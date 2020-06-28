@@ -1,2 +1,2 @@
 # pipecaster
-Python library for broadcasting machine learning pipelines across multiple matrices and ouput targets
+Python library for broadcasting machine learning pipeline construction across multiple input matrices and ouput targets
