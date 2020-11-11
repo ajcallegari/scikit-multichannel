@@ -5,7 +5,7 @@ A Python library for broadcasting machine learning pipeline construction operati
 
 ## silo ML inputs
 
-Many ML workflows implicitly encourage concatenation of features from multiple data sources prior to feature selection or ML.  In practice, concatenation often reduces performance and greater predictive accuracy is obtained by siloing the different inputs through the initial feature selection and ML steps and inferences at a later stage with voting or stacked generalization.  Pipecaster encourages input silos by modifying the sklearn interface from:    
+Many ML workflows implicitly encourage concatenation of features from multiple data sources prior to feature selection or ML.  In practice, concatenation often reduces performance and greater predictive accuracy is obtained by siloing the different inputs through the initial feature selection and ML steps and combining inferences at a later stage using voting or stacked generalization.  Pipecaster encourages input silos by modifying the sklearn interface from:    
 `model.fit(X, y).predict(X)`  
 to   
 `model.fit(Xs, y).predict(Xs).`
