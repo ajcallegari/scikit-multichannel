@@ -33,7 +33,7 @@ def get_clone(pipe, disable_custom_cloning = False):
         return sklearn.base.clone(pipe)
        
 class Layer:
-    """A list of pipe instances with input mappings that supports construction via slice assignment and broadcasting.
+    """A list of pipe instances with input mappings to support multi-input transformers. Also supports construction via slice assignment and broadcasting.
     
     Examples
     --------
@@ -64,7 +64,7 @@ class Layer:
             if i not in self.all_inputs:
                 raise ValueError('Index out of bounds') 
             if i in self.mapped_inputs:
-                raise ValueError('Two pipes may not use the same input (to maintain 1:1 map between inputs and oututs)') 
+                raise ValueError('Two pipes may not use the same input (to maintain 1:1 map between inputs and outputs)') 
                 
         if is_listlike == False:
             n = len(inputs)
@@ -84,6 +84,7 @@ class Layer:
         self.mapped_inputs = self.mapped_inputs.union(inputs)
         
         return self
+        
 
 class Pipeline:
     
@@ -114,7 +115,7 @@ class Pipeline:
                 if type(live_inputs) == int or len(live_inputs) > 0:
                     pipe.fit(Xs[live_inputs], y, **fit_params)
             else:
-                raise TypeError('{} in layer {} is missing a fit() method'.format(pipe.__class__.__name__, i))
+                raise TypeError('{} in layer {} is missing a fit() method'.format(pipe.__class__.__name__, layer_index))
         layer.unmapped_inputs_ = layer.all_inputs - layer.mapped_inputs
 
     def _transform_layer(self, layer_index, Xs):
@@ -131,7 +132,8 @@ class Pipeline:
                     pipe.fit(Xs[inputs], y, **fit_params)
                     Xs_next[live_inputs] = pipe.predict(Xs[live_inputs])
                 else:
-                    raise TypeError('{} in layer {} lacks a method for transforming data'.format(pipe.__class__.__name__, i))        
+                    raise TypeError('{} in layer {} lacks a method for transforming data'
+                                    .format(pipe.__class__.__name__, layer_index))        
         # pass the unmapped inputs through with a copy
         for i in layer.unmapped_inputs_:
             Xs_next[i] = None if Xs[i] is None else Xs[i].copy()
@@ -145,103 +147,57 @@ class Pipeline:
         for pipe, inputs in layer.pipe_list:
             live_inputs = self._get_live_inputs(inputs, Xs)
             if type(live_inputs) == int or len(live_inputs) > 0:
-                if proba == False:
-                    if hasattr(pipe, 'transform'):
-                        Xs_next[live_inputs] = pipe.transform(Xs[live_inputs])                
-                    elif hasattr(pipe, 'predict_proba'):
+                if proba == True:
+                    if hasattr(pipe, 'predict_proba'):
                         Xs_next[live_inputs] = pipe.predict_proba(Xs[live_inputs])
+                    else: 
+                        raise TypeError('{} in layer {} lacks a required predict_proba() method'
+                                        .format(pipe.__class__.__name__, layer_index)) 
+                else:
                     elif hasattr(pipe, 'predict'):
-                        pipe.fit(Xs[inputs], y, **fit_params)
                         Xs_next[live_inputs] = pipe.predict(Xs[live_inputs])
                     else:
-                        raise TypeError('{} in layer {} lacks a method for transforming data'.format(pipe.__class__.__name__, i))        
+                        raise TypeError('{} in layer {} lacks a method for making predictions'
+                                        .format(pipe.__class__.__name__, layer_index))        
         # pass the unmapped inputs through with a copy
         for i in layer.unmapped_inputs_:
             Xs_next[i] = None if Xs[i] is None else Xs[i].copy()
+            
+        outputs = [Xs_next[i] for i in range(self.n_inputs) if Xs_next[i] is not None]
+                
+        if len(outputs) == 1:
+            # typical pattern: pipeline has converged to a single y
+            return outputs[0]
+        else:
+            # atypical pattern: pipeline has not converged and final layer makes multiple predictions
+            return Xs_next
         
-        return Xs_next
-    
     def fit(self, Xs, y, **fit_params):
-        Xs_previous = np.array(Xs, dtype=object)
-        for layer in self.layers[:-1]:
-            Xs_next = np.emtpy(self.n_inputs, dtype=object)
-            for pipe, inputs in layer.pipe_list:
-                if hasattr(pipe, 'fit_transform'):
-                    Xs_next[inputs] = pipe.fit_transform(Xs_previous[inputs], y, **fit_params)
-                elif hasattr(pipe, 'transform'):
-                    pipe.fit(Xs_previous[inputs], y, **fit_params)
-                    Xs_next[inputs] = pipe.transform(Xs_previous[inputs])                
-                elif hasattr(pipe, 'predict_proba'):
-                    pipe.fit(Xs_previous[inputs], y, **fit_params)
-                    Xs_next[inputs] = pipe.predict_proba(Xs_previous[inputs])
-                elif hasattr(pipe, 'predict'):
-                    pipe.fit(Xs_previous[inputs], y, **fit_params)
-                    Xs_next[inputs] = pipe.predict(Xs_previous[inputs])
-            # pass the unmapped inputs through with a copy:
-            unmapped_inputs = layer.all_inputs - layer.mapped_input 
-            for i in unmapped_inputs:
-                Xs_next[i] = None if Xs[i] is None else Xs_previous[i].copy()
-            Xs_previous = Xs_next
-        # fit the last layer without transoforming:
-        for pipe, inputs in self.layers[-1].pipe_list[-1]:
-            pipe.fit(Xs_previous[inputs], y, **fit_params)
+        Xs = np.array(Xs, dtype=object)
+        n_layers = len(self.layers)
+        for i in range(n_layers - 1):
+            self._fit_layer(i, Xs, y, **fit_params)
+            Xs = self._transform_layer(i, Xs)
+        # fit the last layer without transforming:
+        self._fit_layer(n_layers, Xs, y, **fit_params)
     
-    def fit_transform(self, Xs, y, **fit_params):
-        Xs_previous = np.array(Xs, dtype=object)
-        for layer in self.layers:
-            Xs_next = np.emtpy(self.n_inputs, dtype=object)
-            for pipe, inputs in layer.pipe_list:
-                if hasattr(pipe, 'fit_transform'):
-                    Xs_next[inputs] = pipe.fit_transform(Xs_previous[inputs], y, **fit_params)
-                elif hasattr(pipe, 'transform'):
-                    pipe.fit(Xs_previous[inputs], y, **fit_params)
-                    Xs_next[inputs] = pipe.transform(Xs_previous[inputs])                
-                elif hasattr(pipe, 'predict_proba'):
-                    pipe.fit(Xs_previous[inputs], y, **fit_params)
-                    Xs_next[inputs] = pipe.predict_proba(Xs_previous[inputs])
-                elif hasattr(pipe, 'predict'):
-                    pipe.fit(Xs_previous[inputs], y, **fit_params)
-                    Xs_next[inputs] = pipe.predict(Xs_previous[inputs])
-            # pass the unmapped inputs through with a copy
-            unmapped_inputs = layer.all_inputs - layer.mapped_input 
-            for i in unmapped_inputs:
-                Xs_next[i] = None if Xs[i] is None else Xs_previous[i].copy()
-            Xs_previous = Xs_next
-        
-        return Xs_next, y
+    def transform(self, Xs):
+        Xs = np.array(Xs, dtype=object)
+        n_layers = len(self.layers)
+        for i in range(n_layers):
+            Xs = self._transform_layer(i, Xs)
+        return Xs
     
-    def predict(self, Xs, y, **fit_params):
-        Xs_previous = np.array(Xs, dtype=object)
-        for layer in self.layers[:-1]:
-            Xs_next = np.emtpy(self.n_inputs, dtype=object)
-            for pipe, inputs in layer.pipe_list:
-                elif hasattr(pipe, 'transform'):
-                    Xs_next[inputs] = pipe.transform(Xs_previous[inputs])                
-                elif hasattr(pipe, 'predict_proba'):
-                    Xs_next[inputs] = pipe.predict_proba(Xs_previous[inputs])
-                elif hasattr(pipe, 'predict'):
-                    Xs_next[inputs] = pipe.predict(Xs_previous[inputs])
-            # pass the unmapped inputs through with a copy:
-            unmapped_inputs = layer.all_inputs - layer.mapped_input 
-            for i in unmapped_inputs:
-                Xs_next[i] = None if Xs[i] is None else Xs_previous[i].copy()
-            Xs_previous = Xs_next
-            
-        # call predict on the last layer
-        Xs_next = np.emtpy(self.n_inputs, dtype=object)
-        for pipe, inputs in self.layers[-1].pipe_list:
-            if hasattr(pipe, 'predict') == False:
-                raise TypeError('Last pipe does not have a predict() method.  Can not predict with this pipeline')
-            pipe.predict(Xs_previous[inputs]) 
-        unmapped_inputs = layer.all_inputs - layer.mapped_input 
-        for i in unmapped_inputs:
-            Xs_next[i] = None if Xs[i] is None else Xs_previous[i].copy()
-        Xs_previous = Xs_next
-            
-    def transform(self, Xs, y):
-        pass
+    def predict(self, Xs):
+        Xs = np.array(Xs, dtype=object)
+        n_layers = len(self.layers)
+        for i in range(n_layers - 1):
+            Xs = self._transform_layer(i, Xs)
+        return self._predict_layer(n_layers, Xs)
     
-    def predict(Xs):
-        # test for presence of predict() method here? not tested during pipeling construction
-  
-        pass
+    def predict_proba(self, Xs):
+        Xs = np.array(Xs, dtype=object)
+        n_layers = len(self.layers)
+        for i in range(n_layers - 1):
+            Xs = self._transform_layer(i, Xs)
+        return self._predict_layer(n_layers, Xs, proba = True)
