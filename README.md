@@ -1,4 +1,5 @@
 # pipecaster-sklearn
+(still under construction for a few more days)
 
 A Python library for broadcasting machine learning pipeline construction operations across multiple input sources.  The library features the sklearn interface, convenient slice notation, and a Keras-like layered workflow.
 
