@@ -1,5 +1,5 @@
 # pipecaster-sklearn
-(still under construction for a few more days)
+(in progress)
 
 A Python library for broadcasting machine learning pipeline construction operations across multiple input sources.  The library features the sklearn interface, convenient slice notation, and a Keras-like layered workflow.
 
@@ -14,7 +14,7 @@ to
 
 In addition, pipecaster adds in-pipeline input source selection to keep garbage from flowing into and of your ML models and in-pipeline model selection to automate parts of the ML workflow for high throughput ML applications.
 
-# sample use case 1
+# use case example 1
 ![Use case 1](/images/example_1.png)
 
 This diagram shows a classification pipeline taking 5 numerical input matrices and 1 text input.  Code for creating this pipeline is given below.  The InputSelector and ModelSelector objects are highlighted in red because they provide functionality not present in sklearn or spark-ML. The InputSelector "SelectKBestInputs" computes a matrix score for each input by aggregating univariate feature scores and then selects the 3 best inputs.  The ModelSelector "SelectKBestPredictors" does an internal cross validation run within the training set during the calls to cls.fit(Xs, y), assesses the accuracy of models trained on inputs 0 to 4, then selects the two best models and sends their inferences on to a meta-classifier.
