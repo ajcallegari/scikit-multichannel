@@ -12,7 +12,7 @@ to
 
 ## keep workflows fast and pipelines clean
 
-In addition, pipecaster adds in-pipeline input selection to keep garbage from flowing into and out of your ML models and in-pipeline model selection to semi-automate the ML workflow for high throughput ML applications.
+In addition, pipecaster adds in-pipeline input selection to keep garbage from flowing into and out of your ML models and in-pipeline model selection to semi-automate the ML workflow for high throughput ML applications (see the following example).
 
 # use case example 1
 ![Use case 1](/images/example_1.png)
