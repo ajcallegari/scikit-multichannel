@@ -9,28 +9,27 @@ class SelectKBestInputs:
         self.k = k
         
     def fit(self, Xs, y, **fit_params):
-        n_inputs = len(Xs)
-        X_scores = np.empty(n_inputs, dtype=float)
+        k = self.k if self.k < len(Xs) else len(Xs) - 1
+        X_scores = []
         
-        for i in range(n_inputs):
-            if Xs[i] is None:
-                X_scores[i] = np.nan
+        for X in Xs:
+            if X is None:
+                X_scores.append(np.nan)
             else:
-                score_func_ret = self.score_func(Xs[i], y)
+                score_func_ret = self.score_func(X, y)
                 if isinstance(score_func_ret, (list, tuple)):
                     scores = np.array(score_func_ret[0]).astype(float)
                 else:
                     scores = np.array(score_func_ret).astype(float)
-                X_scores[i] = aggregator(scores)
+                X_scores.append(aggregator(scores))
             
-        self.selected_indices_ = np.argsort(-X_scores)[:self.k]
+        self.selected_indices_ = np.argsort(X_scores)[-k:]
             
     def transform(self, Xs, y=None):
-        transformed_Xs = np.empty(len(Xs), dtype=object)
-        transformed_Xs = None
-        transformed_Xs[self.selected_indices_] = Xs[self.selected_indices_]
+        Xs_t = np.full(len(Xs), None)
+        Xs_t[self.selected_indices_] = Xs[self.selected_indices_]
         
-        return transformed_Xs, y
+        return Xs_t, y
     
     def fit_transform(self, Xs, y=None, **fit_params):
         self.fit(Xs, y, **fit_params)
