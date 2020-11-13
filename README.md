@@ -7,9 +7,9 @@ A Python library for broadcasting machine learning (ML) pipeline construction op
 
 ML libraries often implicitly encourage concatenation of features from multiple data sources into a single feature matrix (X) prior to feature selection or ML.  In practice, concatenation often reduces performance and greater predictive accuracy can be obtained by siloing the different inputs through the initial feature selection and ML steps and combining inferences at a later stage using voting or stacked generalization.  Pipecaster encourages input silos by modifying the sklearn interface from:  
 
-`model.fit(X, y).predict(X)`  
+`pipeline.fit(X, y).predict(X)`  
 to   
-`model.fit(Xs, y).predict(Xs).`  
+`pipeline.fit(Xs, y).predict(Xs).`  
 
 ## automate workflows with in-pipeline screening
 
@@ -17,7 +17,8 @@ A typical ML workflow involves screening different input sources, different feat
 
 1. **Input sceening** The different inputs to pipecaster pipelines (Xs) may come from different data sources, different transformations of the data (i.e. for feature engineering), or both.  Pipecaster provides two different ways to select inputs in order to keep garbage from flowing into and out of your ML model.  The *InputScoreSelector* class select inputs based on aggregated univariate feature scores.  The *InputPerformanceSelector* class selects inputs based on performance on an internal cross validation run with with a probe ML model.
 
-1. **Model Screening**  Pipecaster allows in-pipeline screening of ML models and their hyperparameters through the *SelectiveEnsemble* class.  SelectiveEnsembles are voting or concatenating ensembles that select only the most performant models from within the ensemble.  Model performance is assessed with an internal cross validation run within the training set.  
+1. **Model Screening**  Pipecaster allows in-pipeline screening of ML models and their hyperparameters through the *SelectiveEnsemble* and *PerformanceSelector* classes.  A SelectiveEnsemble, which operates on a single input, is a voting or concatenating ensemble that selects only the most performant models from within the ensemble. A PerformanceSelector operates on multiple inputs and selects the
+input and model based on model performance.  In both cases, model performance is assessed with an internal cross validation run within the training set during the call to pipeline.fit().  
 
 # illustrative example
 ![Use case 1](/images/example_1.png)
