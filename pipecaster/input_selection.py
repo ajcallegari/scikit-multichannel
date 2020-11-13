@@ -7,6 +7,29 @@ class SelectKBestInputs:
         self.score_func = score_func
         self.aggregator = aggregator
         self.k = k
+       
+    def __str__(self, verbose = True):
+        string_ = self.__class__.__name__ + '('
+        
+        if verbose:
+            argstrings = []
+            for k, v in self.get_params().items():
+                argstring = k + '=' 
+                if hasattr(v, '__name__'):
+                    argstring += v.__name__
+                elif hasattr(v, '__str__'):
+                    argstring += v.__str__()
+                elif type(v) in [str, int, float]:
+                    argstring += v
+                else:
+                    argstring += 'NA'
+                argstrings.append(argstring)
+            string_ += ', '.join(argstrings)
+                    
+        return  string_ + ')'
+    
+    def __repr__(self, verbose = True):
+        return self.__str__(verbose)
         
     def fit(self, Xs, y, **fit_params):
         k = self.k if self.k < len(Xs) else len(Xs) - 1
@@ -21,16 +44,13 @@ class SelectKBestInputs:
                     scores = np.array(score_func_ret[0]).astype(float)
                 else:
                     scores = np.array(score_func_ret).astype(float)
-                X_scores.append(aggregator(scores))
+                X_scores.append(self.aggregator(scores))
             
-        self.selected_indices_ = np.argsort(X_scores)[-k:]
+        self.selected_indices_ = set(np.argsort(X_scores)[-k:])
             
     def transform(self, Xs, y=None):
-        Xs_t = np.full(len(Xs), None)
-        Xs_t[self.selected_indices_] = Xs[self.selected_indices_]
-        
-        return Xs_t, y
-    
+        return [Xs[i] if (i in self.selected_indices_) else None for i in range(len(Xs))]
+            
     def fit_transform(self, Xs, y=None, **fit_params):
         self.fit(Xs, y, **fit_params)
         return self.transform(Xs, y)

@@ -53,43 +53,48 @@ class Layer:
         
         is_listlike = isinstance(val, (list, tuple, np.ndarray))
         
-        if type(slice_) == int:
-            inputs = [slice_]
-        else:
+        if type(slice_) == slice:
             if slice_.step not in [None, 1]:
                 raise ValueError('Invalid slice step; must be exactly 1 (Pipes may only accept contiguous inputs)')
-            inputs = self._get_slice_indices(slice_)  
+            input_indices = self._get_slice_indices(slice_)
+            if len(input_indices) <= 0:
+                raise ValueError('Invalid slice: no inputs')
+        elif type(slice_) == int:
+            input_indices = [slice_]
+        else:
+            raise ValueError('unrecognized slice format')
             
-        for i in inputs:
+        for i in input_indices:
             if i not in self.all_inputs:
-                raise ValueError('Index out of bounds') 
+                raise ValueError('Slice index out of bounds') 
             if i in self.mapped_inputs:
-                raise ValueError('Two pipes may not use the same input (to maintain 1:1 map between inputs and outputs)') 
+                raise ValueError('Two pipes are mapped to input {}.  Max allowed is 1'.format(i)) 
                 
         if is_listlike == False:
-            n = len(inputs)
+            n = len(input_indices)
             if is_multi_input(val) == True:
-                self.pipe_list.append((get_clone(val), inputs))
+                self.pipe_list.append((val, slice_, input_indices))
             else:
-                for i in inputs:
-                    self.pipe_list.append((get_clone(val), i))            
+                for i in input_indices:
+                    self.pipe_list.append((val, i, [i]))          
         elif is_listlike == True:
             n = len(val)
-            if n != len(inputs):
-                raise ValueError('Length of array slice is not equal to the length of the assigned list argument')
+            if n != len(input_indices):
+                raise ValueError('List of pipe objects does not match slice dimension during assignment')
             else:
-                for pipe, i in zip(val, inputs):
-                    self.pipe_list.append((get_clone(pipe), i))
+                for pipe, i in zip(val, input_indices):
+                    self.pipe_list.append((val, i, [i]))
             
-        self.mapped_inputs = self.mapped_inputs.union(inputs)
+        self.mapped_inputs = self.mapped_inputs.union(input_indices)
         
         return self
         
     def get_pipe_from_input(self, input_index):
-        for pipe, inputs in layer.pipe_list:
-            if type(inputs) == int and inputs == input_index:
-                return pipe
-            elif input_index in inputs:
+        for pipe, slice_ in layer.pipe_list:
+            if type(slice_) == int:
+                if slice_ == input_index:
+                    return pipe
+            elif input_index in self._get_slice_indices(slice_):
                 return pipe
         return None
 
@@ -108,66 +113,73 @@ class Pipeline:
         self.layers.append(layer)
         return layer
     
-    def _get_live_inputs(inputs, Xs):
-        if type(inputs) == int:
-            live_inputs = [] if Xs[inputs] is None else inputs
+    @staticmethod
+    def _get_live_inputs(input_indices, Xs):
+        if type(input_indices) == int:
+            live_inputs = [] if Xs[input_indices] is None else input_indices
         else:
-            live_inputs = [i for i in inputs if Xs[i] is not None]    
+            live_inputs = [i for i in input_indices if Xs[i] is not None]   
+        return live_inputs
             
     def _fit_layer(self, layer_index, Xs, y, **fit_params):
         layer = self.layers[layer_index]
-        for pipe, inputs in layer.pipe_list:
+        for i, (pipe, slice_, input_indices) in enumerate(layer.pipe_list):
             if hasattr(pipe, 'fit'):
-                live_inputs = self._get_live_inputs(inputs, Xs)
-                if type(live_inputs) == int or len(live_inputs) > 0:
-                    pipe.fit(Xs[live_inputs], y, **fit_params)
+                live_inputs = Pipeline._get_live_inputs(input_indices, Xs)
+                if len(live_inputs) > 0:
+                    input_ = [Xs[slice_]] if (is_multi_input(pipe) and len(input_indices) == 1) else Xs[slice_]
+                    pipe = get_clone(pipe)
+                    pipe.fit(input_, y, **fit_params)
+                    self.layers[layer_index].pipe_list[i] = (pipe, slice_, input_indices)
+                else:
+                    del self.layers[layer_index].pipe_list[i]
             else:
                 raise TypeError('{} in layer {} is missing a fit() method'.format(pipe.__class__.__name__, layer_index))
-        layer.unmapped_inputs_ = layer.all_inputs - layer.mapped_inputs
-
+            
     def _transform_layer(self, layer_index, Xs):
+        Xs = Xs.copy() 
         layer = self.layers[layer_index]
-        Xs_t = np.emtpy(self.n_inputs, dtype=object)
-        for pipe, inputs in layer.pipe_list:
-            live_inputs = self._get_live_inputs(inputs, Xs)
-            if type(live_inputs) == int or len(live_inputs) > 0:
-                if hasattr(pipe, 'transform'):
-                    Xs_t[live_inputs] = pipe.transform(Xs[live_inputs])                
-                elif hasattr(pipe, 'predict_proba'):
-                    Xs_t[live_inputs] = pipe.predict_proba(Xs[live_inputs])
-                elif hasattr(pipe, 'predict'):
-                    Xs_t[live_inputs] = pipe.predict(Xs[live_inputs])
-                else:
-                    raise TypeError('{} in layer {} lacks a method for transforming data'
-                                    .format(pipe.__class__.__name__, layer_index))        
-        # pass the unmapped inputs through
-        Xs_t[layer.unmapped_inputs_] = Xs[layer.unmapped_inputs_]
-        
-        return Xs_t
+        for i, (pipe, slice_, input_indices) in enumerate(layer.pipe_list):
+            input_ = [Xs[slice_]] if (is_multi_input(pipe) and len(input_indices) == 1) else Xs[slice_]
+            
+            if hasattr(pipe, 'transform'):
+                Xs[slice_] = pipe.transform(input_)                
+            elif hasattr(pipe, 'predict_proba'):
+                Xs[slice_] = pipe.predict_proba(input_)
+            elif hasattr(pipe, 'predict'):
+                Xs[slice_] = pipe.predict(input_)
+            else:
+                raise TypeError('{} in layer {} lacks a method for transforming data'
+                                    .format(pipe.__class__.__name__, layer_index)) 
+                
+            for i in input_indices:
+                # when regressors or other pipe components return a 1D array, convert to a 1 column matrix
+                if Xs[i] is not None and len(Xs[i].shape) == 1:
+                    Xs[i] = Xs[i].reshape(-1,1)
+            print('a layer {} transform completed'.format(layer_index))
+        return Xs
     
     def _predict_layer(self, layer_index, Xs, proba = False):
+        predictions = [None for X in Xs] 
         layer = self.layers[layer_index]
-        predictions = np.emtpy(self.n_inputs, dtype=object)
-        for pipe, inputs in layer.pipe_list:
-            live_inputs = self._get_live_inputs(inputs, Xs)
-            if type(live_inputs) == int or len(live_inputs) > 0:
-                if proba == True:
-                    if hasattr(pipe, 'predict_proba'):
-                        predictions[live_inputs] = pipe.predict_proba(Xs[live_inputs])
-                    else: 
-                        raise TypeError('{} in layer {} lacks a required predict_proba() method'
-                                        .format(pipe.__class__.__name__, layer_index)) 
+        
+        for i, (pipe, slice_, input_indices) in enumerate(layer.pipe_list):
+            input_ = [Xs[slice_]] if (is_multi_input(pipe) and len(input_indices) == 1) else Xs[slice_]
+            if proba == True:
+                if hasattr(pipe, 'predict_proba'):
+                    predictions[slice_] = pipe.predict_proba(input_)
+                else: 
+                    raise TypeError('{} in layer {} lacks a required predict_proba() method'
+                                    .format(pipe.__class__.__name__, layer_index)) 
+            else:
+                if hasattr(pipe, 'predict'):
+                    predictions[slice_] = pipe.predict(Xs[input_])
                 else:
-                    if hasattr(pipe, 'predict'):
-                        predictions[live_inputs] = pipe.predict(Xs[live_inputs])
-                    else:
-                        raise TypeError('{} in layer {} lacks a method for making predictions'
-                                        .format(pipe.__class__.__name__, layer_index))        
-        # set all unmapped inputs to None
-        predictions[layer.unmapped_inputs_] = None
-            
-        outputs = [predictions[i] for i in range(self.n_inputs) if predictions[i] is not None]
-                
+                    raise TypeError('{} in layer {} lacks a required predict() method'
+                                    .format(pipe.__class__.__name__, layer_index))  
+                    
+        outputs = [p for p in predictions if p is not None]
+        
         if len(outputs) == 1:
             # typical pattern: pipeline has converged to a single y
             return outputs[0]
@@ -176,34 +188,33 @@ class Pipeline:
             return predictions
         
     def fit(self, Xs, y, **fit_params):
-        Xs = np.array(Xs, dtype=object)
         n_layers = len(self.layers)
         for i in range(n_layers - 1):
             self._fit_layer(i, Xs, y, **fit_params)
             Xs = self._transform_layer(i, Xs)
         # fit the last layer without transforming:
-        self._fit_layer(n_layers, Xs, y, **fit_params)
+        self._fit_layer(n_layers - 1, Xs, y, **fit_params)
     
-    def transform(self, Xs):
-        Xs = np.array(Xs, dtype=object)
-        n_layers = len(self.layers)
-        for i in range(n_layers):
+    def transform(self, Xs, y=None):
+        for i in range(len(self.layers)):
             Xs = self._transform_layer(i, Xs)
         return Xs
     
+    def fit_transform(self, Xs, y, **fit_params):
+        self.fit(Xs, y, **fit_params)
+        return self.transform(Xs)
+    
     def predict(self, Xs):
-        Xs = np.array(Xs, dtype=object)
         n_layers = len(self.layers)
         for i in range(n_layers - 1):
             Xs = self._transform_layer(i, Xs)
-        return self._predict_layer(n_layers, Xs)
+        return self._predict_layer(n_layers - 1, Xs)
     
     def predict_proba(self, Xs):
-        Xs = np.array(Xs, dtype=object)
         n_layers = len(self.layers)
         for i in range(n_layers - 1):
             Xs = self._transform_layer(i, Xs)
-        return self._predict_layer(n_layers, Xs, proba = True)
+        return self._predict_layer(n_layers - 1, Xs, proba = True)
     
     def get_pipe(self, input_index, layer_index):
         return self.layers[layer_index].get_pipe_from_input(input_index)
