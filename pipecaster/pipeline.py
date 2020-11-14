@@ -88,6 +88,11 @@ class Layer:
         self.mapped_inputs = self.mapped_inputs.union(input_indices)
         
         return self
+    
+    def clear(self):
+        self.pipe_list = []
+        self.all_inputs = set(range(self.n_inputs))
+        self.mapped_inputs = set()
         
     def get_pipe_from_input(self, input_index):
         for pipe, slice_ in layer.pipe_list:
@@ -156,7 +161,6 @@ class Pipeline:
                 # when regressors or other pipe components return a 1D array, convert to a 1 column matrix
                 if Xs[i] is not None and len(Xs[i].shape) == 1:
                     Xs[i] = Xs[i].reshape(-1,1)
-            print('a layer {} transform completed'.format(layer_index))
         return Xs
     
     def _predict_layer(self, layer_index, Xs, proba = False):
