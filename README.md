@@ -6,16 +6,15 @@ A Python library for broadcasting machine learning (ML) pipeline construction op
 ## silo ML inputs
 
 ML libraries often implicitly encourage concatenation of features from multiple data sources into a single feature matrix (X) prior to feature selection or ML.  In practice, concatenation often reduces performance and greater predictive accuracy can be obtained by siloing the different inputs through the initial feature selection and ML steps and combining inferences at a later stage using voting or stacked generalization.  Pipecaster encourages input silos by modifying the sklearn interface from:  
-
 `pipeline.fit(X, y).predict(X)`  
 to   
 `pipeline.fit(Xs, y).predict(Xs).`  
 
 ## automate workflows with in-pipeline screening
 
-A typical ML workflow involves screening different input sources, feature engineering steps, models, and model hyperparameters.  Pipecaster allows you to semi-automate each of these screening tasks by including them in the ML pipeline.  This can be useful when you are developing a large number of different pipelines in parallel and don't have time to optimize each one separately, and may accelerate ML workflows in general.  I wasn't able to find these in-pipeline operations in sklearn, Dask, or Spark ML, which provided some of the motivation for developing pipecaster.
+A typical ML workflow involves screening different input sources, feature engineering steps, models, and model hyperparameters.  Pipecaster allows you to semi-automate each of these screening tasks by including them in the ML pipeline.  This can be useful when you are developing a large number of different pipelines in parallel and don't have time to optimize each one separately, and may accelerate ML workflows in general.  I wasn't able to find these in-pipeline operations in sklearn, Dask, or Spark ML, which provided some of the motivation for developing this library.
 
-1. **Input selectors** The different inputs to pipecaster pipelines (Xs) may come from different data sources, different transformations of the data (i.e. for feature engineering), or both.  Pipecaster provides two different ways to select inputs in order to keep garbage from flowing into and out of your ML model.  The *InputScoreSelector* class selects inputs based on aggregated univariate feature scores.  The *InputPerformanceSelector* class selects inputs based on performance on an internal cross validation run with with a probe ML model.
+1. **Input selectors** The different inputs to pipecaster pipelines (Xs) may come from different data sources, different transformations of the data (i.e. for feature engineering), or both.  Pipecaster provides two different ways to select inputs in order to keep garbage from flowing into and out of your ML models.  The *InputScoreSelector* class selects inputs based on aggregated feature scores.  The *InputPerformanceSelector* class selects inputs based on performance on an internal cross validation run with with a probe ML model.
 
 1. **Model selectors**  Pipecaster allows in-pipeline screening of ML models and their hyperparameters with the *SelectiveEnsemble* and *ModelSelector* classes.  A *SelectiveEnsemble*, which operates on a single input, is a voting or concatenating ensemble that selects only the most performant models from within the ensemble. A *ModelSelector* operates on multiple inputs and selects the
 input and its associated model based on model performance.  In both cases, model performance is assessed with an internal cross validation run within the training set during the call to pipeline.fit().  
@@ -23,7 +22,7 @@ input and its associated model based on model performance.  In both cases, model
 # illustrative example
 ![Use case 1](/images/example_1.png)
 
-This diagram shows a classification pipeline taking 5 numerical input matrices (X0 to X4) and 1 text input (X5).  Code for building this pipeline is given below.  The InputScoreSelector "SelectKBestInputs" computes a matrix score for each input by aggregating univariate feature scores and then selects the k=3 best inputs.  The ModelSelector "SelectKBestPredictors" does an internal cross validation run within the training set during the call to pipeline.fit(Xs, y), estimates the accuracy of models trained on inputs 0 to 4, then selects the k=2 best models and sends their inferences on to a meta-classifier.
+This diagram shows a classification pipeline taking 5 numerical input matrices (X0 to X4) and 1 text input (X5).  Code for building this pipeline is given below.  The InputScoreSelector "SelectKBestInputs" computes a matrix score for each input by aggregating feature scores and then selects the k=3 best inputs.  The ModelSelector "SelectKBestPredictors" does an internal cross validation run within the training set during the call to pipeline.fit(Xs, y), estimates the accuracy of models trained on inputs 0 to 4, then selects the k=2 best models and sends their inferences on to a meta-classifier.
 
 ## sample code:
 

@@ -1,4 +1,5 @@
 import random
+import numpy as np
 from sklearn.datasets import make_classification
 
 def make_multi_input_classification(n_classes = 2, 
@@ -9,7 +10,11 @@ def make_multi_input_classification(n_classes = 2,
                                     n_redundant=0,
                                     n_repeated=0,
                                     class_sep=1.0,
-                                    weak_noise_sd=50):
+                                    weak_noise_sd=0.2,
+                                    seed = None):
+    if seed is not None:
+        random.seed(seed)
+        np.random.seed(seed)
     
     assert (n_informative_Xs + n_weak_Xs) <= n_Xs, 'too many informative & weak marices for n_Xs'
         
@@ -22,7 +27,7 @@ def make_multi_input_classification(n_classes = 2,
                                n_repeated=n_repeated * (n_informative_Xs + n_weak_Xs),
                                class_sep=class_sep)
     
-    rand_X = np.random.normal(loc=50, scale=20, 
+    rand_X = np.random.normal(loc=0, scale=1, 
                               size=(n_samples, n_features * n_random_Xs))
     
     # split synthetic data into separate matrices
@@ -31,7 +36,7 @@ def make_multi_input_classification(n_classes = 2,
     
     # add extra gaussian noise to create weak matrices
     for i in range(n_weak_Xs):
-        Xs[i] += np.random.normal(loc=50, scale=weak_noise_sd, size=(n_samples,n_features))
+        Xs[i] += np.random.normal(loc=0, scale=weak_noise_sd, size=(n_samples, n_features))
     X_types = ['weak' for i in range(n_weak_Xs)] 
     X_types += ['informative' for i in range(n_informative_Xs)]
     X_types += ['random' for i in range(n_random_Xs)] 
