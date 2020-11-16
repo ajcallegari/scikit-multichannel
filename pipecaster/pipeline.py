@@ -105,7 +105,7 @@ class Layer:
 
 class Pipeline:
     
-    """Sklearn pipeline modified to accept multiple inputs.
+    """Machine learning pipeline that accepts multiple inputs.
     
     """
     
@@ -151,6 +151,8 @@ class Pipeline:
                 Xs[slice_] = pipe.transform(input_)                
             elif hasattr(pipe, 'predict_proba'):
                 Xs[slice_] = pipe.predict_proba(input_)
+            elif hasattr(pipe, 'decision_function'):
+                Xs[slice_] = pipe.decision_function(input_)                
             elif hasattr(pipe, 'predict'):
                 Xs[slice_] = pipe.predict(input_)
             else:

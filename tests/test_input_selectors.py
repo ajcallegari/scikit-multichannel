@@ -55,13 +55,14 @@ class TestInputSelectors(unittest.TestCase):
         return n_informative_hits, n_random_hits, n_weak_hits
     
     @staticmethod
-    def _test_weak_strong_input_discrimination(input_selector, n_weak = 5, n_strong = 5, weak_noise_sd = 0.25):
+    def _test_weak_strong_input_discrimination(input_selector, n_weak = 5, n_strong = 5, weak_noise_sd = 0.25, seed = None):
         n_Xs = 2*(n_weak + n_strong)
         n_informative_hits, n_random_hits, n_weak_hits = TestInputSelectors._select_synthetic(input_selector, 
                                                                              n_Xs =  n_Xs,
                                                                              n_informative_Xs = n_strong,
                                                                              n_weak_Xs = n_weak, 
-                                                                             weak_noise_sd = weak_noise_sd)
+                                                                             weak_noise_sd = weak_noise_sd,
+                                                                             seed = seed)
         passed = True
         if n_informative_hits != n_strong:
             passed = False
@@ -72,13 +73,14 @@ class TestInputSelectors(unittest.TestCase):
         return passed
     
     @staticmethod
-    def _test_weak_input_detection(input_selector, n_weak = 5, n_strong = 5, weak_noise_sd = 0.25):
+    def _test_weak_input_detection(input_selector, n_weak = 5, n_strong = 5, weak_noise_sd = 0.25, seed = None):
         n_Xs = 2*(n_weak + n_strong)
         n_informative_hits, n_random_hits, n_weak_hits = TestInputSelectors._select_synthetic(input_selector, 
                                                                              n_Xs =  n_Xs,
                                                                              n_informative_Xs = n_strong,
                                                                              n_weak_Xs = n_weak, 
-                                                                             weak_noise_sd = weak_noise_sd)
+                                                                             weak_noise_sd = weak_noise_sd,
+                                                                             seed = seed)
         passed = True
         if n_informative_hits != n_strong:
             passed = False
@@ -92,14 +94,14 @@ class TestInputSelectors(unittest.TestCase):
         k = 5
         input_selector = pc.SelectKBestInputs(score_func=f_classif, aggregator=np.mean, k=k)
         passed = TestInputSelectors._test_weak_strong_input_discrimination(input_selector, n_weak = k, 
-                                                                           n_strong = k, weak_noise_sd = 30)
+                                                                           n_strong = k, weak_noise_sd = 30, seed = 42)
         self.assertTrue(passed)
         
     def test_SelectKBestInputs_weak_input_detection(self):
         k = 10
         input_selector = pc.SelectKBestInputs(score_func=f_classif, aggregator=np.mean, k=k)
         passed = TestInputSelectors._test_weak_input_detection(input_selector, n_weak = int(k/2), 
-                                                               n_strong = k - int(k/2), weak_noise_sd = 0.2)
+                                                               n_strong = k - int(k/2), weak_noise_sd = 0.2, seed = 42)
         self.assertTrue(passed)     
 
 if __name__ == '__main__':
