@@ -2,7 +2,7 @@ import ray
 import scipy.sparse as sp
 from sklearn.model_selection._split import check_cv
 from sklearn.model_selection._validation import _fit_and_predict, _check_is_permutation, _enforce_prediction_order
-import pipecaster as pc
+from pipecaster.pipeline import get_clone
 
 def is_classifier(obj):
     return getattr(obj, "_estimator_type", None) == "classifier"
@@ -16,97 +16,9 @@ def fit_predict_deprecated(predictor, X, y, train_indices, test_indices, fit_par
     
     return (prediction, test_indices)
 
-
 @ray.remote
 def ray_fit_predict(predictor, X, y, train_indices, test_indices, verbose, fit_params, method):
     return _fit_and_predict(predictor, X, y, train_indices, test_indices, fit_params, method)
-
-def cross_val_predict(predictor, X, y, fit_params, cv=3, method = 'predict', n_jobs = 1, verbose = 0):
-    """Replacement function for sklearn cross_val_predict that enables stateful cloning (pipecaster.get_clone()) and faster multiprocessing with ray
-    
-    argument
-    --------
-    predictor: object instance that implements the sklearn estimator & predictor interfaces
-Parameters
-    X : ndarray (n_samples, n_features), features
-    y : array-like of shape (n_samples,) or (n_samples, n_outputs), targets, 
-    groups : array-like of shape (n_samples,), sample group labels
-    cv : int, cross-validation generator or an iterable, default=None
-        Determines the cross-validation splitting strategy.
-        Possible inputs for cv are:
-        - None, to use the default 5-fold cross validation,
-        - int, to specify the number of folds in a `(Stratified)KFold`,
-        - :term:`CV splitter`,
-        - An iterable yielding (train, test) splits as arrays of indices.
-        For int/None inputs, if the estimator is a classifier and ``y`` is
-        either binary or multiclass, :class:`StratifiedKFold` is used. In all
-        other cases, :class:`KFold` is used.
-        Refer :ref:`User Guide <cross_validation>` for the various
-        cross-validation strategies that can be used here.
-        .. versionchanged:: 0.22
-            ``cv`` default value if None changed from 3-fold to 5-fold.
-    n_jobs : int, The number of CPUs to use to do the computation.
-    verbose : int, default=0
-        The verbosity level.
-    method : str, methdu used for prediction
-    
-    Returns
-    -------
-    predictions : ndarray (n_splits, n_samples, n_features), predictions
-    """
-    
-    cv = check_cv(cv, y, classifier=is_classifier(predictor))
-    
-    if n_jobs == 1:
-        prediction_blocks = [_fit_predict(pc.get_clone(predictor), X, y, train_indices, test_indices, verboset, fit_params, method)
-                             for train_indices, test_indices in cv.split(X, y, groups)] 
-    elif n_jobs > 1:
-        X = ray.put(X)
-        y = ray.put(y)
-        fit_params = ray.put(fit_params)
-        jobs = [ray_fit_predict.remote(pc.get_clone(predictor), X, y, train_indices, test_indices, fit_params, method)
-                             for train_indices, test_indices in cv.split(X, y, groups)]
-        prediction_blocks = ray.get(jobs)
-        
-    split_predictions, split_test_indices = zip(*prediction_blocks)
-    shuffled_predictions = np.concatenate(split_predictions, axis = 0)
-    test_indices = np.concatenate(split_test_indices)
-    ordered_predictions = np.empty(shuffled_predictions.shape)
-    ordered_predictions[test_indices] = shuffled_predictions
-    
-    # Concatenate the predictions
-    predictions = [pred_block_i for pred_block_i, _ in prediction_blocks]
-    test_indices = np.concatenate([indices_i
-                                   for _, indices_i in prediction_blocks])
-
-    if not _check_is_permutation(test_indices, _num_samples(X)):
-        raise ValueError('cross_val_predict only works for partitions')
-
-    inv_test_indices = np.empty(len(test_indices), dtype=int)
-    inv_test_indices[test_indices] = np.arange(len(test_indices))
-
-    if sp.issparse(predictions[0]):
-        predictions = sp.vstack(predictions, format=predictions[0].format)
-    elif encode and isinstance(predictions[0], list):
-        # `predictions` is a list of method outputs from each fold.
-        # If each of those is also a list, then treat this as a
-        # multioutput-multiclass task. We need to separately concatenate
-        # the method outputs for each label into an `n_labels` long list.
-        n_labels = y.shape[1]
-        concat_pred = []
-        for i_label in range(n_labels):
-            label_preds = np.concatenate([p[i_label] for p in predictions])
-            concat_pred.append(label_preds)
-        predictions = concat_pred
-    else:
-        predictions = np.concatenate(predictions)
-
-    if isinstance(predictions, list):
-        return [p[inv_test_indices] for p in predictions]
-    else:
-        return predictions[inv_test_indices]
-    
-    return ordered_predictions
 
 def cross_val_predict(estimator, X, y=None, *, groups=None, cv=None,
                       n_jobs=None, verbose=0, fit_params=None, method='predict'):
@@ -209,27 +121,19 @@ def cross_val_predict(estimator, X, y=None, *, groups=None, cv=None,
             for i_label in range(y.shape[1]):
                 y_enc[:, i_label] = LabelEncoder().fit_transform(y[:, i_label])
             y = y_enc
-
-    # We clone the estimator to make sure that all the folds are
-    # independent, and that it is pickle-able.
-    #parallel = Parallel(n_jobs=n_jobs, verbose=verbose,
-                        #pre_dispatch=pre_dispatch)
-    #prediction_blocks = parallel(delayed(_fit_and_predict)(
-        #clone(estimator), X, y, train, test, verbose, fit_params, method)
-        #for train, test in cv.split(X, y, groups))
-
-    # Concatenate the predictions
     
-     if n_jobs == 1:
-        prediction_blocks = [_fit_predict(pc.get_clone(predictor), X, y, train_indices, test_indices, verboset, 
+    if n_jobs == 1:
+        prediction_blocks = [_fit_predict(get_clone(predictor), X, y, train_indices, test_indices, verboset, 
                                           fit_params, method) for train_indices, test_indices in cv.split(X, y, groups)] 
     elif n_jobs > 1:
         X = ray.put(X)
         y = ray.put(y)
         fit_params = ray.put(fit_params)
-        jobs = [ray_fit_predict.remote(pc.get_clone(predictor), X, y, train_indices, test_indices, fit_params, method)
+        jobs = [ray_fit_predict.remote(get_clone(predictor), X, y, train_indices, test_indices, fit_params, method)
                              for train_indices, test_indices in cv.split(X, y, groups)]
         prediction_blocks = ray.get(jobs)
+    else:
+        raise ValueError('invalid n_jobs value: {}.  muste be int greater than 0'.format(n_jobs))
         
     predictions = [pred_block_i for pred_block_i, _ in prediction_blocks]
     test_indices = np.concatenate([indices_i

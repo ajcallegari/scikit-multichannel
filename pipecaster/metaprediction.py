@@ -1,13 +1,27 @@
 from sklearn.model_selection import cross_val_predict, StratifiedKFold
 
-from pipecaster import pipeline
+from pipecaster.pipeline import pipeline, get_clone
+from pipecaster.model_selection import cross_val_predict
+
 
 class TransformingPredictor:
     
-    def __init__(self, predictor, method='auto', internal_cv = 5):
+    """Class that wraps sklearn predictors to provide them with a transform() method and internal cross validation training.
+    
+    arguments
+    ---------
+    predictor: instance of predictor object with sklearn interface
+    method: string. indicates the name of the method to use for transformation or 'auto' for 'predict_proba' -> 'decision_function' -> 'predict'
+    internal_cv: None, int or cross validation splitter (e.g. StratifiedKFold).  If None, 0, or 1, cross validation training is disabled.  For integers > 1, KFold is automatically used for regressors and StratifiedKFold used for classifiers.
+    n_jobs: Number of parallel _fit_and_predict jobs to run during internal cv training.
+
+    """
+    
+    def __init__(self, predictor, method='auto', internal_cv = 5, n_jobs = 1):
         self.predictor = predictor
         self.method = method
         self.internal_cv = internal_cv
+        self.n_jobs = n_jobs
         
     def fit(self, X, y, **fit_params):
          if self.method == 'auto'
@@ -31,34 +45,43 @@ class TransformingPredictor:
         else:
             self._estimator_type = 'regressor'
         
-    def fit_transform(self, X, y, **fit_params):
+    def fit_transform(self, X, y, groups=None, fit_params=None):
         self.fit(X, y, **fit_params)
-        transform_method = getattr(self.predictor, self.method_)
-        if self.is_classifier:
-            if type(self.internal_cv) == int:
-                if self.internal_cv < 2:
-                    
-                else:
-                for train_index, test_index in skf.split(X, y):
-                    print("TRAIN:", train_index, "TEST:", test_index)
-                        X_train, X_test = X[train_index], X[test_index]
-                        y_train, y_test = y[train_index], y[test_index]            
-                else:
-                
-                split_generator = StratifiedKFold(n_splits=2, random_state=None, shuffle=False)
-            
-        elif self.is_regressor:
-            
-            
-        predictions = cross_val_predict(pipeline.get_clone(self.predictor), X, y, cv=deepcopy(cv),
-                                   method=meth, n_jobs=self.n_jobs,
-                                   fit_params=fit_params,
-                                   verbose=self.verbose)
-
+        cv_predictions = pc.cross_val_predict(predictor, X, y, fit_params, cv=3, method = 'predict', 
+                                              n_jobs = self.n_jobs, verbose = 0)
         
-        X = transform(X)
+        if self.internal_cv is None or (type(self.internal_cv) == int and self.internal_cv < 2):
+            transform_method = getattr(self.predictor, self.method_)
+            X = transform_method(X)
+        else:
+            X= pc.cross_val_predict(self.predictor, X, y, groups=groups, cv=self.internal_cv,
+                      n_jobs=1, verbose=0, fit_params=fit_params, method=self.method_)
         return X.reshape(-1,1) if len(X.shape) == 1 else X
+    
+    def transform(self, X)
+        transform_method = getattr(self.predictor, self.method_)
+        X = transform_method(X)
+        return X.reshape(-1,1) if len(X.shape) == 1 else X
+                    
+    def get_params(self, deep=False):
+        return {'predictor':self.predictor,
+                'method':self.method,
+                'internal_cv':self.internal_cv,
+                'n_jobs':self.n_jobs}
+    
+    def set_params(self, **params):
+        for key, value in params.items():
+            setattr(self, key, value)
 
+    def _more_tags(self):
+        return {'multiple_inputs': True}
+    
+    def clone(self):
+        clone = TransformingPredictor(get_clone(predictor), method=self.method, 
+                                     internal_cv = self.internal_cv, n_jobs = self.n_jobs)
+        if hasattr(self, 'classes_'):
+            self.classes_ = self.predictor.classes_
+            self._estimator_type = 'classifier'
 
 class MetaPredictor:
     
@@ -121,4 +144,4 @@ class MetaPredictor:
         return {'metapredictor': True}
                            
     def clone(self):
-        return MetaPredictor(pipeline.get_clone(self.predictor))
+        return MetaPredictor(get_clone(self.predictor))
