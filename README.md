@@ -1,7 +1,7 @@
 # pipecaster
 (in progress)
 
-A scikit-learn (sklearn) extension for broadcasting machine learning (ML) pipeline construction operations across multiple input sources and automating some aspects of the ML workflow.  The extension provides an alternative Pipeline class that enables users to build complex pipelines with convenient slice notation and a Keras-like layered workflow.  In addition, pipecaster enables ML workflow automation with in-pipeline screening and selection of data sources, feature engineering transforms, models, and model hyperparameters.
+A scikit-learn extension for broadcasting machine learning pipeline construction operations across multiple input sources and for increasing automation of the machine learning workflow by enabling in-pipeline screening.  Pipecaster provides a multi-input alternative to the sci-kit learn Pipeline class, adding a convenient slice notation and a Keras-like layered workflow to help users build complex pipelines.  Pipecaster also also enables ML workflow automation with in-pipeline screening and selection of data sources, feature engineering transforms, models, and model hyperparameters.
 
 ## silo ML inputs
 

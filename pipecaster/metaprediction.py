@@ -6,7 +6,7 @@ from pipecaster.model_selection import cross_val_predict
 
 class TransformingPredictor:
     
-    """Class that wraps sklearn predictors to provide them with a transform() method and internal cross validation training.
+    """Class that wraps scikit-learn predictors to provide transform() and fit_transform methods and internal cross validation training.
     
     arguments
     ---------
@@ -87,7 +87,7 @@ class TransformingPredictor:
 
 class MetaPredictor:
     
-    """MetaPredictor concatenates predictions generated from multiple inputs and uses them to make metapredictions
+    """Class that wraps scikit-learn predictors to enable concatenation of multiple and metaprediction
     
     arguments
     ---------
