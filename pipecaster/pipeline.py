@@ -2,6 +2,8 @@ import numpy as np
 
 from pipecaster.utility import get_clone, is_multi_input
 from pipecaster.metaprediction import TransformingPredictor
+
+__all__ = ['Layer', 'Pipeline']
        
 class Layer:
     """A list of pipe instances with input mappings to support multi-input transformers. Also supports construction via slice assignment and broadcasting.

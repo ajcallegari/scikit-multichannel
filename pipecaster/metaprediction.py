@@ -3,6 +3,8 @@ from sklearn.model_selection import cross_val_predict, StratifiedKFold
 from pipecaster.utility import get_clone
 from pipecaster.model_selection import cross_val_predict
 
+__all__ = ['TransformingPredictor', 'MetaPredictor']
+
 
 class TransformingPredictor:
     

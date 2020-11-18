@@ -1,6 +1,8 @@
 import numpy as np
 from sklearn.feature_selection import f_classif
 
+__all__ = ['SelectKBestInputs']
+
 class SelectKBestInputs:
             
     def __init__(self, score_func=f_classif, aggregator=np.sum, k=3):
