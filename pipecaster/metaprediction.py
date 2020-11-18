@@ -1,6 +1,6 @@
 from sklearn.model_selection import cross_val_predict, StratifiedKFold
 
-from pipecaster.pipeline import pipeline, get_clone
+from pipecaster.utility import get_clone
 from pipecaster.model_selection import cross_val_predict
 
 
@@ -24,7 +24,7 @@ class TransformingPredictor:
         self.n_jobs = n_jobs
         
     def fit(self, X, y, **fit_params):
-         if self.method == 'auto'
+        if self.method == 'auto':
             if hasattr(predictor, 'predict_proba'):
                 self.method_ = 'predict_proba' 
             elif hasattr(predictor, 'decision_function'):
@@ -47,18 +47,19 @@ class TransformingPredictor:
         
     def fit_transform(self, X, y, groups=None, fit_params=None):
         self.fit(X, y, **fit_params)
-        cv_predictions = pc.cross_val_predict(predictor, X, y, fit_params, cv=3, method = 'predict', 
-                                              n_jobs = self.n_jobs, verbose = 0)
         
+        # internal cv training is disabled
         if self.internal_cv is None or (type(self.internal_cv) == int and self.internal_cv < 2):
             transform_method = getattr(self.predictor, self.method_)
             X = transform_method(X)
+        # internal cv training is enabled
         else:
             X= pc.cross_val_predict(self.predictor, X, y, groups=groups, cv=self.internal_cv,
                       n_jobs=1, verbose=0, fit_params=fit_params, method=self.method_)
+            
         return X.reshape(-1,1) if len(X.shape) == 1 else X
     
-    def transform(self, X)
+    def transform(self, X):
         transform_method = getattr(self.predictor, self.method_)
         X = transform_method(X)
         return X.reshape(-1,1) if len(X.shape) == 1 else X
@@ -76,12 +77,13 @@ class TransformingPredictor:
     def _more_tags(self):
         return {'multiple_inputs': True}
     
-    def clone(self):
-        clone = TransformingPredictor(get_clone(predictor), method=self.method, 
+    def get_clone(self):
+        clone = TransformingPredictor(get_clone(self.predictor), method=self.method, 
                                      internal_cv = self.internal_cv, n_jobs = self.n_jobs)
-        if hasattr(self, 'classes_'):
-            self.classes_ = self.predictor.classes_
-            self._estimator_type = 'classifier'
+        for attr in ['classes_', '_estimator_type', 'method_']:
+            if hasattr(self, attr):
+                setattr(clone, attr, getattr(self, attr))
+        return clone
 
 class MetaPredictor:
     
@@ -108,7 +110,7 @@ class MetaPredictor:
     def fit(self, Xs, y, **fit_params):
         Xs = [X for X in Xs if X is not None]
         Xs = np.concatenate(Xs, axis=1)
-        self.predictor.fit(Xs, y, **fit_params
+        self.predictor.fit(Xs, y, **fit_params)
                            
     def transform(self, Xs):
         Xs = [X for X in Xs if X is not None]

@@ -2,7 +2,7 @@ import ray
 import scipy.sparse as sp
 from sklearn.model_selection._split import check_cv
 from sklearn.model_selection._validation import _fit_and_predict, _check_is_permutation, _enforce_prediction_order
-from pipecaster.pipeline import get_clone
+from pipecaster.utility import get_clone
 
 def is_classifier(obj):
     return getattr(obj, "_estimator_type", None) == "classifier"

@@ -6,8 +6,9 @@ from sklearn.datasets import make_classification
 from sklearn.feature_selection import f_classif
 from sklearn.preprocessing import StandardScaler
 
-import pipecaster as pc
-import synthetic_data
+from pipecaster.pipeline import Pipeline
+from pipecaster.input_selection import SelectKBestInputs
+from pipecaster.tests import synthetic_data
 
 class TestInputSelectors(unittest.TestCase):
 
@@ -27,7 +28,7 @@ class TestInputSelectors(unittest.TestCase):
                                             weak_noise_sd=weak_noise_sd,
                                             seed=seed)
 
-        clf = pc.Pipeline(n_inputs = n_Xs)
+        clf = Pipeline(n_inputs = n_Xs)
         layer0 = clf.get_next_layer()
         layer0[:] = StandardScaler()
         layer1 = clf.get_next_layer()
@@ -92,17 +93,17 @@ class TestInputSelectors(unittest.TestCase):
     
     def test_SelectKBestInputs_weak_strong_input_discrimination(self):
         k = 5
-        input_selector = pc.SelectKBestInputs(score_func=f_classif, aggregator=np.mean, k=k)
+        input_selector = SelectKBestInputs(score_func=f_classif, aggregator=np.mean, k=k)
         passed = TestInputSelectors._test_weak_strong_input_discrimination(input_selector, n_weak = k, 
                                                                            n_strong = k, weak_noise_sd = 30, seed = 42)
-        self.assertTrue(passed)
+        self.assertTrue(passed, 'SelectKBestInputs failed to discriminate between week & strong input matrices')
         
     def test_SelectKBestInputs_weak_input_detection(self):
         k = 10
-        input_selector = pc.SelectKBestInputs(score_func=f_classif, aggregator=np.mean, k=k)
+        input_selector = SelectKBestInputs(score_func=f_classif, aggregator=np.mean, k=k)
         passed = TestInputSelectors._test_weak_input_detection(input_selector, n_weak = int(k/2), 
                                                                n_strong = k - int(k/2), weak_noise_sd = 0.2, seed = 42)
-        self.assertTrue(passed)     
+        self.assertTrue(passed, 'SelectKBestInputs failed to detect all week input matrices')     
 
 if __name__ == '__main__':
     unittest.main()

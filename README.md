@@ -1,7 +1,7 @@
-# pipecaster-sklearn
+# pipecaster
 (in progress)
 
-A Python library for broadcasting machine learning (ML) pipeline construction operations across multiple input sources.  The library provides convenient slice notation and a Keras-like layered workflow with an sklearn interface.  In addition, pipecaster supports ML workflow automation with in-pipeline screening and selection of data sources, feature engineering transforms, models, and model hyperparameters.
+A scikit-learn (sklearn) extension for broadcasting machine learning (ML) pipeline construction operations across multiple input sources and automating some aspects of the ML workflow.  The extension provides an alternative Pipeline class that enables users to build complex pipelines with convenient slice notation and a Keras-like layered workflow.  In addition, pipecaster enables ML workflow automation with in-pipeline screening and selection of data sources, feature engineering transforms, models, and model hyperparameters.
 
 ## silo ML inputs
 
@@ -12,7 +12,7 @@ to
 
 ## automate workflows with in-pipeline screening
 
-A typical ML workflow involves screening different input sources, feature engineering steps, models, and model hyperparameters.  Pipecaster allows you to semi-automate each of these screening tasks by including them in the ML pipeline.  This can be useful when you are developing a large number of different pipelines in parallel and don't have time to optimize each one separately, and may accelerate ML workflows in general.  I wasn't able to find these in-pipeline operations in sklearn, Dask, or Spark ML, which provided some of the motivation for developing this library.
+A typical ML workflow involves screening different input sources, feature engineering steps, models, and model hyperparameters.  Pipecaster allows you to semi-automate each of these screening tasks by including them in the ML pipeline.  This can be useful when you are developing a large number of different pipelines in parallel and don't have time to optimize each one separately, and it may accelerate ML workflows in general.  I wasn't able to find these in-pipeline operations in sklearn, Dask, or Spark ML, which provided some of the motivation for developing this library.
 
 1. **Input selectors** The different inputs to pipecaster pipelines (Xs) may come from different data sources, different transformations of the data (i.e. for feature engineering), or both.  Pipecaster provides two different ways to select inputs in order to keep garbage from flowing into and out of your ML models.  The *InputScoreSelector* class selects inputs based on aggregated feature scores.  The *InputPerformanceSelector* class selects inputs based on performance on an internal cross validation run with with a probe ML model.
 
