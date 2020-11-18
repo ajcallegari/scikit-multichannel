@@ -1,5 +1,4 @@
-import pipecaster.ulitity *
-import pipecaster.input_selection *
-import pipecaster.model_selection *
-import pipecaster.metaprediction *
-import pipecaster.pipeline *
+from pipecaster.input_selection import *
+from pipecaster.model_selection import *
+from pipecaster.metaprediction import *
+from pipecaster.pipeline import *

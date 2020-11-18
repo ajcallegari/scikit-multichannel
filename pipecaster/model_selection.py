@@ -1,7 +1,10 @@
+import numpy as np
 import ray
 import scipy.sparse as sp
+from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection._split import check_cv
 from sklearn.model_selection._validation import _fit_and_predict, _check_is_permutation, _enforce_prediction_order
+from sklearn.utils.validation import indexable, _num_samples
 from pipecaster.utility import get_clone
 
 def is_classifier(obj):
@@ -16,11 +19,13 @@ def fit_predict_deprecated(predictor, X, y, train_indices, test_indices, fit_par
     
     return (prediction, test_indices)
 
-@ray.remote
-def ray_fit_predict(predictor, X, y, train_indices, test_indices, verbose, fit_params, method):
-    return _fit_and_predict(predictor, X, y, train_indices, test_indices, fit_params, method)
+#def _fit_and_predict(estimator, X, y, train, test, verbose, fit_params, method):
 
-def cross_val_predict(estimator, X, y=None, *, groups=None, cv=None,
+@ray.remote
+def ray_fit_and_predict(predictor, X, y, train_indices, test_indices, verbose, fit_params, method):
+    return _fit_and_predict(predictor, X, y, train_indices, test_indices, verbose, fit_params, method)
+
+def cross_val_predict(predictor, X, y=None, *, groups=None, cv=None,
                       n_jobs=None, verbose=0, fit_params=None, method='predict'):
     """Modified version of sklearn cross_val_predict that enables stateful cloning (pipecaster.get_clone()) and faster multiprocessing and distributed computing with ray
     
@@ -30,7 +35,7 @@ def cross_val_predict(estimator, X, y=None, *, groups=None, cv=None,
     Generate cross-validated estimates for each input data point
     The data is split according to the cv parameter. Each sample belongs
     to exactly one test set, and its prediction is computed with an
-    estimator fitted on the corresponding training set.
+    predictor fitted on the corresponding training set.
     Passing these predictions into an evaluation metric may not be a valid
     way to measure generalization performance. Results can differ from
     :func:`cross_validate` and :func:`cross_val_score` unless all tests sets
@@ -38,7 +43,7 @@ def cross_val_predict(estimator, X, y=None, *, groups=None, cv=None,
     Read more in the :ref:`User Guide <cross_validation>`.
     Parameters
     ----------
-    estimator : estimator object implementing 'fit' and 'predict'
+    predictor : predictor object implementing 'fit' and 'predict'
         The object to use to fit the data.
     X : array-like of shape (n_samples, n_features)
         The data to fit. Can be, for example a list, or an array at least 2d.
@@ -57,7 +62,7 @@ def cross_val_predict(estimator, X, y=None, *, groups=None, cv=None,
         - int, to specify the number of folds in a `(Stratified)KFold`,
         - :term:`CV splitter`,
         - An iterable yielding (train, test) splits as arrays of indices.
-        For int/None inputs, if the estimator is a classifier and ``y`` is
+        For int/None inputs, if the predictor is a classifier and ``y`` is
         either binary or multiclass, :class:`StratifiedKFold` is used. In all
         other cases, :class:`KFold` is used.
         Refer :ref:`User Guide <cross_validation>` for the various
@@ -72,9 +77,9 @@ def cross_val_predict(estimator, X, y=None, *, groups=None, cv=None,
     verbose : int, default=0
         The verbosity level.
     fit_params : dict, defualt=None
-        Parameters to pass to the fit method of the estimator.
+        Parameters to pass to the fit method of the predictor.
     method : str, default='predict'
-        Invokes the passed method name of the passed estimator. For
+        Invokes the passed method name of the passed predictor. For
         method='predict_proba', the columns correspond to the classes
         in sorted order.
     Returns
@@ -105,7 +110,7 @@ def cross_val_predict(estimator, X, y=None, *, groups=None, cv=None,
     """
     X, y, groups = indexable(X, y, groups)
 
-    cv = check_cv(cv, y, classifier=is_classifier(estimator))
+    cv = check_cv(cv, y, classifier=is_classifier(predictor))
 
     # If classification methods produce multiple columns of output,
     # we need to manually encode classes to ensure consistent column ordering.
@@ -123,15 +128,24 @@ def cross_val_predict(estimator, X, y=None, *, groups=None, cv=None,
             y = y_enc
     
     if n_jobs == 1:
-        prediction_blocks = [_fit_predict(get_clone(predictor), X, y, train_indices, test_indices, verboset, 
+        prediction_blocks = [_fit_and_predict(get_clone(predictor), X, y, train_indices, test_indices, verbose, 
                                           fit_params, method) for train_indices, test_indices in cv.split(X, y, groups)] 
+        
     elif n_jobs > 1:
+        try:
+            ray.nodes()
+        except RuntimeError:
+            ray.init()
+        splits = list(cv.split(X, y, groups))
         X = ray.put(X)
         y = ray.put(y)
         fit_params = ray.put(fit_params)
-        jobs = [ray_fit_predict.remote(get_clone(predictor), X, y, train_indices, test_indices, fit_params, method)
-                             for train_indices, test_indices in cv.split(X, y, groups)]
+        jobs = [ray_fit_and_predict.remote(ray.put(get_clone(predictor)), X, y, train_indices, test_indices, verbose, 
+                                          fit_params, method) for train_indices, test_indices in splits] 
         prediction_blocks = ray.get(jobs)
+        X = ray.get(X)
+        y = ray.get(y)
+        fit_params = ray.get(fit_params)
     else:
         raise ValueError('invalid n_jobs value: {}.  muste be int greater than 0'.format(n_jobs))
         
