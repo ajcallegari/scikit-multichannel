@@ -17,7 +17,7 @@ def ray_fit_and_predict(predictor, X, y, train_indices, test_indices, verbose, f
 
 def split_predict(predictor, X, y=None, *, groups=None, cv=None,
                       n_jobs=None, verbose=0, fit_params=None, method='predict'):
-    """Modified version of sklearn cross_val_predict for use in internal cv training. The modifications enable stateful cloning (pipecaster.get_clone()) and faster multiprocessing/distributed computing with ray
+    """Slightly modified version of sklearn cross_val_predict for use in internal cv training. The modifications enable stateful cloning with pipecaster.utility.get_clone() and faster multiprocessing/distributed computing with ray
     
     The bulk of this code is copied and pasted from scikit-learn, which request the following copyright notification:
     Copyright (c) 2007-2020 The scikit-learn developers.
