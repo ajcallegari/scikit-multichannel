@@ -1,6 +1,9 @@
 from inspect import signature
 import sklearn.base
 
+def is_classifier(obj):
+    return getattr(obj, "_estimator_type", None) == "classifier"
+
 def is_multi_input(pipe):
     """Detect if a pipeline component is multi-input by determining if the first argument to fit() is 'Xs' 
     """
