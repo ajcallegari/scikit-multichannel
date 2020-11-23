@@ -33,7 +33,7 @@ class SelectKBestInputs:
     def __repr__(self, verbose = True):
         return self.__str__(verbose)
         
-    def fit(self, Xs, y, **fit_params):
+    def fit(self, Xs, y, fit_params):
         k = self.k if self.k < len(Xs) else len(Xs) - 1
         X_scores = []
         
@@ -53,8 +53,8 @@ class SelectKBestInputs:
     def transform(self, Xs, y=None):
         return [Xs[i] if (i in self.selected_indices_) else None for i in range(len(Xs))]
             
-    def fit_transform(self, Xs, y=None, **fit_params):
-        self.fit(Xs, y, **fit_params)
+    def fit_transform(self, Xs, y=None, fit_params):
+        self.fit(Xs, y, fit_params)
         return self.transform(Xs, y)
     
     def get_params(self, deep=False):

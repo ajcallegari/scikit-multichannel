@@ -31,3 +31,36 @@ def get_clone(pipe, disable_custom_cloning = False):
         return pipe.get_clone()
     else:
         return sklearn.base.clone(pipe)
+    
+def get_transform_method(pipe):
+    if hasattr(pipe, 'transform'):
+        transform_method = getattr(pipe, 'transform')
+    elif hasattr(pipe, 'predict_proba'):
+        transform_method = getattr(pipe, 'predict_proba')
+    elif hasattr(pipe, 'decision_function'):
+        transform_method = getattr(pipe, 'decision_function')
+    elif hasattr(pipe, 'predict'):
+        transform_method = getattr(pipe, 'predict')
+    else:
+        transform_method = None
+            
+    return transform_method
+
+def get_predict_method(pipe):
+    if hasattr(pipe, 'predict'):
+        predict_method = getattr(pipe, 'predict')
+    elif hasattr(pipe, 'predict_proba'):
+        predict_method = getattr(pipe, 'predict_proba')
+    elif hasattr(pipe, 'decision_function'):
+        predict_method = getattr(pipe, 'decision_function')
+    else:
+        predict_method = None
+            
+    return transform_method
+
+class FitError(Exception):
+    """Exception raised when calls to fit() fail
+    """
+    def __init__(self, message="call to fit() method failed"):
+        self.message = message
+        super().__init__(self.message)

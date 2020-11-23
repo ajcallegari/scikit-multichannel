@@ -1,15 +1,17 @@
 import numpy as np
 import ray
 import scipy.sparse as sp
+import scipy.stats
 
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection._split import check_cv
 from sklearn.model_selection._validation import _fit_and_predict, _check_is_permutation, _enforce_prediction_order
 from sklearn.utils.validation import indexable, _num_samples
 
-from pipecaster.utility import get_clone, is_classifier
+from pipecaster.utils import get_clone, is_classifier, get_transform_method
 
-__all__ = ['TransformingPredictor', 'MetaPredictor']
+__all__ = ['TransformingPredictor', 'MetaClassifier']
+
 
 @ray.remote
 def ray_fit_and_predict(predictor, X, y, train_indices, test_indices, verbose, fit_params, method):
@@ -189,22 +191,22 @@ class TransformingPredictor:
         self.internal_cv = internal_cv
         self.n_jobs = n_jobs
         
-    def fit(self, X, y, **fit_params):
+    def fit(self, X, y=None, fit_params=None):
         if self.method == 'auto':
-            if hasattr(predictor, 'predict_proba'):
+            if hasattr(self.predictor, 'predict_proba'):
                 self.method_ = 'predict_proba' 
-            elif hasattr(predictor, 'decision_function'):
+            elif hasattr(self.predictor, 'decision_function'):
                 self.method_ = 'decision_function' 
-            elif hasattr(predictor, 'predict'):
+            elif hasattr(self.predictor, 'predict'):
                 self.method_ = 'predict' 
             else:
                 raise TypeError('no method found for transform in ' + self.predictor.__class__.__name__)
         else:
-            if hasattr(predictor, self.method):
+            if hasattr(self.predictor, self.method):
                 self.method_ = self.method 
             else:
                 raise TypeError('{} method not found in {}'.format(self.method, pipe.__class__.__name__)) 
-        self.predictor.fit(X, y, **fit_params)
+        self.predictor.fit(X, y, fit_params)
         if hasattr(self.predictor, 'classes_'):
             self.classes_ = self.predictor.classes_
             self._estimator_type = 'classifier'
@@ -220,15 +222,15 @@ class TransformingPredictor:
             X = transform_method(X)
         # internal cv training is enabled
         else:
-            X= split_predict(self.predictor, X, y, groups=groups, cv=self.internal_cv,
+            X = split_predict(self.predictor, X, y, groups=groups, cv=self.internal_cv,
                       n_jobs=1, verbose=0, fit_params=fit_params, method=self.method_)
-            
-        return X.reshape(-1,1) if len(X.shape) == 1 else X
+        return X.reshape(-1, 1) if len(X.shape) == 1 else X
     
     def transform(self, X):
+        import pdb; pdb.set_trace()
         transform_method = getattr(self.predictor, self.method_)
         X = transform_method(X)
-        return X.reshape(-1,1) if len(X.shape) == 1 else X
+        return X.reshape(-1, 1) if len(X.shape) == 1 else X
                         
     def get_params(self, deep=False):
         return {'predictor':self.predictor,
@@ -236,7 +238,7 @@ class TransformingPredictor:
                 'internal_cv':self.internal_cv,
                 'n_jobs':self.n_jobs}
     
-    def set_params(self, **params):
+    def set_params(self, params):
         for key, value in params.items():
             setattr(self, key, value)
 
@@ -251,9 +253,9 @@ class TransformingPredictor:
                 setattr(clone, attr, getattr(self, attr))
         return clone
 
-class MetaPredictor:
+class MetaClassifier:
     
-    """Class that wraps scikit-learn predictors to enable concatenation of multiple and metaprediction
+    """xxx
     
     arguments
     ---------
@@ -261,55 +263,129 @@ class MetaPredictor:
     
     Notes
     -----
-    If you are only using one input, use sklearn's StackingClassifier and StackingRegressor instead.
-    Stardard practice is to use this class on outputs from base classifiers trained using internal cross validation splitting
-    to prevent overfitting.  This is done internally by pipecaster, which by wraps all predictors
-    in the TransformingPredictor class.  When the number of training samples is limiting rather than overfitting, 
-    you may get better performance by turning off internal cv splitting by using internal_cv = 1 in the constructor of 
-    TransformingPredictor.
+    Takes multiple inputs channels and ouputs to the channel with the lowest index number.
+    Supports multiclass but not multilabel or multioutput classification
+    Adds tranform functionality to both voting and stacking metaclassifiers to enable multilevel metaclassification.
+        For soft voting, the transform is the mean probabilities of the multiple inputs
+        For hard voting, the transform is the fraction of the input classifiers that picked the class - shape (n_samples, n_classes)
+        For stacking, the transform is the predict_proba() method of the meta-clf algorithm if available otherwise the decision_function()
     
     """
     
-    def __init__(self, predictor):
-        self.predictor = predictor
+    def __init__(self, classifier = 'soft vote'):
+        self._estimator_type = 'classifier'
         
-    def fit(self, Xs, y, **fit_params):
-        Xs = [X for X in Xs if X is not None]
-        Xs = np.concatenate(Xs, axis=1)
-        self.predictor.fit(Xs, y, **fit_params)
-                           
-    def transform(self, Xs):
-        Xs = [X for X in Xs if X is not None]
-        X = np.concatenate(Xs, axis=1)
-        if hasattr(self.predictor, 'transform'):
-            X = self.predictor.transform(X)                
-        elif hasattr(self.predictor, 'predict_proba'):
-            X = self.predictor.predict_proba(X)
-        elif hasattr(self.predictor, 'decision_function'):
-            X = self.predictor.decision_function(X)         
-        elif hasattr(self.predictor, 'predict'):
-            X = self.predictor.predict(X)
+        if classifier not in ['soft vote', 'hard vote']:
+            if hasattr(classifier, 'fit') == False:
+                raise AttributeError('classifier object missing fit() method')
+            if hasattr(classifier, 'predict') == False:
+                raise AttributeError('classifier missing predict() method')
+                
+        self.classifier = classifier
+
+        
+    def fit(self, Xs, y=None, **fit_params):
+        if y is not None:
+            if isinstance(y, np.ndarray) and len(y.shape) > 1 and y.shape[1] > 1:
+                raise NotImplementedError('Multilabel and multi-output classification not supported')
+            self.classes_, y = np.unique(y, return_inverse=True)
+            
+        if self.classifier not in ['soft vote', 'hard vote']:
+            self.transform_method_ = get_transform_method(self.classifier)
+            if hasattr(self.classifier, 'predict_proba'):
+                self.pred_proba_method_ = getattr(self.classifier, 'predict_proba')
+            elif hasattr(self.classifier, 'decision_function'):
+                self.pred_proba_method_ = getattr(self.classifier, 'decision_function')
+            if hasattr(self.classifier, 'transform') == False:
+                self.transform_method_ = 'decision_function'
+            else:
+                self.pred_proba_method_ = None
+                
+            live_Xs = [X for X in Xs if X is not None]
+            if len(Xs) < 1:
+                raise ValueError('no inputs available to fit metaclassifier')
+            meta_X = np.concatenate(live_Xs, axis=1)
+            if y is None:
+                self.classifier.fit(meta_X, **fit_params)
+            else:
+                self.classifier.fit(meta_X, y, **fit_params)
+        
+    def predict_proba(self, Xs):
+        live_Xs = [X for X in Xs if X is not None]
+        if self.classifier in ['soft vote', 'hard vote']:
+            return np.mean(live_Xs, axis=0)
         else:
-            raise TypeError('predictor wrapped by metapredictor lacks interface for transform \
-                            (transform, predict_proba, or predict')
-        return X
+            meta_X = np.concatenate(live_Xs, axis=1)
+            return self.pred_proba_method_(meta_X)
+                
+    def decision_function(self, Xs):
+        return self.predict_proba(Xs)
+    
+    def predict(self, Xs):
+        live_Xs = [X for X in Xs if X is not None]
+        if self.classifier == 'soft vote':
+            mean_probs = np.mean(live_Xs, axis=0)
+            decisions = np.argmax(mean_probs, axis=1)
+            predictions = self.classes_[decisions]
+            #import pdb; pdb.set_trace()
+        elif self.classifier == 'hard vote':
+            input_decisions = np.stack([np.argmax(X, axis=1) for X in live_Xs])
+            decisions = scipy.stats.mode(input_decisions, axis = 0)[0][0]
+            predictions = self.classes_[decisions]
+        else:
+            meta_X = np.concatenate(live_Xs, axis=1)
+            predictions = self.classifier.predict(meta_X)
+            
+        return predictions
+            
+    def transform(self, Xs):
+        live_Xs = [X for X in Xs if X is not None]
+        if self.classifier == 'soft vote':
+            X_t = np.mean(live_Xs, axis=0)
+        elif self.classifier == 'hard vote':
+            input_predictions = [np.argmax(X, axis=1).reshape(-1,1) for X in live_Xs]
+            input_predictions = np.concatenate(input_predictions, axis=1)
+            n_samples = input_predictions.shape[0]
+            n_classes = len(self.classes_)
+            class_counts = [np.bincount(input_predictions[i,:], minlength=n_classes) for i in range(n_samples)]
+            class_counts = np.stack(class_counts)
+            class_counts /= len(live_Xs)
+            X_t = class_counts
+        else:
+            if self.tranform_method_ is None:
+                raise AttributeError('wrapped classifier lacks an accepted transform method')
+            else:
+                meta_X = np.concatenate(live_Xs, axis=1)
+                X_t = self.tranform_method_(meta_X)
+                
+        if len(X_t.shape) == 1:
+            X_t = X_t.reshape(-1, 1)
+            
+        Xs_t = [None for X in Xs]
+        Xs_t[0] = X_t
+        
+        return Xs_t
                            
-    def fit_transform(self, Xs, y, **fit_params):
+    def fit_transform(self, Xs, y=None, **fit_params):
         self.fit(Xs, y, **fit_params)
         return self.transform(Xs)
                            
-    def predict(self, Xs):
-        Xs = [X for X in Xs if X is not None]
-        X = np.concatenate(Xs, axis=1)
-        return self.predict(X)
-                           
-    def predict_proba(self, Xs):
-        Xs = [X for X in Xs if X is not None]
-        X = np.concatenate(Xs, axis=1)
-        return self.predict_proba(X)   
-                           
     def _more_tags(self):
         return {'metapredictor': True}
+                                        
+    def get_params(self, deep=False):
+        return {'classifier':self.classifier, '_estimator_type':'classifier'}
+    
+    def set_params(self, **params):
+        valid_params = self.get_params().keys()
+        for key, value in params.items():
+            if key in valid_params:
+                setattr(self, key, value)
+            else:
+                raise ValueError('invalid parameter name')
                            
-    def clone(self):
-        return MetaPredictor(get_clone(self.predictor))
+    def get_clone(self):
+        if self.classifier in ['soft vote', 'hard vote']:
+            return MetaClassifier(self.classifier)
+        else:
+            return MetaClassifier(get_clone(self.classifier))
