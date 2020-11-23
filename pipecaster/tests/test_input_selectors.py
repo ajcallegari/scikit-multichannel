@@ -8,7 +8,7 @@ from sklearn.preprocessing import StandardScaler
 
 from pipecaster.pipeline import Pipeline
 from pipecaster.input_selection import SelectKBestInputs
-from pipecaster.tests import synthetic_data
+from pipecaster import synthetic_data
 
 class TestInputSelectors(unittest.TestCase):
 

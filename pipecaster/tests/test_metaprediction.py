@@ -11,6 +11,7 @@ from sklearn.metrics import roc_auc_score
 
 import sklearn.model_selection
 import pipecaster.metaprediction
+from pipecaster import synthetic_data
 
 class TestSplitPredict(unittest.TestCase):
     

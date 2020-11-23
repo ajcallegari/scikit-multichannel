@@ -8,7 +8,7 @@ from sklearn.model_selection._split import check_cv
 from sklearn.model_selection._validation import _fit_and_predict, _check_is_permutation, _enforce_prediction_order
 from sklearn.utils.validation import indexable, _num_samples
 
-from pipecaster.utils import get_clone, is_classifier, get_transform_method
+import pipecaster.utils as utils
 
 __all__ = ['TransformingPredictor', 'MetaClassifier']
 
@@ -102,7 +102,7 @@ def split_predict(predictor, X, y=None, *, groups=None, cv=None,
     """
     X, y, groups = indexable(X, y, groups)
 
-    cv = check_cv(cv, y, classifier=is_classifier(predictor))
+    cv = check_cv(cv, y, classifier=utils.is_classifier(predictor))
 
     # If classification methods produce multiple columns of output,
     # we need to manually encode classes to ensure consistent column ordering.
@@ -120,7 +120,7 @@ def split_predict(predictor, X, y=None, *, groups=None, cv=None,
             y = y_enc
     
     if n_jobs == 1:
-        prediction_blocks = [_fit_and_predict(get_clone(predictor), X, y, train_indices, test_indices, verbose, 
+        prediction_blocks = [_fit_and_predict(utils.get_clone(predictor), X, y, train_indices, test_indices, verbose, 
                                           fit_params, method) for train_indices, test_indices in cv.split(X, y, groups)] 
         
     elif n_jobs > 1:
@@ -132,7 +132,7 @@ def split_predict(predictor, X, y=None, *, groups=None, cv=None,
         X = ray.put(X)
         y = ray.put(y)
         fit_params = ray.put(fit_params)
-        jobs = [ray_fit_and_predict.remote(ray.put(get_clone(predictor)), X, y, train_indices, test_indices, verbose, 
+        jobs = [ray_fit_and_predict.remote(ray.put(utils.get_clone(predictor)), X, y, train_indices, test_indices, verbose, 
                                           fit_params, method) for train_indices, test_indices in splits] 
         prediction_blocks = ray.get(jobs)
         X = ray.get(X)
@@ -191,7 +191,7 @@ class TransformingPredictor:
         self.internal_cv = internal_cv
         self.n_jobs = n_jobs
         
-    def fit(self, X, y=None, fit_params=None):
+    def fit(self, X, y=None, **fit_params):
         if self.method == 'auto':
             if hasattr(self.predictor, 'predict_proba'):
                 self.method_ = 'predict_proba' 
@@ -206,14 +206,14 @@ class TransformingPredictor:
                 self.method_ = self.method 
             else:
                 raise TypeError('{} method not found in {}'.format(self.method, pipe.__class__.__name__)) 
-        self.predictor.fit(X, y, fit_params)
+        self.predictor.fit(X, y, **fit_params)
         if hasattr(self.predictor, 'classes_'):
             self.classes_ = self.predictor.classes_
             self._estimator_type = 'classifier'
         else:
             self._estimator_type = 'regressor'
         
-    def fit_transform(self, X, y, groups=None, fit_params=None):
+    def fit_transform(self, X, y, groups=None, **fit_params):
         self.fit(X, y, **fit_params)
         
         # internal cv training is disabled
@@ -246,7 +246,7 @@ class TransformingPredictor:
         return {'multiple_inputs': True}
     
     def get_clone(self):
-        clone = TransformingPredictor(get_clone(self.predictor), method=self.method, 
+        clone = TransformingPredictor(utils.get_clone(self.predictor), method=self.method, 
                                      internal_cv = self.internal_cv, n_jobs = self.n_jobs)
         for attr in ['classes_', '_estimator_type', 'method_']:
             if hasattr(self, attr):
@@ -291,7 +291,7 @@ class MetaClassifier:
             self.classes_, y = np.unique(y, return_inverse=True)
             
         if self.classifier not in ['soft vote', 'hard vote']:
-            self.transform_method_ = get_transform_method(self.classifier)
+            self.transform_method_ = utils.get_transform_method(self.classifier)
             if hasattr(self.classifier, 'predict_proba'):
                 self.pred_proba_method_ = getattr(self.classifier, 'predict_proba')
             elif hasattr(self.classifier, 'decision_function'):
@@ -388,4 +388,4 @@ class MetaClassifier:
         if self.classifier in ['soft vote', 'hard vote']:
             return MetaClassifier(self.classifier)
         else:
-            return MetaClassifier(get_clone(self.classifier))
+            return MetaClassifier(utils.get_clone(self.classifier))

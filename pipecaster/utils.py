@@ -58,6 +58,9 @@ def get_predict_method(pipe):
             
     return transform_method
 
+def is_predictor(pipe):
+    return False if get_predict_method(pipe) is None else True
+
 class FitError(Exception):
     """Exception raised when calls to fit() fail
     """
