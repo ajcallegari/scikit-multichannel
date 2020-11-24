@@ -227,7 +227,6 @@ class TransformingPredictor:
         return X.reshape(-1, 1) if len(X.shape) == 1 else X
     
     def transform(self, X):
-        import pdb; pdb.set_trace()
         transform_method = getattr(self.predictor, self.method_)
         X = transform_method(X)
         return X.reshape(-1, 1) if len(X.shape) == 1 else X
@@ -312,11 +311,15 @@ class MetaClassifier:
         
     def predict_proba(self, Xs):
         live_Xs = [X for X in Xs if X is not None]
+        channel_predictions = [None for X in Xs]
+            
         if self.classifier in ['soft vote', 'hard vote']:
-            return np.mean(live_Xs, axis=0)
+            channel_predictions[0] = np.mean(live_Xs, axis=0)
+            return channel_predictions
         else:
             meta_X = np.concatenate(live_Xs, axis=1)
-            return self.pred_proba_method_(meta_X)
+            channel_predictions[0] =  self.pred_proba_method_(meta_X)
+            return channel_predictions
                 
     def decision_function(self, Xs):
         return self.predict_proba(Xs)
@@ -327,7 +330,6 @@ class MetaClassifier:
             mean_probs = np.mean(live_Xs, axis=0)
             decisions = np.argmax(mean_probs, axis=1)
             predictions = self.classes_[decisions]
-            #import pdb; pdb.set_trace()
         elif self.classifier == 'hard vote':
             input_decisions = np.stack([np.argmax(X, axis=1) for X in live_Xs])
             decisions = scipy.stats.mode(input_decisions, axis = 0)[0][0]
@@ -336,7 +338,10 @@ class MetaClassifier:
             meta_X = np.concatenate(live_Xs, axis=1)
             predictions = self.classifier.predict(meta_X)
             
-        return predictions
+        channel_predictions = [None for X in Xs]
+        channel_predictions[0] = predictions
+            
+        return channel_predictions
             
     def transform(self, Xs):
         live_Xs = [X for X in Xs if X is not None]

@@ -16,9 +16,9 @@ class TestInputSelectors(unittest.TestCase):
     def _select_synthetic(input_selector, n_Xs=20, n_informative_Xs=5, n_weak_Xs=5, weak_noise_sd=10, verbose = 0, seed = None):
         
         Xs, y, X_types = synthetic_data.make_multi_input_classification(n_classes = 2, 
-                                            n_Xs=n_Xs, 
                                             n_informative_Xs=n_informative_Xs, 
                                             n_weak_Xs=n_weak_Xs,
+                                            n_random_Xs=n_Xs-n_informative_Xs-n_weak_Xs,         
                                             n_samples=1000, 
                                             n_features=100, 
                                             n_informative=20,

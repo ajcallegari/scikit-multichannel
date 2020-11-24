@@ -17,7 +17,7 @@ def get_clone(pipe, disable_custom_cloning = False):
     ----------
     pipe : transformer, estimator, predictor
         Pipeline building block
-   disable_custom_cloning : bool
+    disable_custom_cloning : bool
         Flag that disables use of the pipe.get_clone() method
     Returns
     -------
@@ -56,7 +56,7 @@ def get_predict_method(pipe):
     else:
         predict_method = None
             
-    return transform_method
+    return predict_method
 
 def is_predictor(pipe):
     return False if get_predict_method(pipe) is None else True

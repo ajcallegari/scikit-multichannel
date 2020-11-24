@@ -104,7 +104,7 @@ class Layer:
                 if hasattr(pipe, 'fit'):
                     pipe = utils.get_clone(pipe)
                     try:
-                        if y is not None:
+                        if y is None:
                             pipe.fit(input_, **fit_params)
                         else:
                             pipe.fit(input_, y, **fit_params)
@@ -157,7 +157,7 @@ class Layer:
                     raise AttributeError('valid transform method not found (fit_transform, transform, \
                                           predict, predict_proba, or decision_function)')
                     
-                self.pipe_list[i] = (pipe, slice_, input_indices)   
+                self.pipe_list[i] = (pipe, slice_, input_indices) 
                 
         return Xs
                                      
@@ -318,6 +318,7 @@ class Pipeline:
         return Xs
     
     def predict(self, Xs):
+        Xs = [np.array(X, dtype=float) for X in Xs]
         Xs = [X.reshape(1, -1) if len(X.shape) == 1 else X for X in Xs]
         n_layers = len(self.layers)
         for i in range(n_layers - 1):
@@ -325,6 +326,7 @@ class Pipeline:
         return self.layers[-1].predict(Xs)
     
     def predict_proba(self, Xs):
+        Xs = [np.array(X, dtype=float) for X in Xs]
         Xs = [X.reshape(1, -1) if len(X.shape) == 1 else X for X in Xs]
         n_layers = len(self.layers)
         for i in range(n_layers - 1):
@@ -332,6 +334,7 @@ class Pipeline:
         return self.layers[-1].predict_proba(Xs)
     
     def decision_function(self, Xs):
+        Xs = [np.array(X, dtype=float) for X in Xs]
         Xs = [X.reshape(1, -1) if len(X.shape) == 1 else X for X in Xs]
         n_layers = len(self.layers)
         for i in range(n_layers - 1):
