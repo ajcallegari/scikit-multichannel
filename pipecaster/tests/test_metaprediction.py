@@ -5,10 +5,13 @@ import numpy as np
 import unittest
 import warnings 
 
+from scipy.stats import pearsonr
+
 from sklearn.datasets import make_classification
 from sklearn.preprocessing import StandardScaler
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn.ensemble import RandomForestClassifier
+from sklearn.svm import SVC
 from sklearn.metrics import roc_auc_score, accuracy_score
 
 import sklearn.model_selection
@@ -17,6 +20,12 @@ from pipecaster import synthetic_data
 from pipecaster.pipeline import Pipeline
 from pipecaster.metaprediction import MetaClassifier
 from pipecaster.model_selection import cross_val_score
+
+
+try:
+    ray.nodes()
+except RuntimeError:
+    ray.init()
 
 class TestSplitPredict(unittest.TestCase):
     
@@ -55,10 +64,6 @@ class TestSplitPredict(unittest.TestCase):
         if n_cpus > 1:
             # shut off warnings because ray and redis generate massive numbers
             warnings.filterwarnings("ignore")
-            try:
-                ray.nodes()
-            except RuntimeError:
-                ray.init()
             
             SETUP_CODE = ''' 
 import pipecaster.model_selection'''
@@ -132,12 +137,17 @@ class TestMetaClassifier(unittest.TestCase):
         self.assertTrue(np.array_equal(clf_predictions, mclf_predictions), 
                         'hard voting metaclassifier failed on single matrix easy prediction task')
         
-    def test_multi_matrix_soft_voting(self):
-        """Determine if KNN->MetaClassifier(soft voting) in a pipecaster pipeline gives monotonically increasing accuracy with increasing number of inputs in concordance with Condorcet's jury theorem
+    def test_multi_matrix_voting(self):
+        """Determine if KNN->MetaClassifier(soft voting) in a pipecaster pipeline gives monotonically increasing accuracy with increasing number of inputs in concordance with Condorcet's jury theorem, and also test hard voting with same pass criterion
         """
         
+        n_jobs = multiprocessing.cpu_count()
+        if n_jobs > 1:
+            # shut off warnings because ray and redis generate massive numbers
+            warnings.filterwarnings("ignore")
+        
         n_inputs = 5
-        accuracies = []
+        soft_accuracies, hard_accuracies = [], []
 
         for i in range(0, n_inputs + 1):
             Xs, y, _ = synthetic_data.make_multi_input_classification(n_classes = 2, 
@@ -163,9 +173,68 @@ class TestMetaClassifier(unittest.TestCase):
             split_accuracies = cross_val_score(mclf, Xs, y, prediction_method='predict', 
                                      scoring_metric=roc_auc_score, cv=3, n_jobs=1, verbose=0, 
                                      fit_params=None, error_score=np.nan)
-            accuracies.append(np.mean(split_accuracies))
-
-        self.assertTrue(all(x<y for x, y in zip(accuracies, accuracies[1:])))
+            soft_accuracies.append(np.mean(split_accuracies))
             
+            layer2.clear()
+            layer2[:] = MetaClassifier('hard vote')
+            split_accuracies = cross_val_score(mclf, Xs, y, prediction_method='predict', 
+                                     scoring_metric=roc_auc_score, cv=3, n_jobs=1, verbose=0, 
+                                     fit_params=None, error_score=np.nan)
+            hard_accuracies.append(np.mean(split_accuracies))
+            
+        if n_jobs > 1:
+            # shut off warnings because ray and redis generate massive numbers
+            warnings.resetwarnings()
+            
+        n_informative = range(0, n_inputs + 1)
+        self.assertTrue(soft_accuracies[-1] > 0.80)
+        self.assertTrue(pearsonr(soft_accuracies, n_informative)[0] > 0.80)  
+        self.assertTrue(hard_accuracies[-1] > 0.80)
+        self.assertTrue(pearsonr(hard_accuracies, n_informative)[0] > 0.80) 
+        
+    def test_multi_matrices_svm_metaclassifier(self):
+        
+        n_jobs = multiprocessing.cpu_count()
+        if n_jobs > 1:
+            # shut off warnings because ray and redis generate massive numbers
+            warnings.filterwarnings("ignore")
+
+        n_inputs = 5
+        accuracies = []
+
+        for i in range(0, n_inputs + 1):
+            Xs, y, _ = synthetic_data.make_multi_input_classification(n_classes = 2, 
+                                                        n_informative_Xs=i, 
+                                                        n_weak_Xs=0,
+                                                        n_random_Xs=n_inputs - i,   
+                                                        n_samples=500, 
+                                                        n_features=100, 
+                                                        n_informative=20,
+                                                        n_redundant=0,
+                                                        n_repeated=0,
+                                                        class_sep=3,
+                                                        weak_noise_sd=None,
+                                                        seed=None)
+            mclf = Pipeline(n_inputs)
+            layer0 = mclf.get_next_layer()
+            layer0[:] = StandardScaler()
+            layer1 = mclf.get_next_layer()
+            layer1[:] = KNeighborsClassifier(n_neighbors=5, weights='uniform')
+            layer2 = mclf.get_next_layer()
+            layer2[:] = MetaClassifier(SVC())
+
+            split_accuracies = cross_val_score(mclf, Xs, y, prediction_method='predict', 
+                                     scoring_metric=roc_auc_score, cv=3, n_jobs=n_jobs, verbose=0, 
+                                     fit_params=None, error_score=np.nan)
+            accuracies.append(np.mean(split_accuracies))
+            
+        if n_jobs > 1:
+            # shut off warnings because ray and redis generate massive numbers
+            warnings.resetwarnings()
+
+        self.assertTrue(accuracies[-1] > 0.80)
+        n_informative = range(0, n_inputs + 1)
+        self.assertTrue(pearsonr(accuracies, n_informative)[0] > 0.80)
+
 if __name__ == '__main__':
     unittest.main()
