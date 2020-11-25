@@ -402,8 +402,8 @@ class MetaRegressor:
     
     Parameters
     ----------
-    regressor: str, or object instance with the sklearn regressor interface, default='mean'
-        Determines the metapredicition method: 'mean', 'median', or stacked generalization using 
+    regressor: str, or object instance with the sklearn regressor interface, default='mean voting'
+        Determines the metapredicition method: 'mean voting', 'median voting', or stacked generalization using 
         the specified regressor 
     
     Notes
@@ -414,11 +414,11 @@ class MetaRegressor:
     
     """
     
-    def __init__(self, regressor = 'mean'):
+    def __init__(self, regressor = 'mean voting'):
         self._estimator_type = 'regressor'
         
-        if regressor not in ['mean', 'median']:
-            if hasattr(classifier, 'fit') == False:
+        if regressor not in ['mean voting', 'median voting']:
+            if hasattr(regressor, 'fit') == False:
                 raise AttributeError('regressor object missing fit() method')
                 
         self.regressor = regressor
@@ -428,7 +428,7 @@ class MetaRegressor:
             if isinstance(y, np.ndarray) and len(y.shape) > 1 and y.shape[1] > 1:
                 raise NotImplementedError('Multi-output meta-regression not supported')
             
-        if self.regressor not in ['mean', 'median']:
+        if self.regressor not in ['mean voting', 'median voting']:
             self.transform_method_ = utils.get_transform_method(self.regressor)
             live_Xs = [X for X in Xs if X is not None]
             if len(Xs) < 1:
@@ -441,9 +441,9 @@ class MetaRegressor:
     
     def predict(self, Xs):
         live_Xs = [X for X in Xs if X is not None]
-        if self.regressor == 'mean':
+        if self.regressor == 'mean voting':
             predictions = np.mean(live_Xs, axis=0).reshape(-1)
-        elif self.classifier == 'median':
+        elif self.regressor == 'median voting':
             predictions = np.median(live_Xs, axis=0).reshape(-1)
         else:
             meta_X = np.concatenate(live_Xs, axis=1)
@@ -456,9 +456,9 @@ class MetaRegressor:
             
     def transform(self, Xs):
         live_Xs = [X for X in Xs if X is not None]
-        if self.regressor == 'mean':
+        if self.regressor == 'mean voting':
             predictions = np.mean(live_Xs, axis=0)
-        elif self.classifier == 'median':
+        elif self.regressor == 'median voting':
             predictions = np.median(live_Xs, axis=0)
         else:
             meta_X = np.concatenate(live_Xs, axis=1)
@@ -488,7 +488,7 @@ class MetaRegressor:
                 raise ValueError('invalid parameter name')
                            
     def get_clone(self):
-        if self.regressor in ['mean', 'median']:
-            return MetaClassifier(self.regressor)
+        if self.regressor in ['mean voting', 'median voting']:
+            return MetaRegressor(self.regressor)
         else:
-            return MetaClassifier(utils.get_clone(self.regressor))
+            return MetaRegressor(utils.get_clone(self.regressor))
