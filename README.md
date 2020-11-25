@@ -1,12 +1,12 @@
 # pipecaster
 (in progress)
 
-A scikit-learn extension for broadcasting machine learning pipeline construction operations across multiple input sources and for in-pipeline workflow automation.  Provides slice notation and a Keras-like layered workflow for creating complex pipelines, and enables in-pipeline screens to automate the selection of data sources, feature engineering steps, ML algorithms, and model hyperparameters.
+A scikit-learn extension library for building multi-input ML pipelines and automating ML workflows.  Provides slice notation for broadcasting pipeline construction operations across multiple inputs and a Keras-like layered interface for building deep pipelines step-by-step.  Enables users to automate common screening tasks by including them in the pipeline: screen data sources, feature engineering steps, ML algorithms, and model hyperparameters.
 
 # sample architecture
 ![Use case 1](/images/architecture_1.png)
 
-This diagram shows a pipecaster classification pipeline taking 5 numerical input matrices (X0 to X4) and 1 text input (X5).  Code for building this pipeline is given below.  The ScoreChannelSelector "SelectKBestInputs" computes a matrix score for each input by aggregating feature scores and then selects the k=3 best inputs.  The ChannelModelSelector "SelectKBestPredictors" does an internal cross validation run within the training set during the call to pipeline.fit(Xs, y), estimates the accuracy of models trained on inputs 0 to 4, then selects the k=2 best models and sends their inferences on to a meta-classifier.
+This diagram shows a pipecaster classification pipeline taking 5 numerical input matrices (X0 to X4) and 1 text input (X5).  Code for building this pipeline is given below.  SelectKBestInputs computes a matrix score for each input channel by aggregating feature scores and then selects the k=3 best channels.  SelectKBestPredictors does an internal cross validation run within the training set during the call to pipeline.fit(Xs, y), estimates the accuracy of models trained on inputs 0 to 4, then selects the k=2 best models and sends their inferences on to a meta-classifier.
 
 ## sample code:
 
