@@ -3,6 +3,44 @@
 
 A scikit-learn extension for broadcasting machine learning pipeline construction operations across multiple input sources and for in-pipeline workflow automation.  Provides slice notation and a Keras-like layered workflow for creating complex pipelines, and enables in-pipeline screens to automate the selection of data sources, feature engineering steps, ML algorithms, and model hyperparameters.
 
+# sample architecture
+![Use case 1](/images/architecture_1.png)
+
+This diagram shows a pipecaster classification pipeline taking 5 numerical input matrices (X0 to X4) and 1 text input (X5).  Code for building this pipeline is given below.  The ScoreChannelSelector "SelectKBestInputs" computes a matrix score for each input by aggregating feature scores and then selects the k=3 best inputs.  The ChannelModelSelector "SelectKBestPredictors" does an internal cross validation run within the training set during the call to pipeline.fit(Xs, y), estimates the accuracy of models trained on inputs 0 to 4, then selects the k=2 best models and sends their inferences on to a meta-classifier.
+
+## sample code:
+
+```
+import pipecaster as pc  
+
+clf = pc.Pipeline(n_inputs=6)
+
+layer = clf.get_next_layer()
+layer[:5] = SimpleImputer()
+layer[5] = CountVectorizer()
+
+layer = clf.get_next_layer()
+layer[:5] = StandardScaler()
+layer[5] = TfidfTransformer()
+
+clf.get_next_layer()[:] = SelectKBest(f_classif, k = 100)
+
+clf.get_next_layer()[:5] = pc.SelectKBestInputs(scoring=f_classif, aggregator='sum', k=3)
+
+layer = clf.get_next_layer()
+predictors = [KNeighborsClassifier() for i in range(5)]
+layer[:5] = pc.SelectKBestPredictors(predictors=predictors,
+                                     scoring=make_scorer(roc_auc_score), cv=3)
+layer[5] = MultinomialNB()
+
+clf.get_next_layer()[:] = pc.MetaClassifier(SVC())
+
+clf.fit(X_trains, y_train)
+clf.predict(X_tests)
+```
+
+# motivation and features
+
 ## silo ML inputs
 
 ML libraries often implicitly encourage concatenation of features from multiple data sources into a single feature matrix (X) prior to feature selection or ML.  In practice, concatenation often reduces performance and greater predictive accuracy can be obtained by siloing the different inputs through the initial feature selection and ML steps and combining inferences at a later stage using voting or stacked generalization.  Pipecaster encourages input silos by modifying the sklearn interface from:  
@@ -26,40 +64,3 @@ The different input channels passed to pipecaster pipelines (Xs) may come from d
 
 **Model screening**  
 Pipecaster allows in-pipeline screening of ML models and their hyperparameters with the *SelectiveEnsemble* class.  A *SelectiveEnsemble*, which operates on a single input, is a voting or concatenating ensemble that selects only the most performant models from within the ensemble. Model performance is assessed with an internal cross validation run within the training set during calls to pipeline.fit().  
-
-# sample architecture
-![Use case 1](/images/architecture_1.png)
-
-This diagram shows a pipecaster classification pipeline taking 5 numerical input matrices (X0 to X4) and 1 text input (X5).  Code for building this pipeline is given below.  The ScoreChannelSelector "SelectKBestInputs" computes a matrix score for each input by aggregating feature scores and then selects the k=3 best inputs.  The ChannelModelSelector "SelectKBestPredictors" does an internal cross validation run within the training set during the call to pipeline.fit(Xs, y), estimates the accuracy of models trained on inputs 0 to 4, then selects the k=2 best models and sends their inferences on to a meta-classifier.
-
-## sample code:
-
-```
-import pipecaster as pc
-clf = pc.Pipeline(n_inputs=6)
-
-layer0 = clf.get_next_layer()
-layer0[:5] = SimpleImputer()
-layer0[5] = CountVectorizer()
-
-layer1 = clf.get_next_layer()
-layer1[:5] = StandardScaler()
-layer1[5] = TfidfTransformer()
-
-layer2 = clf.get_next_layer()
-layer2[:] = SelectKBest(f_classif, k = 100)
-
-layer3 = clf.get_next_layer()
-layer3[:5] = pc.SelectKBestInputs(scoring=f_classif, aggregator='sum', k=3)
-
-layer4 = clf.get_next_layer()
-predictors = [KNeighborsClassifier() for i in range(5)]
-layer4[:5] = pc.SelectKBestPredictors(predictors=predictors, scoring=make_scorer(roc_auc_score), cv=3)
-layer4[5] = MultinomialNB()
-
-layer5 = clf.get_next_layer()
-layer5[:] = pc.MetaClassifier(SVC())
-
-clf.fit(X_trains, y_train)
-clf.predict(X_tests)
-```
