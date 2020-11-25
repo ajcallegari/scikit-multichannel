@@ -15,18 +15,18 @@ class TestInputSelectors(unittest.TestCase):
     @staticmethod
     def _select_synthetic(input_selector, n_Xs=20, n_informative_Xs=5, n_weak_Xs=5, weak_noise_sd=10, verbose = 0, seed = None):
         
-        Xs, y, X_types = synthetic_data.make_multi_input_classification(n_classes = 2, 
-                                            n_informative_Xs=n_informative_Xs, 
-                                            n_weak_Xs=n_weak_Xs,
-                                            n_random_Xs=n_Xs-n_informative_Xs-n_weak_Xs,         
-                                            n_samples=1000, 
-                                            n_features=100, 
-                                            n_informative=20,
-                                            n_redundant=0,
-                                            n_repeated=0,
-                                            class_sep=2.0,
-                                            weak_noise_sd=weak_noise_sd,
-                                            seed=seed)
+        n_random_Xs = n_Xs - n_informative_Xs - n_weak_Xs
+        
+        sklearn_params = {'n_classes':2, 
+                          'n_samples':1000, 
+                          'n_features':100, 
+                          'n_informative':20, 
+                          'n_redundant':0, 
+                          'n_repeated':0, 
+                          'class_sep':2.0}
+        
+        Xs, y, X_types = synthetic_data.make_multi_input_classification(n_informative_Xs, n_weak_Xs,
+                                                         n_random_Xs, weak_noise_sd, seed, **sklearn_params)
 
         clf = Pipeline(n_inputs = n_Xs)
         layer0 = clf.get_next_layer()

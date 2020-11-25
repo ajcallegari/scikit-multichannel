@@ -148,20 +148,25 @@ class TestMetaClassifier(unittest.TestCase):
         
         n_inputs = 5
         soft_accuracies, hard_accuracies = [], []
+        
+        sklearn_params = {'n_classes':2, 
+                  'n_samples':500, 
+                  'n_features':100, 
+                  'n_informative':30, 
+                  'n_redundant':0, 
+                  'n_repeated':0, 
+                  'class_sep':3.0}
 
         for i in range(0, n_inputs + 1):
-            Xs, y, _ = synthetic_data.make_multi_input_classification(n_classes = 2, 
-                                                        n_informative_Xs=i, 
-                                                        n_weak_Xs=0,
-                                                        n_random_Xs=n_inputs - i,   
-                                                        n_samples=500, 
-                                                        n_features=100, 
-                                                        n_informative=30,
-                                                        n_redundant=0,
-                                                        n_repeated=0,
-                                                        class_sep=3,
-                                                        weak_noise_sd=None,
-                                                        seed=None)
+            
+            Xs, y, _ = synthetic_data.make_multi_input_classification(n_informative_Xs=i, 
+                                    n_weak_Xs=0,
+                                    n_random_Xs=n_inputs - i,
+                                    weak_noise_sd=None,
+                                    seed = 42,
+                                    **sklearn_params                                   
+                                    )
+
             mclf = Pipeline(n_inputs)
             layer0 = mclf.get_next_layer()
             layer0[:] = StandardScaler()
@@ -187,10 +192,16 @@ class TestMetaClassifier(unittest.TestCase):
             warnings.resetwarnings()
             
         n_informative = range(0, n_inputs + 1)
-        self.assertTrue(soft_accuracies[-1] > 0.80)
-        self.assertTrue(pearsonr(soft_accuracies, n_informative)[0] > 0.80)  
-        self.assertTrue(hard_accuracies[-1] > 0.80)
-        self.assertTrue(pearsonr(hard_accuracies, n_informative)[0] > 0.80) 
+        accuracy = soft_accuracies[-1]
+        self.assertTrue(accuracy > 0.80, 'soft voting accuracy of {} below acceptable threshold of 0.80'.format(accuracy))
+        linearity = pearsonr(soft_accuracies, n_informative)[0]
+        self.assertTrue(linearity > 0.80, 
+                        'hard voting linearity of {} below acceptable threshold of 0.80 pearsonr'.format(linearity))
+        accuracy = hard_accuracies[-1]
+        self.assertTrue(accuracy > 0.80, 'soft voting accuracy of {} below acceptable threshold of 0.80'.format(accuracy))
+        linearity = pearsonr(hard_accuracies, n_informative)[0]
+        self.assertTrue(linearity > 0.80, 
+                        'hard voting linearity of {} below acceptable threshold of 0.80 pearsonr'.format(linearity))
         
     def test_multi_matrices_svm_metaclassifier(self):
         
@@ -201,20 +212,23 @@ class TestMetaClassifier(unittest.TestCase):
 
         n_inputs = 5
         accuracies = []
+        
+        sklearn_params = {'n_classes':2, 
+                          'n_samples':500, 
+                          'n_features':100, 
+                          'n_informative':20, 
+                          'n_redundant':0, 
+                          'n_repeated':0, 
+                          'class_sep':3.0}
 
         for i in range(0, n_inputs + 1):
-            Xs, y, _ = synthetic_data.make_multi_input_classification(n_classes = 2, 
-                                                        n_informative_Xs=i, 
-                                                        n_weak_Xs=0,
-                                                        n_random_Xs=n_inputs - i,   
-                                                        n_samples=500, 
-                                                        n_features=100, 
-                                                        n_informative=20,
-                                                        n_redundant=0,
-                                                        n_repeated=0,
-                                                        class_sep=3,
-                                                        weak_noise_sd=None,
-                                                        seed=None)
+            Xs, y, _ = synthetic_data.make_multi_input_classification(n_informative_Xs=i, 
+                                    n_weak_Xs=0,
+                                    n_random_Xs=n_inputs - i,
+                                    weak_noise_sd=None,
+                                    seed = 42,
+                                    **sklearn_params                                   
+                                    )
             mclf = Pipeline(n_inputs)
             layer0 = mclf.get_next_layer()
             layer0[:] = StandardScaler()
@@ -231,10 +245,12 @@ class TestMetaClassifier(unittest.TestCase):
         if n_jobs > 1:
             # shut off warnings because ray and redis generate massive numbers
             warnings.resetwarnings()
-
-        self.assertTrue(accuracies[-1] > 0.80)
+        
         n_informative = range(0, n_inputs + 1)
-        self.assertTrue(pearsonr(accuracies, n_informative)[0] > 0.80)
-
+        self.assertTrue(accuracies[-1] > 0.80, 
+                        'SVC metaclassification accuracy of {} below acceptable threshold of 0.80'.format(accuracies[-1]))
+        linearity = pearsonr(accuracies, n_informative)[0]
+        self.assertTrue(linearity > 0.80, 
+                        'SVC metaclassification linearity of {} below acceptable threshold of 0.80 pearsonr'.format(linearity))
 if __name__ == '__main__':
     unittest.main()

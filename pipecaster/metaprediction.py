@@ -254,11 +254,13 @@ class TransformingPredictor:
 
 class MetaClassifier:
     
-    """xxx
+    """Classifier and meta-classifier that takes multiple input matrices and generates a single prediction. 
     
-    arguments
-    ---------
-    predictor: instance of a classifier or regressor with the sklearn interface
+    Parameters
+    ----------
+    classifier: str, or object instance with the sklearn interface, default='soft vote'
+        Determines the metapredicition method: 'soft voting', 'hard voting', or stacked generalization using 
+        the specified classifier 
     
     Notes
     -----
@@ -277,8 +279,6 @@ class MetaClassifier:
         if classifier not in ['soft vote', 'hard vote']:
             if hasattr(classifier, 'fit') == False:
                 raise AttributeError('classifier object missing fit() method')
-            if hasattr(classifier, 'predict') == False:
-                raise AttributeError('classifier missing predict() method')
                 
         self.classifier = classifier
 
@@ -286,7 +286,7 @@ class MetaClassifier:
     def fit(self, Xs, y=None, **fit_params):
         if y is not None:
             if isinstance(y, np.ndarray) and len(y.shape) > 1 and y.shape[1] > 1:
-                raise NotImplementedError('Multilabel and multi-output classification not supported')
+                raise NotImplementedError('Multilabel and multi-output meta-classification not supported')
             self.classes_, y = np.unique(y, return_inverse=True)
             
         if self.classifier not in ['soft vote', 'hard vote']:
@@ -394,3 +394,101 @@ class MetaClassifier:
             return MetaClassifier(self.classifier)
         else:
             return MetaClassifier(utils.get_clone(self.classifier))
+        
+        
+class MetaRegressor:
+    
+    """Regressor and meta-regressor that takes multiple input matrices and generates a single prediction. 
+    
+    Parameters
+    ----------
+    regressor: str, or object instance with the sklearn regressor interface, default='mean'
+        Determines the metapredicition method: 'mean', 'median', or stacked generalization using 
+        the specified regressor 
+    
+    Notes
+    -----
+    Takes multiple inputs channels and ouputs to the channel with the lowest index number.
+    Does not support multioutput regression (yet).
+    Adds tranform functionality for multilevel metaclassification.
+    
+    """
+    
+    def __init__(self, regressor = 'mean'):
+        self._estimator_type = 'regressor'
+        
+        if regressor not in ['mean', 'median']:
+            if hasattr(classifier, 'fit') == False:
+                raise AttributeError('regressor object missing fit() method')
+                
+        self.regressor = regressor
+        
+    def fit(self, Xs, y=None, **fit_params):
+        if y is not None:
+            if isinstance(y, np.ndarray) and len(y.shape) > 1 and y.shape[1] > 1:
+                raise NotImplementedError('Multi-output meta-regression not supported')
+            
+        if self.regressor not in ['mean', 'median']:
+            self.transform_method_ = utils.get_transform_method(self.regressor)
+            live_Xs = [X for X in Xs if X is not None]
+            if len(Xs) < 1:
+                raise ValueError('no inputs available to fit meta-regressor')
+            meta_X = np.concatenate(live_Xs, axis=1)
+            if y is None:
+                self.regressor.fit(meta_X, **fit_params)
+            else:
+                self.regressor.fit(meta_X, y, **fit_params)
+    
+    def predict(self, Xs):
+        live_Xs = [X for X in Xs if X is not None]
+        if self.regressor == 'mean':
+            predictions = np.mean(live_Xs, axis=0).reshape(-1)
+        elif self.classifier == 'median':
+            predictions = np.median(live_Xs, axis=0).reshape(-1)
+        else:
+            meta_X = np.concatenate(live_Xs, axis=1)
+            predictions = self.regressor.predict(meta_X)
+            
+        channel_predictions = [None for X in Xs]
+        channel_predictions[0] = predictions
+            
+        return channel_predictions
+            
+    def transform(self, Xs):
+        live_Xs = [X for X in Xs if X is not None]
+        if self.regressor == 'mean':
+            predictions = np.mean(live_Xs, axis=0)
+        elif self.classifier == 'median':
+            predictions = np.median(live_Xs, axis=0)
+        else:
+            meta_X = np.concatenate(live_Xs, axis=1)
+            predictions = self.regressor.predict(meta_X).reshape(-1,1)
+            
+        Xs_t = [None for X in Xs]
+        Xs_t[0] = predictions
+            
+        return Xs_t
+                           
+    def fit_transform(self, Xs, y=None, **fit_params):
+        self.fit(Xs, y, **fit_params)
+        return self.transform(Xs)
+                           
+    def _more_tags(self):
+        return {'metapredictor': True}
+                                        
+    def get_params(self, deep=False):
+        return {'regressor':self.regressor, '_estimator_type':'regressor'}
+    
+    def set_params(self, **params):
+        valid_params = self.get_params().keys()
+        for key, value in params.items():
+            if key in valid_params:
+                setattr(self, key, value)
+            else:
+                raise ValueError('invalid parameter name')
+                           
+    def get_clone(self):
+        if self.regressor in ['mean', 'median']:
+            return MetaClassifier(self.regressor)
+        else:
+            return MetaClassifier(utils.get_clone(self.regressor))
