@@ -22,6 +22,7 @@ from pipecaster.pipeline import Pipeline
 from pipecaster.metaprediction import ChannelClassifier, ChannelRegressor
 from pipecaster.model_selection import cross_val_score
 
+
 try:
     ray.nodes()
 except RuntimeError:
@@ -101,7 +102,7 @@ pipecaster.metaprediction.split_predict(clf, X, y, cv = 5, n_jobs = {})'''.forma
 
 class TestChannelClassifier(unittest.TestCase):
     
-    def test_singe_matrix_soft_voting(self):
+    def test_single_matrix_soft_voting(self):
         """Determine if KNN->ChannelClassifier(soft voting) in a pipecaster pipeline gives identical predictions to sklearn KNN on training data
         """
         X, y = make_classification(n_samples=100, n_features=20, n_informative=10, class_sep=5, random_state=42)
@@ -119,7 +120,7 @@ class TestChannelClassifier(unittest.TestCase):
         self.assertTrue(np.array_equal(clf_predictions, mclf_predictions), 
                         'soft voting metaclassifier did not reproduce sklearn result on single matrix prediction task')
         
-    def test_singe_matrix_hard_voting(self):
+    def test_single_matrix_hard_voting(self):
         """Determine if KNN->ChannelClassifier(hard voting) in a pipecaster pipeline gives identical predictions to sklearn KNN on training data
         """
         X, y = make_classification(n_samples=100, n_features=20, n_informative=10, class_sep=5, random_state=42)
@@ -257,7 +258,7 @@ class TestChannelClassifier(unittest.TestCase):
         
 class TestChannelRegressor(unittest.TestCase):
     
-    def test_singe_matrix_mean_voting(self, seed=42):
+    def test_single_matrix_mean_voting(self, seed=42):
         """Determine if KNN->ChannelRegressor(mean voting) in a pipecaster pipeline gives identical predictions to sklearn KNN on training data
         """
         X, y = make_regression(n_samples=100, n_features=20, n_informative=10, random_state=seed)
@@ -277,7 +278,7 @@ class TestChannelRegressor(unittest.TestCase):
         self.assertTrue(np.array_equal(rgr_predictions, mrgr_predictions), 
                         'mean voting ChannelRegressor failed to reproduce sklearn result on single matrix prediction task')
         
-    def test_singe_matrix_median_voting(self, seed=42):
+    def test_single_matrix_median_voting(self, seed=42):
         """Determine if KNN->ChannelRegressor(median voting) in a pipecaster pipeline gives identical predictions to sklearn KNN on training data
         """
         X, y = make_regression(n_samples=100, n_features=20, n_informative=10, random_state=seed)
@@ -297,7 +298,7 @@ class TestChannelRegressor(unittest.TestCase):
         self.assertTrue(np.array_equal(rgr_predictions, mrgr_predictions), 
                         'median voting ChannelRegressor failed to reproduce sklearn result on single matrix prediction task')
         
-    def test_multi_matrix_voting(self, seed = 42, verbose=0):
+    def test_multi_matrix_voting(self, seed = 42, verbose=1):
         """Determine if KNN->ChannelRegressor(voting) in a pipecaster pipeline gives monotonically increasing accuracy with increasing number of inputs and exceeds an accuracy cutoff
         """
         

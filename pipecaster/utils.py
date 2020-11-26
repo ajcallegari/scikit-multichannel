@@ -74,3 +74,23 @@ class FitError(Exception):
     def __init__(self, message="call to fit() method failed"):
         self.message = message
         super().__init__(self.message)
+        
+def get_descriptor(class_name, params, verbose = True):
+        string_ = class_name + '('
+        
+        if verbose:
+            argstrings = []
+            for k, v in params.items():
+                argstring = k + '=' 
+                if hasattr(v, '__name__'):
+                    argstring += v.__name__
+                elif hasattr(v, '__str__'):
+                    argstring += v.__str__()
+                elif type(v) in [str, int, float]:
+                    argstring += v
+                else:
+                    argstring += 'NA'
+                argstrings.append(argstring)
+            string_ += ', '.join(argstrings)
+                    
+        return  string_ + ')'

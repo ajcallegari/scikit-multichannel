@@ -1,7 +1,13 @@
 import numpy as np
-from sklearn.feature_selection import f_classif
+import ray
 
-__all__ = ['SelectKBestChannels']
+from sklearn.feature_selection import f_classif
+from sklearn.model_selection import cross_val_score
+
+import pipecaster.utils as utils
+
+
+__all__ = ['SelectKBestChannels', 'SelectKBestPerformers']
 
 class AggregateFeatureScorer:
     
@@ -24,6 +30,43 @@ class AggregateFeatureScorer:
                 
         return X_scores
         
+class PerformanceScorer:
+    
+    def __init__(self, probe, cv, scoring, channel_jobs=1, cv_jobs=1):
+        self.probe = probe
+        self.cv = cv
+        self.scoring = scoring
+        self.channel_jobs = channel_jobs
+        self.cv_jobs = cv_jobs
+    
+    @staticmethod
+    def _get_performance_score(probe, X, y, scoring, cv, cv_jobs, **fit_params):
+        if X is None:
+            return None
+        else:
+            scores = cross_val_score(probe, X, y, scoring=scoring, cv=cv, n_jobs=cv_jobs, 
+                                     verbose=0, fit_params=fit_params)
+            return np.mean(scores)
+    
+    @ray.remote
+    def _ray_get_performance_score(probe, X, y, scoring, cv, cv_jobs, **fit_params):
+        return PerformanceScorer._get_performance_score(probe, X, y, scoring, cv, cv_jobs, **fit_params)
+        
+    def __call__(self, Xs, y, **fit_params):
+        
+        if self.channel_jobs < 2:
+            X_scores = [PerformanceScorer._get_performance_score(self.probe, X, y, self.scoring, self.cv, 
+                                                                 self.cv_jobs, **fit_params)
+                        for X in Xs]
+        elif self.channel_jobs > 1:
+            jobs = [PerformanceScorer._ray_get_performance_score.remote(ray.put(self.probe), ray.put(X), ray.put(y), 
+                                                                        self.scoring, self.cv, self.cv_jobs, 
+                                                                        **fit_params) 
+                    for X in Xs]
+            X_scores = ray.get(jobs)
+                
+        return X_scores
+        
 class RankScoreSelector:
     
     def __init__(self, k=3):
@@ -39,15 +82,15 @@ class ChannelSelector:
         self.channel_scorer = channel_scorer
         self.score_selector = score_selector
     
-    def fit(self, Xs, y=None, **fit_params):
-        channel_scores = self.channel_scorer(Xs, y)
+    def fit(self, Xs, y=None, groups=None, **fit_params):
+        channel_scores = self.channel_scorer(Xs, y, **fit_params)
         self.selected_indices_ = self.score_selector(channel_scores)
             
     def transform(self, Xs):
         return [Xs[i] if (i in self.selected_indices_) else None for i in range(len(Xs))]
             
     def fit_transform(self, Xs, y=None, **fit_params):
-        self.fit(Xs, y)
+        self.fit(Xs, y, **fit_params)
         return self.transform(Xs)
     
     def get_params(self, deep=False):
@@ -72,28 +115,19 @@ class SelectKBestChannels(ChannelSelector):
     def __init__(self, feature_scorer=f_classif, aggregator=np.sum, k=3):
         super().__init__(AggregateFeatureScorer(feature_scorer, aggregator), RankScoreSelector(k))
         
-        
     def __str__(self, verbose = True):
-        string_ = self.__class__.__name__ + '('
-        
-        if verbose:
-            argstrings = []
-            for k, v in self.get_params().items():
-                argstring = k + '=' 
-                if hasattr(v, '__name__'):
-                    argstring += v.__name__
-                elif hasattr(v, '__str__'):
-                    argstring += v.__str__()
-                elif type(v) in [str, int, float]:
-                    argstring += v
-                else:
-                    argstring += 'NA'
-                argstrings.append(argstring)
-            string_ += ', '.join(argstrings)
-                    
-        return  string_ + ')'
+        return utils.get_descriptor(self.__class__.__name__, self.get_params(), verbose)
     
     def __repr__(self, verbose = True):
         return self.__str__(verbose)
-
     
+class SelectKBestPerformers(ChannelSelector):
+    
+    def __init__(self, probe, cv, scoring, k, channel_jobs=1, cv_jobs=1):
+        super().__init__(PerformanceScorer(probe, cv, scoring, channel_jobs, cv_jobs), RankScoreSelector(k))
+
+    def __str__(self, verbose = True):
+        return utils.get_descriptor(self.__class__.__name__, self.get_params(), verbose)
+    
+    def __repr__(self, verbose = True):
+        return self.__str__(verbose)    
