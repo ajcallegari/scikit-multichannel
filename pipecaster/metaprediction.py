@@ -10,7 +10,7 @@ from sklearn.utils.validation import indexable, _num_samples
 
 import pipecaster.utils as utils
 
-__all__ = ['TransformingPredictor', 'MetaClassifier']
+__all__ = ['TransformingPredictor', 'ChannelClassifier', 'ChannelRegressor']
 
 
 @ray.remote
@@ -174,15 +174,26 @@ def split_predict(predictor, X, y=None, *, groups=None, cv=None,
 
 class TransformingPredictor:
     
-    """Class that wraps scikit-learn predictors to provide transform() & fit_transform() methods, and training on internal splits.  Internal cross validation splits are used only during fit_transform() in order to reduce overfitting during downstream metaclassifier training.  Models trained on splits are temporary.  A persistent model trained on the full training set is also gererated by fit_transform() -- and also fit() -- and used for inference during calls to transform().
+    """Wrapper class that provids scikit-learn predictors with transform()/fit_transform() methods and internal cross validation training so their predictions may be used for metaprediction. 
     
     arguments
     ---------
-    predictor: instance of predictor object with sklearn interface
-    method: string. indicates the name of the method to use for transformation or 'auto' for 'predict_proba' -> 'decision_function' -> 'predict'
-    internal_cv: None, int or cross validation splitter (e.g. StratifiedKFold).  If None, 0, or 1, cross validation training is disabled.  For integers > 1, KFold is automatically used for regressors and StratifiedKFold used for classifiers.
-    n_jobs: Number of parallel _fit_and_predict jobs to run during internal cv training.
-
+    predictor: object instance 
+        The sklearn predictor to be wrapped
+    method: string. indicates the name of the method to use for transformation or 'auto' 
+        for 'predict_proba' -> 'decision_function' -> 'predict'
+    internal_cv: None, int or cross validation splitter (e.g. StratifiedKFold).  
+        Set the traing set subsampling method used for fitting and tranforming when fit_tranform() is called.  If None, 0, or 1, 
+        subsamplish is disabled.  For integers > 1, KFold is automatically used for regressors and StratifiedKFold used for 
+        classifiers.  Cv subsampling ensures that models do not make predictions on their own training data samples, and is
+        useful when predictions will subsequently be used to train a meta-classifier.
+    n_jobs: Number of parallel _fit_and_predict jobs to run during internal cv training (ray multiprocessing).
+    
+    notes
+    -----
+    Models that are trained with internal cross validation subsamples when fit_transform() is called are used 
+    transiently during pipeline fitting and are not persisted for subsequent inferences.  Inferences are made on 
+    a differnt, persistent model that is trained on the full training set during calls to fit_transform() -- or fit().
     """
     
     def __init__(self, predictor, method='auto', internal_cv = 5, n_jobs = 1):
@@ -252,7 +263,7 @@ class TransformingPredictor:
                 setattr(clone, attr, getattr(self, attr))
         return clone
 
-class MetaClassifier:
+class ChannelClassifier:
     
     """Classifier and meta-classifier that takes multiple input matrices and generates a single prediction. 
     
@@ -391,12 +402,12 @@ class MetaClassifier:
                            
     def get_clone(self):
         if self.classifier in ['soft vote', 'hard vote']:
-            return MetaClassifier(self.classifier)
+            return ChannelClassifier(self.classifier)
         else:
-            return MetaClassifier(utils.get_clone(self.classifier))
+            return ChannelClassifier(utils.get_clone(self.classifier))
         
         
-class MetaRegressor:
+class ChannelRegressor:
     
     """Regressor and meta-regressor that takes multiple input matrices and generates a single prediction. 
     
@@ -489,6 +500,6 @@ class MetaRegressor:
                            
     def get_clone(self):
         if self.regressor in ['mean voting', 'median voting']:
-            return MetaRegressor(self.regressor)
+            return ChannelRegressor(self.regressor)
         else:
-            return MetaRegressor(utils.get_clone(self.regressor))
+            return ChannelRegressor(utils.get_clone(self.regressor))

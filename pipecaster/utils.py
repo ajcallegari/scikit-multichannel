@@ -1,5 +1,6 @@
 from inspect import signature
 import sklearn.base
+import joblib
 
 def is_classifier(obj):
     return getattr(obj, "_estimator_type", None) == "classifier"
@@ -31,6 +32,12 @@ def get_clone(pipe, disable_custom_cloning = False):
         return pipe.get_clone()
     else:
         return sklearn.base.clone(pipe)
+    
+def save_model(model, filepath):
+    joblib.dump(model, filepath) 
+    
+def load_model(filepath):
+    return joblib.load(filepath) 
     
 def get_transform_method(pipe):
     if hasattr(pipe, 'transform'):
