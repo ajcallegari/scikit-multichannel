@@ -1,6 +1,7 @@
 import numpy as np
 import pipecaster.utils as utils
 from pipecaster.metaprediction import TransformingPredictor
+from pipecaster.utils import FitError
 
 __all__ = ['Layer', 'Pipeline']
        
