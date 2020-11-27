@@ -27,6 +27,9 @@ try:
     ray.nodes()
 except RuntimeError:
     ray.init()
+    
+n_cpus = multiprocessing.cpu_count()
+
 
 class TestSplitPredict(unittest.TestCase):
     
@@ -60,7 +63,6 @@ class TestSplitPredict(unittest.TestCase):
             
     def test_multiprocessing(self):
         clf, X, y = self.clf, self.X, self.y
-        n_cpus = multiprocessing.cpu_count()
 
         if n_cpus > 1:
             # shut off warnings because ray and redis generate massive numbers
@@ -142,8 +144,7 @@ class TestChannelClassifier(unittest.TestCase):
         """Test if KNN->ChannelClassifier(soft voting) in a pipecaster pipeline gives monotonically increasing accuracy with increasing number of inputs in concordance with Condorcet's jury theorem, and also test hard voting with same pass criterion. Test if accuracy is > 80%.
         """
         
-        n_jobs = multiprocessing.cpu_count()
-        if n_jobs > 1:
+        if n_cpus > 1:
             # shut off warnings because ray and redis generate massive numbers
             warnings.filterwarnings("ignore")
         
@@ -188,7 +189,7 @@ class TestChannelClassifier(unittest.TestCase):
                                      fit_params=None, error_score=np.nan)
             hard_accuracies.append(np.mean(split_accuracies))
             
-        if n_jobs > 1:
+        if n_cpus > 1:
             # shut off warnings because ray and redis generate massive numbers
             warnings.resetwarnings()
             
@@ -207,8 +208,7 @@ class TestChannelClassifier(unittest.TestCase):
     def test_multi_matrices_svm_metaclassifier(self):
         """Test if KNN classifier->ChannelClassifier(SVC) in a pipecaster pipeline gives monotonically increasing accuracy with increasing number of inputs, and test if accuracy is > 80%.
         """        
-        n_jobs = multiprocessing.cpu_count()
-        if n_jobs > 1:
+        if n_cpus > 1:
             # shut off warnings because ray and redis generate massive numbers
             warnings.filterwarnings("ignore")
 
@@ -240,11 +240,11 @@ class TestChannelClassifier(unittest.TestCase):
             layer2[:] = ChannelClassifier(SVC())
 
             split_accuracies = cross_val_score(mclf, Xs, y, prediction_method='predict', 
-                                     scoring_metric=roc_auc_score, cv=3, n_jobs=n_jobs, verbose=0, 
+                                     scoring_metric=roc_auc_score, cv=3, n_jobs=n_cpus, verbose=0, 
                                      fit_params=None, error_score=np.nan)
             accuracies.append(np.mean(split_accuracies))
             
-        if n_jobs > 1:
+        if n_cpus > 1:
             # shut off warnings because ray and redis generate massive numbers
             warnings.resetwarnings()
         
@@ -298,12 +298,11 @@ class TestChannelRegressor(unittest.TestCase):
         self.assertTrue(np.array_equal(rgr_predictions, mrgr_predictions), 
                         'median voting ChannelRegressor failed to reproduce sklearn result on single matrix prediction task')
         
-    def test_multi_matrix_voting(self, seed = 42, verbose=1):
+    def test_multi_matrix_voting(self, seed = 42, verbose=0):
         """Determine if KNN->ChannelRegressor(voting) in a pipecaster pipeline gives monotonically increasing accuracy with increasing number of inputs and exceeds an accuracy cutoff
         """
         
-        n_jobs = multiprocessing.cpu_count()
-        if n_jobs > 1:
+        if n_cpus > 1:
             # shut off warnings because ray and redis generate massive numbers
             warnings.filterwarnings("ignore")
         
@@ -334,14 +333,14 @@ class TestChannelRegressor(unittest.TestCase):
             layer2[:] = ChannelRegressor('mean voting')
 
             split_accuracies = cross_val_score(mrgr, Xs, y, prediction_method='predict', 
-                                     scoring_metric=explained_variance_score, cv=3, n_jobs=1, verbose=0, 
+                                     scoring_metric=explained_variance_score, cv=3, n_jobs=n_cpus, verbose=0, 
                                      fit_params=None, error_score=np.nan)
             mean_accuracies.append(np.mean(split_accuracies))
             
             layer2.clear()
             layer2[:] = ChannelRegressor('median voting')
             split_accuracies = cross_val_score(mrgr, Xs, y, prediction_method='predict', 
-                                     scoring_metric=explained_variance_score, cv=3, n_jobs=1, verbose=0, 
+                                     scoring_metric=explained_variance_score, cv=3, n_jobs=n_cpus, verbose=0, 
                                      fit_params=None, error_score=np.nan)
             median_accuracies.append(np.mean(split_accuracies))
             
@@ -352,7 +351,7 @@ class TestChannelRegressor(unittest.TestCase):
             for n_informative, mean_ev, median_ev in zip(n_informatives, mean_accuracies, median_accuracies):
                 print('{}\t\t {}\t\t {}'.format(n_informative, mean_ev, median_ev))
                 
-        if n_jobs > 1:
+        if n_cpus > 1:
             # shut off warnings because ray and redis generate massive numbers
             warnings.resetwarnings()
             
@@ -382,8 +381,7 @@ class TestChannelRegressor(unittest.TestCase):
            increasing accuracy with increasing number of inputs and exceeds a minimum accuracy cutoff.
         """
         
-        n_jobs = multiprocessing.cpu_count()
-        if n_jobs > 1:
+        if n_cpus > 1:
             # shut off warnings because ray and redis generate massive numbers
             warnings.filterwarnings("ignore")
         
@@ -415,7 +413,7 @@ class TestChannelRegressor(unittest.TestCase):
             layer2[:] = ChannelRegressor(SVR())
 
             split_accuracies = cross_val_score(mrgr, Xs, y, prediction_method='predict', 
-                                     scoring_metric=explained_variance_score, cv=3, n_jobs=1, verbose=0, 
+                                     scoring_metric=explained_variance_score, cv=3, n_jobs=n_cpus, verbose=0, 
                                      fit_params=None, error_score=np.nan)
             accuracies.append(np.mean(split_accuracies))
 
@@ -427,7 +425,7 @@ class TestChannelRegressor(unittest.TestCase):
             for n_informative, ev in zip(n_informatives, accuracies):
                 print('{}\t\t {}'.format(n_informative, ev))
                 
-        if n_jobs > 1:
+        if n_cpus > 1:
             # shut off warnings because ray and redis generate massive numbers
             warnings.resetwarnings()
             

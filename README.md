@@ -67,3 +67,6 @@ The different input channels passed to pipecaster pipelines (Xs) may come from d
 
 **Model screening**  
 Pipecaster allows in-pipeline screening of ML models and their hyperparameters with the *SelectiveEnsemble* class.  A *SelectiveEnsemble*, which operates on a single input, is a voting or concatenating ensemble that selects only the most performant models from within the ensemble. Model performance is assessed with an internal cross validation run within the training set during calls to pipeline.fit().  
+
+## fast multiprocessing and distributed computing
+Pipecaster uses Ray to distribute cross validation runs and hyperparameter screens to multiple processors and computers.  Ray dramatically increases performance relative to joblib multiprocessing or the Python standard library's multiprocessing package because it distributes Python objects without serialization/de-serialization overhead using the plasma in-memory object store that is also used by Apache Arrow & Apache Spark.
