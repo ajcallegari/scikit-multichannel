@@ -3,7 +3,7 @@ import ray
 import scipy.stats
 
 import pipecaster.utils as utils
-from pipecaster.model_selection import cross_val_predict
+from pipecaster.cross_validation import cross_val_predict
 
 __all__ = ['TransformingPredictor', 'ChannelClassifier', 'ChannelRegressor']
 
@@ -248,7 +248,6 @@ class ChannelClassifier:
             return ChannelClassifier(self.classifier)
         else:
             return ChannelClassifier(utils.get_clone(self.classifier))
-        
         
 class ChannelRegressor:
     

@@ -17,7 +17,7 @@ from sklearn.metrics import roc_auc_score, explained_variance_score
 from pipecaster import synthetic_data
 from pipecaster.pipeline import Pipeline
 from pipecaster.channel_metaprediction import ChannelClassifier, ChannelRegressor
-from pipecaster.model_selection import cross_val_score
+from pipecaster.cross_validation import cross_val_score
 
 try:
     ray.nodes()

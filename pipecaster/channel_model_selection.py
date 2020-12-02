@@ -5,7 +5,7 @@ import pipecaster.utils as utils
 from pipecaster.channel_metaprediction import TransformingPredictor
 from pipecaster.score_selection import RankScoreSelector
 from pipecaster.channel_scoring import CvPerformanceScorer
-from pipecaster.model_selection import cross_val_score 
+from pipecaster.cross_validation import cross_val_score 
 from sklearn.metrics import accuracy_score
 
 

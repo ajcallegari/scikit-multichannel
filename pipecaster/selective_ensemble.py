@@ -2,15 +2,14 @@ import ray
 
 import pipecaster.utils as utils
 
-
-                                 
 class SelectiveEnsemble:
     
-    def __init__(self, predictors, model_scorer, score_selector, internal_cv=5, predictor_jobs=1, cv_jobs=1):
+    def __init__(self, predictors, model_scorer, score_selector, internal_cv=5, cv_scorer='auto', predictor_jobs=1, cv_jobs=1):
         self.predictors = predictors
         self.model_scorer = model_scorer
         self.score_selector = score_selector
         self.internal_cv = internal_cv
+        self.cv_scorer = cv_scorer
         self.predictor_jobs = predictor_jobs
         self.cv_jobs = cv_jobs
     

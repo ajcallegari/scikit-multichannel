@@ -2,7 +2,7 @@ import numpy as np
 
 from sklearn.feature_selection import f_classif
 
-from pipecaster.model_selection import cross_val_score
+from pipecaster.cross_validation import cross_val_score
 
 __all__ = ['AggregateFeatureScorer', 'CvPerformanceScorer']
 
