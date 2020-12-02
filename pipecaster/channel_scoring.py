@@ -4,6 +4,8 @@ from sklearn.feature_selection import f_classif
 
 from pipecaster.model_selection import cross_val_score
 
+__all__ = ['AggregateFeatureScorer', 'CvPerformanceScorer']
+
 class AggregateFeatureScorer:
     
     def __init__(self, feature_scorer=f_classif, aggregator=np.sum):

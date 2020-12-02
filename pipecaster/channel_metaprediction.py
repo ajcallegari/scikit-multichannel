@@ -31,16 +31,19 @@ class TransformingPredictor:
     a differnt, persistent model that is trained on the full training set during calls to fit_transform() -- or fit().
     """
     
-    def __init__(self, predictor, transform_method='auto', internal_cv=5, n_jobs=1):
+    def __init__(self, predictor, transform_method='auto', internal_cv=5, cv_scorer=None, cv_jobs=1):
         self.predictor = predictor
         self.transform_method = transform_method
         self.internal_cv = internal_cv
-        self.n_jobs = n_jobs
+        self.cv_scorer = cv_scorer
+        self.cv_jobs = cv_jobs
         
     def fit(self, X, y=None, **fit_params):
         if hasattr(self.predictor, 'fit') == False:
             raise AttributeError('missing fit method')
         self.predictor.fit(X, y, **fit_params)
+        
+        # detect the type of predictor
         if hasattr(self.predictor, 'classes_'):
             self.classes_ = self.predictor.classes_
         if utils.is_classifier(self.predictor):
@@ -69,7 +72,9 @@ class TransformingPredictor:
         # internal cv training is enabled
         else:
             X = cross_val_predict(self.predictor, X, y, groups=groups, cv=self.internal_cv,
-                      n_jobs=1, predict_method=self.transform_method_.__name__, **fit_params)
+                      n_jobs=self.cv_jobs, predict_method=self.transform_method_.__name__, **fit_params)
+            if self.cv_scorer is not None:
+                self.score_ = self.cv_scorer(y, X)
         return X.reshape(-1, 1) if len(X.shape) == 1 else X
     
     def transform(self, X):
@@ -91,13 +96,11 @@ class TransformingPredictor:
     
     def get_clone(self):
         clone = TransformingPredictor(utils.get_clone(self.predictor), transform_method=self.transform_method, 
-                                      internal_cv = self.internal_cv, n_jobs = self.n_jobs)
-        if hasattr(self, 'transform_method_'):
-            setattr(clone, self.transform_method_)
-        if hasattr(self, '_estimator_type'):
-            setattr(clone, self._estimator_type)
-        if hasattr(self, 'classes_'):
-            setattr(clone, self.classes_)
+                                      internal_cv=self.internal_cv, cv_scorer=self.cv_scorer, cv_jobs=self.cv_jobs)
+        state_variables = ['transform_method_', '_estimator_type', 'classes_', 'score_']
+        for var in state_variables:
+            if hasattr(self, var):
+                setattr(clone, var, getattr(self, var))
         return clone
             
 class ChannelClassifier:

@@ -2,6 +2,9 @@ from inspect import signature, getfullargspec
 import sklearn.base
 import joblib
 
+__all__ = ['is_classifier', 'is_regressor', 'is_multi_input', 'get_clone', 'get_list_clone', 'save_model', 'load_model',
+           'get_transform_method', 'get_predict_method', 'is_predictor', 'FitError', 'get_descriptor', 'get_param_names']
+
 def is_classifier(obj):
     if hasattr(obj, '_estimator_type'):
         if getattr(obj, '_estimator_type', None) == 'classifier':
