@@ -1,6 +1,6 @@
 import numpy as np
 import pipecaster.utils as utils
-from pipecaster.metaprediction import TransformingPredictor
+from pipecaster.channel_metaprediction import TransformingPredictor
 from pipecaster.utils import FitError
 
 __all__ = ['Layer', 'Pipeline']
@@ -201,7 +201,7 @@ class Layer:
                     
         outputs = [p for p in predictions if p is not None]
         if len(outputs) == 0:
-            raise ValueError('missing predict{} method in Layer')        
+            raise ValueError('missing predict method in Layer')        
         elif len(outputs) == 1:
             # typical pattern: pipeline has converged to a single y
             return outputs[0]
@@ -289,9 +289,18 @@ class Pipeline:
     
     """
     
-    def __init__(self, n_inputs = 3):
+    def __init__(self, n_inputs):
         self.n_inputs = n_inputs
         self.layers = []
+        
+    @property
+    def _estimator_type(self):
+        estimator_type = None
+        for layer in self.layers:
+            for pipe, _, _ in layer.pipe_list:
+                if hasattr(pipe, '_estimator_type'):
+                    estimator_type = pipe._estimator_type
+        return estimator_type
         
     def get_next_layer(self):
         layer = Layer(self.n_inputs)
@@ -349,3 +358,4 @@ class Pipeline:
         new_pipline = Pipeline(self.n_inputs)
         new_pipline.layers = [layer.get_clone() for layer in self.layers]
         return new_pipline
+    

@@ -1,8 +1,8 @@
 import numpy as np
 
-from sklearn.model_selection import cross_val_score
 from sklearn.feature_selection import f_classif
 
+from pipecaster.model_selection import cross_val_score
 
 class AggregateFeatureScorer:
     
@@ -26,10 +26,10 @@ class AggregateFeatureScorer:
     
 class CvPerformanceScorer:
     
-    def __init__(self, predictor, cv, scoring, channel_jobs=1, cv_jobs=1):
+    def __init__(self, predictor, cv, scorer, channel_jobs=1, cv_jobs=1):
         self.predictor = predictor
         self.cv = cv
-        self.scoring = scoring
+        self.scorer = scorer
         self.channel_jobs = channel_jobs
         self.cv_jobs = cv_jobs
     
@@ -37,9 +37,8 @@ class CvPerformanceScorer:
         if X is None:
             return None
         else:
-            scores = cross_val_score(self.predictor, X, y, scoring=self.scoring, cv=self.cv, n_jobs=self.cv_jobs, 
-                                     verbose=0, fit_params=fit_params)
+            scores = cross_val_score(self.predictor, X, y, scorer=self.scorer, cv=self.cv, n_jobs=self.cv_jobs, **fit_params)
             return np.mean(scores)
     
     def get_clone(self):
-        return PerformanceScorer(self.cv, self.scoring, self.channel_jobs, self.cv_jobs)
+        return PerformanceScorer(self.cv, self.scorer, self.channel_jobs, self.cv_jobs)

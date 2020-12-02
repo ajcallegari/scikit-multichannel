@@ -1,9 +1,24 @@
-from inspect import signature
+from inspect import signature, getfullargspec
 import sklearn.base
 import joblib
 
 def is_classifier(obj):
-    return getattr(obj, "_estimator_type", None) == "classifier"
+    if hasattr(obj, '_estimator_type'):
+        if getattr(obj, '_estimator_type', None) == 'classifier':
+            return True
+    elif hasattr(obj, 'classes_'):
+        return True
+    else:
+        return False
+     
+def is_regressor(obj):
+    if hasattr(obj, '_estimator_type'):
+        if getattr(obj, '_estimator_type', None) == 'regressor':
+            return True
+    elif hasattr(obj, 'classes_'):
+        return False
+    else:
+        return False
 
 def is_multi_input(pipe):
     """Detect if a pipeline component is multi-input by determining if the first argument to fit() is 'Xs' 
@@ -32,6 +47,12 @@ def get_clone(pipe, disable_custom_cloning = False):
         return pipe.get_clone()
     else:
         return sklearn.base.clone(pipe)
+    
+def get_list_clone(pipes):
+    if isinstance(pipes, (list, tuple, np.ndarray)):
+        return get_clone(pipes)
+    else:
+        return [get_clone(p) if p is not None else None for p in pipes]
     
 def save_model(model, filepath):
     joblib.dump(model, filepath) 
@@ -94,3 +115,9 @@ def get_descriptor(class_name, params, verbose = True):
             string_ += ', '.join(argstrings)
                     
         return  string_ + ')'
+    
+def get_param_names(callable_, omit_self = True):
+    param_names = set(getfullargspec(Foobar.__init__)[0])
+    if omit_self:
+        param_names.remove('self')
+    return param_names

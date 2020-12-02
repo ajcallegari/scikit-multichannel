@@ -1,6 +1,7 @@
 import numpy as np
 import ray
 
+from sklearn.metrics import accuracy_score
 from sklearn.feature_selection import f_classif
 
 import pipecaster.utils as utils
@@ -8,7 +9,6 @@ from pipecaster.score_selection import RankScoreSelector
 from pipecaster.channel_scoring import AggregateFeatureScorer, CvPerformanceScorer
 
 __all__ = ['SelectKBestChannels', 'SelectKBestPerformers']
-
         
 class ChannelSelector:
     
@@ -54,13 +54,15 @@ class ChannelSelector:
             else:
                 raise AttributeError('{} not a valid ChannelSelector parameter'.format(key))
                 
+    def get_selection_indices(self):
+        return self.selected_indices_
+                
     def get_clone(self):
         clone = ChannelSelector(self.channel_scorer.clone(), self.score_selector.clone())
         if hasattr(self, 'selected_indices_'):
             clone.selected_indices_ = self.selected_indices_
         return clone
 
-                
 class SelectKBestChannels(ChannelSelector):
     
     def __init__(self, feature_scorer=f_classif, aggregator=np.sum, k=1):
@@ -80,14 +82,14 @@ class SelectKBestChannels(ChannelSelector):
     
 class SelectKBestPerformers(ChannelSelector):
     
-    def __init__(self, probe, cv=3, scoring='accuracy', k=1, channel_jobs=1, cv_jobs=1):
+    def __init__(self, probe, cv=3, scorer=accuracy_score, k=1, channel_jobs=1, cv_jobs=1):
         self.probe = probe
         self.cv = cv
-        self.scoring = scoring
+        self.scorer = scorer
         self.k = k
         self.channel_jobs = channel_jobs
         self.cv_jobs = cv_jobs
-        super().__init__(CvPerformanceScorer(probe, cv, scoring, channel_jobs, cv_jobs), RankScoreSelector(k))
+        super().__init__(CvPerformanceScorer(probe, cv, scorer, channel_jobs, cv_jobs), RankScoreSelector(k))
 
     def __str__(self, verbose = True):
         return utils.get_descriptor(self.__class__.__name__, self.get_params(), verbose)
@@ -96,6 +98,6 @@ class SelectKBestPerformers(ChannelSelector):
         return self.__str__(verbose)  
     
     def get_clone(self):
-        return SelectKBestPerformers(utils.get_clone(self.probe), self.cv, self.scoring, 
+        return SelectKBestPerformers(utils.get_clone(self.probe), self.cv, self.scorer, 
                                      self.k, self.channel_jobs, self.cv_jobs)
     

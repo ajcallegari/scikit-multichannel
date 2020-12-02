@@ -2,9 +2,11 @@ import numpy as np
 import ray
 
 import pipecaster.utils as utils
-from pipecaster.metaprediction import TransformingPredictor
+from pipecaster.channel_metaprediction import TransformingPredictor
 from pipecaster.score_selection import RankScoreSelector
 from pipecaster.channel_scoring import CvPerformanceScorer
+from pipecaster.model_selection import cross_val_score 
+from sklearn.metrics import accuracy_score
 
 
 __all__ = ['SelectKBestModels']
@@ -12,9 +14,9 @@ __all__ = ['SelectKBestModels']
 
 class CvModelScorer:
     
-    def __init__(self, cv, scoring, channel_jobs=1, cv_jobs=1):
+    def __init__(self, cv, scorer, channel_jobs=1, cv_jobs=1):
         self.cv = cv
-        self.scoring = scoring
+        self.scorer = scorer
         self.channel_jobs = channel_jobs
         self.cv_jobs = cv_jobs
     
@@ -22,12 +24,12 @@ class CvModelScorer:
         if X is None:
             return None
         else:
-            scores = cross_val_score(predictor, X, y, scoring=self.scoring, cv=self.cv, n_jobs=self.cv_jobs, 
+            scores = cross_val_score(predictor, X, y, scorer=self.scorer, cv=self.cv, n_jobs=self.cv_jobs, 
                                      verbose=0, fit_params=fit_params)
             return np.mean(scores)
     
     def get_clone(self):
-        return PerformanceScorer(self.cv, self.scoring, self.channel_jobs, self.cv_jobs)
+        return PerformanceScorer(self.cv, self.scorer, self.channel_jobs, self.cv_jobs)
     
 class ChannelModelSelector:
     
@@ -39,17 +41,18 @@ class ChannelModelSelector:
         self.cv_jobs = cv_jobs
     
     @staticmethod
-    def _get_score(predictor, X, y, **fit_params):
+    def _get_score(model_scorer, predictor, X, y, **fit_params):
         if X is None:
             return None
         else:
-            return self.performance_scorer(predictor, X, y, **fit_params)
+            return model_scorer(model_scorer, X, y, **fit_params)
     
     @ray.remote
-    def _ray_get_score(predictor, X, y, **fit_params):
-        return _get_score(predictor, X, y, **fit_params)
+    def _ray_get_score(model_scorer, predictor, X, y, **fit_params):
+        return _get_score(model_scorer, predictor, X, y, **fit_params)
     
     def fit(self, Xs, y=None, **fit_params):
+        
         is_listlike = isinstance(self.predictors, (list, tuple, np.ndarray))
         if is_listlike:
             if len(Xs) != len(self.predictors):
@@ -61,12 +64,14 @@ class ChannelModelSelector:
         self.predictors = [TransformingPredictor(p) if X is not None else None for X, p in zip(Xs, self.predictors)]
             
         if self.channel_jobs < 2:
-            performance_scores = [ChannelModelSelector._get_score(predictor, X, y, **fit_params) 
+            performance_scores = [ChannelModelSelector._get_score(self.model_scorer, predictor, X, y, **fit_params) 
                                   for predictor, X in zip(self.predictors, Xs)]
         else:
             y = ray.put(y)
-            jobs = [ChannelModelSelector._ray_get_score.remote(ray.put(predictor), ray.put(X), y, **fit_params) 
-                                  for predictor, X in zip(self.predictors, Xs)]
+            model_scorer = ray.put(self.model_scorer)
+            jobs = [ChannelModelSelector._ray_get_score.remote(model_scorer, ray.put(predictor), 
+                                                               ray.put(X), y, **fit_params) 
+                    for predictor, X in zip(self.predictors, Xs)]
             performance_scores = ray.get(jobs)
         
         selected_indices = set(self.score_selector(performance_scores))
@@ -78,39 +83,39 @@ class ChannelModelSelector:
     def fit_transform(self, Xs, y=None, **fit_params):
         self.fit(Xs, y, **fit_params)
         return [p.transform(Xs) if p is not None else None for p in self.predictors]
-
     
     def get_params(self, deep=False):
         return {'predictors':self.predictors,
-                'performance_scorer':self.performance_scorer,
-                'channel_scorer':self.channel_scorer,
+                'model_scorer':self.model_scorer,
                 'score_selector':self.score_selector,
                 'channel_jobs':self.channel_jobs,
                 'cv_jobs':self.cv_jobs}
     
     def set_params(self, **params):
         for key, value in params.items():
-            if key in ['predictors', 'performance_scorer', 'channel_scorer', 'score_selector', 'channel_jobs', 'cv_jobs']:
+            if key in ['predictors', 'model_scorer','score_selector', 'channel_jobs', 'cv_jobs']:
                 setattr(self, key, value)
             else:
                 raise AttributeError('{} not a valid ChannelModelSelector parameter'.format(key))
                 
+    def get_selection_indices(self):
+        return [i for i, p in enumerate(self.predictors) if p is not None]
+                
     def get_clone(self):
-        clone = ChannelSelector(self.channel_scorer, self.score_selector)
-        if hasattr(self, 'selected_indices_'):
-            clone.selected_indices_ = self.selected_indices_
+        clone = ChannelModelSelector(utils.get_list_clone(self.predictors), self.model_scorer, 
+                                     self.score_selector, self.channel_jobs, self.cv_jobs)
         return clone
     
 class SelectKBestModels(ChannelModelSelector):
     
-    def __init__(self, predictors, cv=3, scoring='accuracy', k=1, channel_jobs=1, cv_jobs=1):
+    def __init__(self, predictors, cv=3, scorer=accuracy_score, k=1, channel_jobs=1, cv_jobs=1):
         self.predictors = predictors
         self.cv = cv
-        self.scoring = scoring
+        self.scorer = scorer
         self.k = k
         self.channel_jobs = channel_jobs
         self.cv_jobs = cv_jobs
-        super().__init__(predictors, CvPerformanceScorer(probe, cv, scoring, channel_jobs, cv_jobs), RankScoreSelector(k))
+        super().__init__(predictors, CvModelScorer(cv, scorer, channel_jobs, cv_jobs), RankScoreSelector(k))
 
     def __str__(self, verbose = True):
         return utils.get_descriptor(self.__class__.__name__, self.get_params(), verbose)
@@ -121,17 +126,18 @@ class SelectKBestModels(ChannelModelSelector):
     def get_params(self):
         return {'predictors':self.predictors,
                 'cv':self.cv,
-                'scoring':self.scoring,
+                'scorer':self.scorer,
                 'k':self.k,
                 'channel_jobs':self.channel_jobs,
                 'cv_jobs':self.cv_jobs}
     
     def set_params(self, **params):
         for key, value in params.items():
-            if key in ['predictors', 'cv', 'scoring', 'k', 'channel_jobs', 'cv_jobs']:
+            if key in ['predictors', 'cv', 'scorer', 'k', 'channel_jobs', 'cv_jobs']:
                 setattr(self, key, value)
             else:
-                raise AttributeError('{} not a valid SelectKBestModels parameter'.format(key))    
+                raise AttributeError('{} not a valid SelectKBestModels parameter'.format(key))   
+                
     def get_clone(self):
-        return SelectKBestPerformers(utils.get_clone(self.probe), self.cv, self.scoring, 
+        return SelectKBestModels(utils.get_clone(self.predictors), self.cv, self.scorer, 
                                      self.k, self.channel_jobs, self.cv_jobs)

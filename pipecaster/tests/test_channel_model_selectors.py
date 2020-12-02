@@ -1,9 +1,10 @@
+import numpy as np
 import unittest
 import random
 import ray
 import multiprocessing
 
-import numpy as np
+from sklearn.metrics import accuracy_score, explained_variance_score
 from sklearn.datasets import make_classification
 from sklearn.feature_selection import f_classif, f_regression
 from sklearn.preprocessing import StandardScaler
@@ -11,7 +12,8 @@ from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
 from sklearn.ensemble import RandomForestRegressor
 
 from pipecaster.pipeline import Pipeline
-from pipecaster.channel_selection import ChannelModelSelector
+from pipecaster.channel_model_selection import ChannelModelSelector
+from pipecaster.channel_selection import SelectKBestPerformers, SelectKBestChannels
 from pipecaster import synthetic_data
 
 try:
@@ -141,7 +143,7 @@ class TestChannelSelectors(unittest.TestCase):
                   'n_repeated':0, 
                   'class_sep':2.0}
         channel_selector = SelectKBestPerformers(probe=KNeighborsClassifier(n_neighbors=5, weights='uniform'), 
-                                                 cv=3, scoring='accuracy', k=k, channel_jobs=n_cpus, cv_jobs=1)
+                                                 cv=3, scorer=accuracy_score, k=k, channel_jobs=n_cpus, cv_jobs=1)
         passed = TestChannelSelectors._test_weak_strong_cls_input_discrimination(channel_selector, n_weak=k, 
                                                                            n_strong=k, weak_noise_sd=50, 
                                                                            verbose=verbose, seed=seed, **sklearn_params)
@@ -157,7 +159,7 @@ class TestChannelSelectors(unittest.TestCase):
                   'n_repeated':0, 
                   'class_sep':2.0}
         channel_selector = SelectKBestPerformers(probe=KNeighborsClassifier(n_neighbors=5, weights='uniform'), 
-                                                 cv=3, scoring='accuracy', k=k, channel_jobs=n_cpus, cv_jobs=1)
+                                                 cv=3, scorer=accuracy_score, k=k, channel_jobs=n_cpus, cv_jobs=1)
         passed = TestChannelSelectors._test_weak_cls_input_detection(channel_selector, n_weak = int(k/2), 
                                                                n_strong = k - int(k/2), weak_noise_sd = 1, 
                                                                verbose=verbose, seed=seed, **sklearn_params)
@@ -276,7 +278,7 @@ class TestChannelSelectors(unittest.TestCase):
                       'n_informative':5
                       }
         channel_selector = SelectKBestPerformers(probe=RandomForestRegressor(n_estimators=20, max_depth=2), 
-                                                 cv=3, scoring='explained_variance', k=k, channel_jobs=n_cpus, cv_jobs=1)        
+                                                 cv=3, scorer=explained_variance_score, k=k, channel_jobs=n_cpus, cv_jobs=1)        
         passed = TestChannelSelectors._test_weak_strong_rgr_input_discrimination(channel_selector, n_weak=k, 
                                                             n_strong=k, weak_noise_sd=30, 
                                                             verbose=verbose, seed=seed, **sklearn_params)
@@ -290,7 +292,7 @@ class TestChannelSelectors(unittest.TestCase):
                       'n_informative':5
                       }   
         channel_selector = SelectKBestPerformers(probe=RandomForestRegressor(n_estimators=25, max_depth=1), 
-                                                 cv=3, scoring='explained_variance', k=k, channel_jobs=n_cpus, cv_jobs=1)        
+                                                 cv=3, scorer=explained_variance_score, k=k, channel_jobs=n_cpus, cv_jobs=1)        
         passed = TestChannelSelectors._test_weak_rgr_input_detection(channel_selector, n_weak=int(k/2), 
                                                 n_strong=k - int(k/2), weak_noise_sd=0.5, 
                                                 verbose=verbose, seed=seed, **sklearn_params)
