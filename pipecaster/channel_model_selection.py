@@ -2,15 +2,13 @@ import numpy as np
 import ray
 
 import pipecaster.utils as utils
-from pipecaster.channel_metaprediction import TransformingPredictor
+from pipecaster.transforming_predictors import CvPredictor
 from pipecaster.score_selection import RankScoreSelector
 from pipecaster.channel_scoring import CvPerformanceScorer
 from pipecaster.cross_validation import cross_val_score 
 from sklearn.metrics import accuracy_score
 
-
 __all__ = ['SelectKBestModels']
-
 
 class CvModelScorer:
     
@@ -61,7 +59,7 @@ class ChannelModelSelector:
                 self.predictors = [utils.get_clone(p) if X is not None else None for X, p in zip(Xs, self.predictors)]
         else:
             self.predictors = [utils.get_clone(self.predictors) if X is not None else None for X in Xs]
-        self.predictors = [TransformingPredictor(p) if X is not None else None for X, p in zip(Xs, self.predictors)]
+        self.predictors = [CvPredictor(p) if X is not None else None for X, p in zip(Xs, self.predictors)]
             
         if self.channel_jobs < 2:
             performance_scores = [ChannelModelSelector._get_score(self.model_scorer, predictor, X, y, **fit_params) 

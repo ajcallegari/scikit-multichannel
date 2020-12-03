@@ -1,6 +1,6 @@
 import numpy as np
 import pipecaster.utils as utils
-from pipecaster.channel_metaprediction import TransformingPredictor
+from pipecaster.transforming_predictors import CvPredictor
 from pipecaster.utils import FitError
 
 __all__ = ['Layer', 'Pipeline']
@@ -118,7 +118,7 @@ class Layer:
     def fit_transform(self, Xs, y=None, **fit_params):
         """Clone pipes this layer, invoke their fit_transform() if available or fall back on fit() then transform(). 
            If all input channels for a pipe are dead (None value), pipe and mapping info are deleted.
-           Predictors are automatically converted to transformers by wrapping them in the TransformingPredictor class.
+           Predictors are automatically converted to transformers by wrapping them in the CvPredictor class.
         """
         Xs = Xs.copy() 
         for i, (pipe, slice_, input_indices) in enumerate(self.pipe_list):
@@ -148,7 +148,7 @@ class Layer:
                     else:
                         Xs[input_indices[0]] = pipe.transform(input_)                
                 elif hasattr(pipe, 'fit') and utils.is_predictor(pipe):
-                    pipe = TransformingPredictor(pipe)
+                    pipe = CvPredictor(pipe)
                     try:
                         Xs[input_indices[0]] = pipe.fit_transform(input_, y, **fit_params) 
                     except Exception as e:

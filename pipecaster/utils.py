@@ -130,7 +130,57 @@ def get_descriptor(class_name, params, verbose = True):
         return  string_ + ')'
     
 def get_param_names(callable_, omit_self = True):
-    param_names = set(getfullargspec(Foobar.__init__)[0])
+    param_names = set(getfullargspec(callable_)[0])
     if omit_self:
         param_names.remove('self')
     return param_names
+
+def get_param_clone(pipe):
+    return pipe.__class__(**pipe.get_params())
+
+class Parameterized:
+    
+    state_variables = ['override me with a list of state attributes to set on calls to get_clone']
+    
+    def __init__(self, **params):
+        self._init_params(locals())
+        
+    @property
+    def param_names(self):
+        return get_param_names(self.__init__)
+                
+    def _init_params(self, locals_):
+        for param_name in self.param_names:
+            setattr(self, param_name, locals_[param_name])
+    
+    def __str__(self, verbose=True):
+        return get_descriptor(self.__class__.__name__, self.get_params(), verbose)
+    
+    def __repr__(self):
+        return self.__str__(verbose=True)  
+    
+    def get_params(self, deep=False):
+        return {p:getattr(self,p) for p in self.param_names}
+    
+    def set_params(self, params):
+        for key, value in params.items():
+            if key in self.__class__.params:
+                setattr(self, key, value)
+            else:
+                raise AttributeError('invalid parameter name')
+    
+    def get_clone(self):
+        clone = get_param_clone(self)
+        for var in self.__class__.state_variables:
+            if hasattr(self, var):
+                setattr(clone, var, getattr(self, var))
+        return clone
+    
+class Saveable:
+    
+    def save(self, filepath):
+        joblib.dump(self, filepath)
+        
+    @staticmethod
+    def load(filepath):
+        return joblib.load(filepath) 

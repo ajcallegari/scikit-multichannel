@@ -1,17 +1,22 @@
 import ray
 
 import pipecaster.utils as utils
+from pipecaster.utils import Parameterized, Saveable
 from pipecaster.channel_metaprediction import TransformingPredictor
 
-
-class PredictorStack:
+class PredictorStack(Parameterized, Saveable):
     
-    def __init__(self, base_predictors, meta_predictor, internal_cv=5, predictor_jobs=1, cv_jobs=1):
-        self.base_predictors = base_predictors
-        self.meta_predictor = meta_predictor
-        self.internal_cv = internal_cv
-        self.predictor_jobs = predictor_jobs
-        self.cv_jobs = cv_jobs
+    """
+    
+    notes:
+    cloning occurs at fit time
+    
+    """
+    
+    state_variables = ['_estimator_type']
+    
+    def __init__(self, base_predictors=None, meta_predictor=None, internal_cv=5, predictor_jobs=1, cv_jobs=1):
+        self._init_params(locals())
         
     def fit(self, X, y=None, **fit_params):
         estimator_types = [p._estimator_type for p in self.base_predictors]
@@ -20,7 +25,6 @@ class PredictorStack:
         self._estimator_type = estimator_types[0]
         self.base_predictors = [utils.get_clone(p) if type(p) == TransformingPredictor else 
                                 TransformingPredictor(p, internal_cv=self.internal_cv, cv_jobs=self.cv_jobs)]
-        
         predictions_list = []
         for predictor in self.base_predictors:
             if y is None:
@@ -48,14 +52,10 @@ class PredictorStack:
         
     def fit_transform(self, X, y=None, **fit_params):
         self.fit(X, y, **fit_params)
-        self.tranform(X
+        return self.tranform(X)
         
-    def get_params(self, ):
-        
-    def set_params(self, ):
-        
-    def get_clone(self, ):
-        
+    def _more_tags(self):
+        return {'multichannel': False}
 
 class ClassifierStack:
     

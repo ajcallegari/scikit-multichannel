@@ -25,6 +25,7 @@ class TransformingPredictor:
     Models that are trained with internal cross validation subsamples when fit_transform() is called are used 
     transiently during pipeline fitting and are not persisted for subsequent inferences.  Inferences are made on 
     a differnt, persistent model that is trained on the full training set during calls to fit_transform() -- or fit().
+    The predictor is not cloned during construction or calls to fit(), but is cloned on get_clone() call. 
     """
     params = ['predictor', 'transform_method']
     state_variables = ['transform_method_', '_estimator_type', 'classes_']
@@ -36,7 +37,6 @@ class TransformingPredictor:
     def fit(self, X, y=None, **fit_params):
         if hasattr(self.predictor, 'fit') == False:
             raise AttributeError('missing fit method')
-        self.predictor = utils.get_clone(self.predictor)
         if y is None:
             self.predictor.fit(X, **fit_params)
         else:
@@ -76,7 +76,7 @@ class TransformingPredictor:
                 raise AttributeError('invalid parameter name')
 
     def _more_tags(self):
-        return {'multiple_inputs': True}
+        return {'multiple_inputs': False}
     
     def get_clone(self):
         clone = TransformingPredictor(utils.get_clone(self.predictor), transform_method=self.transform_method)
@@ -144,7 +144,7 @@ class CvPredictor(TransformingPredictor):
                 raise AttributeError('invalid parameter name')
 
     def _more_tags(self):
-        return {'multiple_inputs': True}
+        return {'multiple_inputs': False}
     
     def get_clone(self):
         clone = CvPredictor(utils.get_clone(self.predictor), transform_method=self.transform_method,
