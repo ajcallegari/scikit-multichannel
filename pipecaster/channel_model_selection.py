@@ -51,7 +51,7 @@ class ChannelModelSelector:
     def _ray_get_score(model_scorer, predictor, X, y, **fit_params):
         return _get_score(model_scorer, predictor, X, y, **fit_params)
     
-    def fit(self, Xs, y=None, **fit_params):
+    def fit(self, Xs, y, **fit_params):
         
         is_listlike = isinstance(self.predictors, (list, tuple, np.ndarray))
         if is_listlike:
@@ -80,7 +80,7 @@ class ChannelModelSelector:
     def transform(self, Xs):
         return [p.transform(Xs) if p is not None else None for p in self.predictors]
             
-    def fit_transform(self, Xs, y=None, **fit_params):
+    def fit_transform(self, Xs, y, **fit_params):
         self.fit(Xs, y, **fit_params)
         return [p.transform(Xs) if p is not None else None for p in self.predictors]
     

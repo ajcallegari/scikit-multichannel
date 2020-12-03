@@ -184,10 +184,7 @@ def cross_val_predict(predictor, Xs, y=None, groups=None, predict_method='predic
         
 def cross_val_score(predictor, Xs, y=None, groups=None, scorer=None, predict_method='predict',
                     cv=3, n_jobs=1, split_seed=None, **fit_params):
-    """Sklearn's cross_validate function (v23.2), modified to enable stateful cloning with pipecaster.utility.get_clone() and faster multiprocessing/distributed computing with ray
-    
-     The bulk of this code is copied and pasted from scikit-learn, which request the following copyright notification:
-    Copyright (c) 2007-2020 The scikit-learn developers.
+    """xxx
     
     Parameters
     ----------

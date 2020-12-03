@@ -2,8 +2,9 @@ from inspect import signature, getfullargspec
 import sklearn.base
 import joblib
 
-__all__ = ['is_classifier', 'is_regressor', 'is_multi_input', 'get_clone', 'get_list_clone', 'save_model', 'load_model',
-           'get_transform_method', 'get_predict_method', 'is_predictor', 'FitError', 'get_descriptor', 'get_param_names']
+__all__ = ['is_classifier', 'is_regressor', 'detect_estimator_type', 'is_multi_input', 'get_clone', 'get_list_clone', 
+           'save_model', 'load_model', 'get_transform_method', 'get_predict_method', 'is_predictor', 'FitError', 
+           'get_descriptor', 'get_param_names']
 
 def is_classifier(obj):
     if hasattr(obj, '_estimator_type'):
@@ -22,6 +23,15 @@ def is_regressor(obj):
         return False
     else:
         return False
+    
+def detect_estimator_type(obj):
+    if is_classifier(obj):
+        _estimator_type = 'classifier'
+    elif is_regressor(obj):
+        _estimator_type = 'regressor'
+    else:
+        _estimator_type = 'unknown'
+    return _estimator_type
 
 def is_multi_input(pipe):
     """Detect if a pipeline component is multi-input by determining if the first argument to fit() is 'Xs' 
