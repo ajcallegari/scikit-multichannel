@@ -35,7 +35,7 @@ def fit_and_predict(predictor, Xs, y, train_indices, test_indices, predict_metho
         return prediction_block
 
 def cross_val_predict(predictor, Xs, y=None, groups=None, predict_method='predict', cv=None,
-                      combine_splits=True, n_jobs='max', split_seed=None, fit_params=None):
+                      combine_splits=True, n_processes='max', split_seed=None, fit_params=None):
     
     """Multichannel version of sklearn cross_val_predict.  Also supports single channel cross validation.
 
@@ -67,10 +67,8 @@ def cross_val_predict(predictor, Xs, y=None, groups=None, predict_method='predic
         cross-validation strategies that can be used here.
         .. versionchanged:: 0.22
             'cv' default value if None changed from 3-fold to 5-fold.
-    n_jobs : int, default='max'
-        The number of CPUs to use to do the computation.
-        Note: This is a misnomer introduced to conform with sklearn. 
-        This argument does not set the number of jobs.
+    n_processes : int, default='max'
+        The number of parallel processes to use to do the computation.
         
     verbose : int, default=0
         The verbosity level.
@@ -82,29 +80,14 @@ def cross_val_predict(predictor, Xs, y=None, groups=None, predict_method='predic
         in sorted order.
     Returns
     -------
-    predictions : ndarray
-        This is the result of calling 'method'
-    See also
-    --------
-    cross_val_score : calculate score for each CV split
-    cross_validate : calculate one or more scores and timings for each CV split
-    Notes
-    -----
-    In the case that one or more classes are absent in a training portion, a
-    default score needs to be assigned to all instances for that class if
-    'method' produces columns per class, as in {'decision_function',
-    'predict_proba', 'predict_log_proba'}.  For 'predict_proba' this value is
-    0.  In order to ensure finite output, we approximate negative infinity by
-    the minimum finite float value for the dtype in other cases.
-    Examples
-    --------
-    >>> from sklearn import datasets, linear_model
-    >>> from sklearn.model_selection import cross_val_predict
-    >>> diabetes = datasets.load_diabetes()
-    >>> X = diabetes.data[:150]
-    >>> y = diabetes.target[:150]
-    >>> lasso = linear_model.Lasso()
-    >>> y_pred = cross_val_predict(lasso, X, y, cv=3)
+    predictions : list(tuple) or ndarray 
+        Returns the result of calling 'method'.
+        When combine_splits == False:
+            returns a list containing (predictions, sample indices) for each split
+        When combine_splits == True:
+            returns a single list with predictions for each sample in Xs
+            in the order in which they were provided 
+ 
     """
     
     # If classification methods produce multiple columns of output,
@@ -140,17 +123,17 @@ def cross_val_predict(predictor, Xs, y=None, groups=None, predict_method='predic
     args_list = [(predictor, Xs, y, train_indices, test_indices, predict_method, fit_params) 
                 for train_indices, test_indices in splits] 
             
-    if n_jobs != 1:
+    if n_processes != 1:
         try:
             shared_mem_objects = [Xs, y, fit_params]
             prediction_blocks = parallel.starmap_jobs(fit_and_predict, args_list, 
-                                                      n_cpus=n_jobs, shared_mem_objects=shared_mem_objects)
+                                                      n_cpus=n_processes, shared_mem_objects=shared_mem_objects)
         except Exception as e:
             print('parallel processing request failed with message {}'.format(e))
             print('defaulting to single processor')
-            n_jobs = 1       
+            n_processes = 1       
 
-    if n_jobs == 1:
+    if n_processes == 1:
         # print('running a single process with {} jobs'.format(len(args_list)))
         prediction_blocks = [fit_and_predict(*args) for args in args_list]
         
@@ -169,9 +152,10 @@ def cross_val_predict(predictor, Xs, y=None, groups=None, predict_method='predic
         return predictions[test_indices]
         
 def cross_val_score(predictor, Xs, y=None, groups=None, scorer=None, predict_method='predict',
-                    cv=3, n_jobs=1, split_seed=None, **fit_params):
-    """xxx
-    
+                    cv=3, n_processes=1, split_seed=None, **fit_params):
+    """
+    Multichannel channel version of scikit-learn's cross_val_score function.  
+        
     Parameters
     ----------
     estimator : estimator object implementing 'fit'
@@ -186,14 +170,10 @@ def cross_val_score(predictor, Xs, y=None, groups=None, scorer=None, predict_met
         Group labels for the samples used while splitting the dataset into
         train/test set. Only used in conjunction with a "Group" :term:'cv'
         instance (e.g., :class:'GroupKFold').
-    scoring : str or callable, default=None
-        A str (see model evaluation documentation) or
+    scoring : callable, default=None
         a scorer callable object / function with signature
-        'scorer(estimator, X, y)' which should return only
+        'scorer(y_pred, t_true)' which should return only
         a single value.
-        Similar to :func:'cross_validate'
-        but only a single metric is permitted.
-        If None, the estimator's default scorer (if available) is used.
     cv : int, cross-validation generator or an iterable, default=None
         Determines the cross-validation splitting strategy.
         Possible inputs for cv are:
@@ -204,62 +184,21 @@ def cross_val_score(predictor, Xs, y=None, groups=None, scorer=None, predict_met
         For int/None inputs, if the estimator is a classifier and 'y' is
         either binary or multiclass, :class:'StratifiedKFold' is used. In all
         other cases, :class:'KFold' is used.
-        Refer :ref:'User Guide <cross_validation>' for the various
-        cross-validation strategies that can be used here.
-        .. versionchanged:: 0.22
-            'cv' default value if None changed from 3-fold to 5-fold.
-    n_jobs : int, default=None
+    n_processes : int, default=None
         The number of CPUs to use to do the computation.
         'None' means 1 unless in a :obj:'joblib.parallel_backend' context.
-        '-1' means using all processors. See :term:'Glossary <n_jobs>'
+        '-1' means using all processors. See :term:'Glossary <n_processes>'
         for more details.
     verbose : int, default=0
         The verbosity level.
     fit_params : dict, default=None
         Parameters to pass to the fit method of the estimator.
-    pre_dispatch : int or str, default='2*n_jobs'
-        Controls the number of jobs that get dispatched during parallel
-        execution. Reducing this number can be useful to avoid an
-        explosion of memory consumption when more jobs get dispatched
-        than CPUs can process. This parameter can be:
-            - None, in which case all the jobs are immediately
-              created and spawned. Use this for lightweight and
-              fast-running jobs, to avoid delays due to on-demand
-              spawning of the jobs
-            - An int, giving the exact number of total jobs that are
-              spawned
-            - A str, giving an expression as a function of n_jobs,
-              as in '2*n_jobs'
-    error_score : 'raise' or numeric, default=np.nan
-        Value to assign to the score if an error occurs in estimator fitting.
-        If set to 'raise', the error is raised.
-        If a numeric value is given, FitFailedWarning is raised. This parameter
-        does not affect the refit step, which will always raise the error.
-        .. versionadded:: 0.20
+
     Returns
     -------
     scores : array of float, shape=(len(list(cv)),)
         Array of scores of the estimator for each run of the cross validation.
-    Examples
-    --------
-    >>> from sklearn import datasets, linear_model
-    >>> from sklearn.model_selection import cross_val_score
-    >>> diabetes = datasets.load_diabetes()
-    >>> X = diabetes.data[:150]
-    >>> y = diabetes.target[:150]
-    >>> lasso = linear_model.Lasso()
-    >>> print(cross_val_score(lasso, X, y, cv=3))
-    [0.33150734 0.08022311 0.03531764]
-    See Also
-    ---------
-    :func:'sklearn.model_selection.cross_validate':
-        To run cross-validation on multiple metrics and also to return
-        train scores, fit times and score times.
-    :func:'sklearn.model_selection.cross_val_predict':
-        Get predictions from each split of cross-validation for diagnostic
-        purposes.
-    :func:'sklearn.metrics.make_scorer':
-        Make a scorer from a performance metric or loss function.
+    
     """
     
     if scorer is None:
@@ -269,7 +208,7 @@ def cross_val_score(predictor, Xs, y=None, groups=None, scorer=None, predict_met
             scorer = explained_variance_score
         
     split_blocks = cross_val_predict(predictor, Xs, y, groups, predict_method, cv, 
-                                     combine_splits=False, n_jobs=n_jobs, split_seed=split_seed, **fit_params)
+                                     combine_splits=False, n_processes=n_processes, split_seed=split_seed, **fit_params)
     scores = [scorer(y[test_indices], predictions) for predictions, test_indices in split_blocks]
     return scores
     

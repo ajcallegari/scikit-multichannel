@@ -39,42 +39,42 @@ class TestCrossValPredict(unittest.TestCase):
         self.rgr_predictions = sk_model_selection.cross_val_predict(rgr, self.X_rgr, self.y_rgr, cv=self.cv, n_jobs=1)
         
     def test_single_input_classification(self):
-        pc_predictions = pc_cross_validation.cross_val_predict(self.clf, self.X_cls, self.y_cls, cv=self.cv, n_jobs=1)  
+        pc_predictions = pc_cross_validation.cross_val_predict(self.clf, self.X_cls, self.y_cls, cv=self.cv, n_processes=1)  
         self.assertTrue(np.array_equal(self.cls_predictions, pc_predictions), 'classifier predictions from pipecaster.cross_validation.cross_val_predict did not match sklearn control (single input predictor)')
         
     def test_multi_input_classification(self):
         mclf = Pipeline(n_inputs=1)
         mclf.get_next_layer()[:] = self.clf
-        pc_predictions = pc_cross_validation.cross_val_predict(mclf, [self.X_cls], self.y_cls, cv=self.cv, n_jobs=1) 
+        pc_predictions = pc_cross_validation.cross_val_predict(mclf, [self.X_cls], self.y_cls, cv=self.cv, n_processes=1) 
         self.assertTrue(np.array_equal(self.cls_predictions, pc_predictions), 'classifier predictions from pipecaster.cross_validation.cross_val_predict did not match sklearn control (multi input predictor)')
         
     def test_multi_input_classification_parallel(self):
         mclf = Pipeline(n_inputs=1)
         mclf.get_next_layer()[:] = self.clf   
-        pc_predictions = pc_cross_validation.cross_val_predict(mclf, [self.X_cls], self.y_cls, cv=self.cv, n_jobs=n_cpus) 
+        pc_predictions = pc_cross_validation.cross_val_predict(mclf, [self.X_cls], self.y_cls, cv=self.cv, n_processes=n_cpus) 
         self.assertTrue(np.array_equal(self.cls_predictions, pc_predictions), 'parallel predictions from cross_val_predict with all CPUs did not match sklearn control (multi input predictor)')
         
     def test_multi_input_classification_parallel_chunked(self):
         mclf = Pipeline(n_inputs=1)
         mclf.get_next_layer()[:] = self.clf   
-        pc_predictions = pc_cross_validation.cross_val_predict(mclf, [self.X_cls], self.y_cls, cv=self.cv, n_jobs=n_cpus-1) 
+        pc_predictions = pc_cross_validation.cross_val_predict(mclf, [self.X_cls], self.y_cls, cv=self.cv, n_processes=n_cpus-1) 
         self.assertTrue(np.array_equal(self.cls_predictions, pc_predictions), 'parallel predictions from cross_val_predict made using using chunked jobs did not match sklearn control (multi input predictor)')
         
     def test_single_input_regression(self):
-        pc_predictions = pc_cross_validation.cross_val_predict(self.rgr, self.X_rgr, self.y_rgr, cv=self.cv, n_jobs=1)  
+        pc_predictions = pc_cross_validation.cross_val_predict(self.rgr, self.X_rgr, self.y_rgr, cv=self.cv, n_processes=1)  
         self.assertTrue(np.array_equal(self.rgr_predictions, pc_predictions), 'regressor predictions from pipecaster.cross_validation.cross_val_predict did not match sklearn control (single input predictor)')
 
     def test_multi_input_regression(self):
         mrgr = Pipeline(n_inputs=1)
         mrgr.get_next_layer()[:] = self.rgr  
-        pc_predictions = pc_cross_validation.cross_val_predict(mrgr, [self.X_rgr], self.y_rgr, cv=self.cv, n_jobs=1) 
+        pc_predictions = pc_cross_validation.cross_val_predict(mrgr, [self.X_rgr], self.y_rgr, cv=self.cv, n_processes=1) 
         self.assertTrue(np.array_equal(self.rgr_predictions, pc_predictions), 'regressor predictions from pipecaster.cross_validation.cross_val_predict did not match sklearn control (multi input predictor)')
         
     def test_multi_input_regression_parallel_get(self):
         if n_cpus > 1:
             mrgr = Pipeline(n_inputs=1)
             mrgr.get_next_layer()[:] = self.rgr  
-            pc_predictions = pc_cross_validation.cross_val_predict(mrgr, [self.X_rgr], self.y_rgr, cv=self.cv, n_jobs=n_cpus) 
+            pc_predictions = pc_cross_validation.cross_val_predict(mrgr, [self.X_rgr], self.y_rgr, cv=self.cv, n_processes=n_cpus) 
             self.assertTrue(np.array_equal(self.rgr_predictions, pc_predictions), 'regressor predictions from pipecaster.cross_validation.cross_val_predict did not match sklearn control (multi input predictor)')
         
     def test_multi_input_regression_parallel_starmap(self):
@@ -82,7 +82,7 @@ class TestCrossValPredict(unittest.TestCase):
             mrgr = Pipeline(n_inputs=1)
             mrgr.get_next_layer()[:] = self.rgr  
             pc_predictions = pc_cross_validation.cross_val_predict(mrgr, [self.X_rgr], self.y_rgr, 
-                                                                   cv=self.cv, n_jobs=n_cpus-1) 
+                                                                   cv=self.cv, n_processes=n_cpus-1) 
             self.assertTrue(np.array_equal(self.rgr_predictions, pc_predictions), 'regressor predictions from pipecaster.cross_validation.cross_val_predict did not match sklearn control (multi input predictor)')   
         
     def test_multiprocessing_speedup(self, verbose=0):
@@ -99,13 +99,13 @@ class TestCrossValPredict(unittest.TestCase):
             SETUP_CODE = ''' 
 import pipecaster.cross_validation'''
             TEST_CODE = ''' 
-pipecaster.cross_validation.cross_val_predict(mclf, [X], y, cv = {}, n_jobs = 1)'''.format(n_cpus)
+pipecaster.cross_validation.cross_val_predict(mclf, [X], y, cv = {}, n_processes = 1)'''.format(n_cpus)
             t_serial = timeit.timeit(setup = SETUP_CODE, 
                                   stmt = TEST_CODE, 
                                   globals = locals(), 
                                   number = 5) 
             TEST_CODE = ''' 
-pipecaster.cross_validation.cross_val_predict(mclf, [X], y, cv = {}, n_jobs = {})'''.format(n_cpus, n_cpus)
+pipecaster.cross_validation.cross_val_predict(mclf, [X], y, cv = {}, n_processes = {})'''.format(n_cpus, n_cpus)
             t_parallel = timeit.timeit(setup = SETUP_CODE, 
                                   stmt = TEST_CODE, 
                                   globals = locals(), 
@@ -136,13 +136,13 @@ pipecaster.cross_validation.cross_val_predict(mclf, [X], y, cv = {}, n_jobs = {}
             SETUP_CODE = ''' 
 import pipecaster.cross_validation'''
             TEST_CODE = ''' 
-pipecaster.cross_validation.cross_val_predict(mclf, [X], y, cv = {}, n_jobs = 1)'''.format(n_cpus - 1)
+pipecaster.cross_validation.cross_val_predict(mclf, [X], y, cv = {}, n_processes = 1)'''.format(n_cpus - 1)
             t_serial = timeit.timeit(setup = SETUP_CODE, 
                                   stmt = TEST_CODE, 
                                   globals = locals(), 
                                   number = 5) 
             TEST_CODE = ''' 
-pipecaster.cross_validation.cross_val_predict(mclf, [X], y, cv = {}, n_jobs = {})'''.format(n_cpus - 1, n_cpus - 1)
+pipecaster.cross_validation.cross_val_predict(mclf, [X], y, cv = {}, n_processes = {})'''.format(n_cpus - 1, n_cpus - 1)
             t_parallel = timeit.timeit(setup = SETUP_CODE, 
                                   stmt = TEST_CODE, 
                                   globals = locals(), 

@@ -306,6 +306,11 @@ class Pipeline:
         layer = Layer(self.n_inputs)
         self.layers.append(layer)
         return layer  
+    
+    def add_layer(self, pipes):
+        layer = Layer(self.n_inputs)
+        self.layers.append(layer)
+        # implement me after designing use case
             
     def fit(self, Xs, y=None, **fit_params):
         n_layers = len(self.layers)
