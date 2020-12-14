@@ -14,7 +14,7 @@ from sklearn.ensemble import RandomForestRegressor
 from pipecaster.pipeline import Pipeline
 from pipecaster.channel_model_selection import ChannelModelSelector
 from pipecaster.channel_selection import SelectKBestPerformers, SelectKBestChannels
-from pipecaster import synthetic_data
+from pipecaster.testing_utils import synthetic_data
 
 try:
     ray.nodes()

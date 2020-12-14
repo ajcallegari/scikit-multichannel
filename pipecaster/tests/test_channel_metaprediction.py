@@ -14,7 +14,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.svm import SVC, SVR
 from sklearn.metrics import roc_auc_score, explained_variance_score
 
-from pipecaster import synthetic_data
+from pipecaster.testing_utils import synthetic_data
 from pipecaster.pipeline import Pipeline
 from pipecaster.channel_metaprediction import ChannelClassifier, ChannelRegressor
 from pipecaster.cross_validation import cross_val_score

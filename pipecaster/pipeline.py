@@ -109,8 +109,8 @@ class Layer:
                             pipe.fit(input_, **fit_params)
                         else:
                             pipe.fit(input_, y, **fit_params)
-                    except:
-                        raise FitError('pipe {} raised an error on fit()'.format(pipe.__class__.__name__))
+                    except Exception as e:
+                        raise FitError('pipe {} raised an error on fit(): {}'.format(pipe.__class__.__name__, e))
                     self.pipe_list[i] = (pipe, slice_, input_indices)
                 else:
                     raise FitError('missing fit() method in {}'.format(pipe.__class__.__name__))

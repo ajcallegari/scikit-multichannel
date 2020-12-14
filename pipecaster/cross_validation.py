@@ -1,5 +1,4 @@
 import numpy as np
-import ray
 import scipy.sparse as sp
 
 from sklearn.metrics import accuracy_score, explained_variance_score
@@ -7,12 +6,15 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import KFold, StratifiedKFold, GroupKFold
 
 import pipecaster.utils as utils
+import pipecaster.parallel as parallel
 
 __all__ = ['cross_val_score', 'cross_val_predict']
 
 #### SINGLE MATRIX INPUTS ####
 
-def fit_and_predict(predictor, Xs, y, train_indices, test_indices, predict_method, **fit_params):
+def fit_and_predict(predictor, Xs, y, train_indices, test_indices, predict_method, fit_params):
+        predictor = utils.get_clone(predictor)
+        fit_params = {} if fit_params is None else fit_params
         if utils.is_multi_input(predictor):
             X_trains = [X[train_indices] if X is not None else None for X in Xs]
             predictor.fit(X_trains, y[train_indices], **fit_params)
@@ -32,31 +34,16 @@ def fit_and_predict(predictor, Xs, y, train_indices, test_indices, predict_metho
         
         return prediction_block
 
-@ray.remote
-def ray_fit_and_predict(predictor, Xs, y, train_indices, test_indices, predict_method, **fit_params):
-    return fit_and_predict(predictor, Xs, y, train_indices, test_indices, predict_method, **fit_params)
-
 def cross_val_predict(predictor, Xs, y=None, groups=None, predict_method='predict', cv=None,
-                      combine_splits=True, n_jobs=1, split_seed=None, **fit_params):
-    """Sklearn's cross_val_predict function (v23.2) modified to enable stateful cloning with pipecaster.utility.get_clone() and faster multiprocessing/distributed computing with ray
+                      combine_splits=True, n_jobs='max', split_seed=None, fit_params=None):
     
-    The bulk of this code is copied and pasted from scikit-learn, which request the following copyright notification:
-    Copyright (c) 2007-2020 The scikit-learn developers.
-    
-    Generate cross-validated estimates for each input data point
-    The data is split according to the cv parameter. Each sample belongs
-    to exactly one test set, and its prediction is computed with an
-    predictor fitted on the corresponding training set.
-    Passing these predictions into an evaluation metric may not be a valid
-    way to measure generalization performance. Results can differ from
-    :func:`cross_validate` and :func:`cross_val_score` unless all tests sets
-    have equal size and the metric decomposes over samples.
-    Read more in the :ref:`User Guide <cross_validation>`.
+    """Multichannel version of sklearn cross_val_predict.  Also supports single channel cross validation.
+
     Parameters
     ----------
-    predictor : predictor object implementing 'fit' and 'predict'
-        The object to use to fit the data.
-    X : array-like of shape (n_samples, n_features)
+    predictor : predictor instance implementing 'fit' and 'predict'
+        
+    Xs : array-like of shape (n_samples, n_features)
         The data to fit. Can be, for example a list, or an array at least 2d.
     y : array-like of shape (n_samples,) or (n_samples, n_outputs), \
             default=None
@@ -64,27 +51,27 @@ def cross_val_predict(predictor, Xs, y=None, groups=None, predict_method='predic
         supervised learning.
     groups : array-like of shape (n_samples,), default=None
         Group labels for the samples used while splitting the dataset into
-        train/test set. Only used in conjunction with a "Group" :term:`cv`
-        instance (e.g., :class:`GroupKFold`).
+        train/test set. Only used in conjunction with a "Group" :term:'cv'
+        instance (e.g., :class:'GroupKFold').
     cv : int, cross-validation generator or an iterable, default=None
         Determines the cross-validation splitting strategy.
         Possible inputs for cv are:
         - None, to use the default 5-fold cross validation,
-        - int, to specify the number of folds in a `(Stratified)KFold`,
-        - :term:`CV splitter`,
+        - int, to specify the number of folds in a '(Stratified)KFold',
+        - :term:'CV splitter',
         - An iterable yielding (train, test) splits as arrays of indices.
-        For int/None inputs, if the predictor is a classifier and ``y`` is
-        either binary or multiclass, :class:`StratifiedKFold` is used. In all
-        other cases, :class:`KFold` is used.
-        Refer :ref:`User Guide <cross_validation>` for the various
+        For int/None inputs, if the predictor is a classifier and 'y' is
+        either binary or multiclass, :class:'StratifiedKFold' is used. In all
+        other cases, :class:'KFold' is used.
+        Refer :ref:'User Guide <cross_validation>' for the various
         cross-validation strategies that can be used here.
         .. versionchanged:: 0.22
-            ``cv`` default value if None changed from 3-fold to 5-fold.
-    n_jobs : int, default=None
+            'cv' default value if None changed from 3-fold to 5-fold.
+    n_jobs : int, default='max'
         The number of CPUs to use to do the computation.
-        ``None`` means 1 unless in a :obj:`joblib.parallel_backend` context.
-        ``-1`` means using all processors. See :term:`Glossary <n_jobs>`
-        for more details.
+        Note: This is a misnomer introduced to conform with sklearn. 
+        This argument does not set the number of jobs.
+        
     verbose : int, default=0
         The verbosity level.
     fit_params : dict, defualt=None
@@ -96,7 +83,7 @@ def cross_val_predict(predictor, Xs, y=None, groups=None, predict_method='predic
     Returns
     -------
     predictions : ndarray
-        This is the result of calling ``method``
+        This is the result of calling 'method'
     See also
     --------
     cross_val_score : calculate score for each CV split
@@ -105,8 +92,8 @@ def cross_val_predict(predictor, Xs, y=None, groups=None, predict_method='predic
     -----
     In the case that one or more classes are absent in a training portion, a
     default score needs to be assigned to all instances for that class if
-    ``method`` produces columns per class, as in {'decision_function',
-    'predict_proba', 'predict_log_proba'}.  For ``predict_proba`` this value is
+    'method' produces columns per class, as in {'decision_function',
+    'predict_proba', 'predict_log_proba'}.  For 'predict_proba' this value is
     0.  In order to ensure finite output, we approximate negative infinity by
     the minimum finite float value for the dtype in other cases.
     Examples
@@ -122,8 +109,8 @@ def cross_val_predict(predictor, Xs, y=None, groups=None, predict_method='predic
     
     # If classification methods produce multiple columns of output,
     # we need to manually encode classes to ensure consistent column ordering.
-    encode = predict_method in ['decision_function', 'predict_proba',
-                        'predict_log_proba'] and y is not None
+    encode = predict_method in ['decision_function', 'predict_proba', 'predict_log_proba'] and y is not None
+    
     if encode:
         y = np.asarray(y)
         if y.ndim == 1:
@@ -149,24 +136,23 @@ def cross_val_predict(predictor, Xs, y=None, groups=None, predict_method='predic
         splits = list(cv.split(live_Xs[0], y, groups))
     else:
         splits = list(cv.split(Xs, y, groups))
-    
-    if n_jobs < 2:
-        prediction_blocks = [fit_and_predict(utils.get_clone(predictor), Xs, y, train_indices, test_indices, 
-                                                    predict_method, **fit_params) 
-                             for train_indices, test_indices in splits] 
-    elif n_jobs > 1:
-        try:
-            ray.nodes()
-        except RuntimeError:
-            ray.init()
-        Xs = ray.put(Xs)
-        y = ray.put(y)
-        jobs = [ray_fit_and_predict.remote(ray.put(utils.get_clone(predictor)), Xs, y, ray.put(train_indices), 
-                                                  ray.put(test_indices), predict_method, **fit_params) 
+        
+    args_list = [(predictor, Xs, y, train_indices, test_indices, predict_method, fit_params) 
                 for train_indices, test_indices in splits] 
-        prediction_blocks = ray.get(jobs)
-    else:
-        raise ValueError('Invalid n_jobs value: {}. Must be int greater than 0.'.format(n_jobs))
+            
+    if n_jobs != 1:
+        try:
+            shared_mem_objects = [Xs, y, fit_params]
+            prediction_blocks = parallel.starmap_jobs(fit_and_predict, args_list, 
+                                                      n_cpus=n_jobs, shared_mem_objects=shared_mem_objects)
+        except Exception as e:
+            print('parallel processing request failed with message {}'.format(e))
+            print('defaulting to single processor')
+            n_jobs = 1       
+
+    if n_jobs == 1:
+        # print('running a single process with {} jobs'.format(len(args_list)))
+        prediction_blocks = [fit_and_predict(*args) for args in args_list]
         
     if combine_splits == False:
         return prediction_blocks
@@ -198,34 +184,34 @@ def cross_val_score(predictor, Xs, y=None, groups=None, scorer=None, predict_met
         supervised learning.
     groups : array-like of shape (n_samples,), default=None
         Group labels for the samples used while splitting the dataset into
-        train/test set. Only used in conjunction with a "Group" :term:`cv`
-        instance (e.g., :class:`GroupKFold`).
+        train/test set. Only used in conjunction with a "Group" :term:'cv'
+        instance (e.g., :class:'GroupKFold').
     scoring : str or callable, default=None
         A str (see model evaluation documentation) or
         a scorer callable object / function with signature
-        ``scorer(estimator, X, y)`` which should return only
+        'scorer(estimator, X, y)' which should return only
         a single value.
-        Similar to :func:`cross_validate`
+        Similar to :func:'cross_validate'
         but only a single metric is permitted.
         If None, the estimator's default scorer (if available) is used.
     cv : int, cross-validation generator or an iterable, default=None
         Determines the cross-validation splitting strategy.
         Possible inputs for cv are:
         - None, to use the default 5-fold cross validation,
-        - int, to specify the number of folds in a `(Stratified)KFold`,
-        - :term:`CV splitter`,
+        - int, to specify the number of folds in a '(Stratified)KFold',
+        - :term:'CV splitter',
         - An iterable yielding (train, test) splits as arrays of indices.
-        For int/None inputs, if the estimator is a classifier and ``y`` is
-        either binary or multiclass, :class:`StratifiedKFold` is used. In all
-        other cases, :class:`KFold` is used.
-        Refer :ref:`User Guide <cross_validation>` for the various
+        For int/None inputs, if the estimator is a classifier and 'y' is
+        either binary or multiclass, :class:'StratifiedKFold' is used. In all
+        other cases, :class:'KFold' is used.
+        Refer :ref:'User Guide <cross_validation>' for the various
         cross-validation strategies that can be used here.
         .. versionchanged:: 0.22
-            ``cv`` default value if None changed from 3-fold to 5-fold.
+            'cv' default value if None changed from 3-fold to 5-fold.
     n_jobs : int, default=None
         The number of CPUs to use to do the computation.
-        ``None`` means 1 unless in a :obj:`joblib.parallel_backend` context.
-        ``-1`` means using all processors. See :term:`Glossary <n_jobs>`
+        'None' means 1 unless in a :obj:'joblib.parallel_backend' context.
+        '-1' means using all processors. See :term:'Glossary <n_jobs>'
         for more details.
     verbose : int, default=0
         The verbosity level.
@@ -266,13 +252,13 @@ def cross_val_score(predictor, Xs, y=None, groups=None, scorer=None, predict_met
     [0.33150734 0.08022311 0.03531764]
     See Also
     ---------
-    :func:`sklearn.model_selection.cross_validate`:
+    :func:'sklearn.model_selection.cross_validate':
         To run cross-validation on multiple metrics and also to return
         train scores, fit times and score times.
-    :func:`sklearn.model_selection.cross_val_predict`:
+    :func:'sklearn.model_selection.cross_val_predict':
         Get predictions from each split of cross-validation for diagnostic
         purposes.
-    :func:`sklearn.metrics.make_scorer`:
+    :func:'sklearn.metrics.make_scorer':
         Make a scorer from a performance metric or loss function.
     """
     

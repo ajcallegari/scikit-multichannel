@@ -1,11 +1,13 @@
 from inspect import signature, getfullargspec
 import sklearn.base
 import joblib
+import ray
 
-__all__ = ['is_classifier', 'is_regressor', 'detect_estimator_type', 'is_multi_input', 'get_clone', 'get_list_clone', 
-           'save_model', 'load_model', 'get_transform_method', 'get_predict_method', 'is_predictor', 'FitError', 
-           'get_descriptor', 'get_param_names']
-
+__all__ = ['is_classifier', 'is_regressor', 
+           'detect_estimator_type', 'is_multi_input',
+           'get_clone', 'get_list_clone', 'save_model', 'load_model', 'get_transform_method', 'get_predict_method', 
+           'is_predictor', 'FitError', 'get_descriptor', 'get_param_names']
+    
 def is_classifier(obj):
     if hasattr(obj, '_estimator_type'):
         if getattr(obj, '_estimator_type', None) == 'classifier':
@@ -109,6 +111,13 @@ class FitError(Exception):
         self.message = message
         super().__init__(self.message)
         
+class ParallelBackendError(Exception):
+    """Exception raised when a distributed backend function fails
+    """
+    def __init__(self, message='request to the parallel backend failed'):
+        self.message = message
+        super().__init__(self.message)
+        
 def get_descriptor(class_name, params, verbose = True):
         string_ = class_name + '('
         
@@ -138,9 +147,9 @@ def get_param_names(callable_, omit_self = True):
 def get_param_clone(pipe):
     return pipe.__class__(**pipe.get_params())
 
-class Parameterized:
+class Clonable:
     
-    state_variables = ['override me with a list of state attributes to set on calls to get_clone']
+    state_variables = [] # override me with a list of state attributes to set on calls to get_clone
     
     def __init__(self, **params):
         self._init_params(locals())
@@ -184,3 +193,9 @@ class Saveable:
     @staticmethod
     def load(filepath):
         return joblib.load(filepath) 
+    
+def encode_labels(y):
+    if isinstance(y, np.ndarray) and len(y.shape) > 1 and y.shape[1] > 1:
+        raise NotImplementedError('Multilabel and multi-output meta-classification not supported')
+    classes_, y = np.unique(y, return_inverse=True)
+    return classes_, y_encoded
