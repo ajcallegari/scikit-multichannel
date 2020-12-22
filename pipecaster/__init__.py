@@ -7,4 +7,7 @@ from pipecaster.channel_model_selection import *
 from pipecaster.transforming_predictors import *
 """
 
-from pipecaster.parallel import *
+
+import pipecaster.transform_wrappers as transform_wrappers
+from pipecaster.multichannel_pipeline import *
+from pipecaster.model_stacking import *

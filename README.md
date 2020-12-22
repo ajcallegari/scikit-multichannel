@@ -1,20 +1,22 @@
 # pipecaster
 (in progress)
 
-### what is pipecaster?
+Pipecaster is a Python library for building multichannel machine learning pipelines and for in-pipeline screening of hyperparameters, models, data sources, and feature engineering steps.  The current version supports algorithms with the scikit-learn transformer and predictor interfaces.
 
-A scikit-learn extension library for building multi-input ML pipelines and for automating ML workflows.  Provides slice notation for broadcasting pipeline construction operations across multiple inputs and a Keras-like layered interface for building deep pipelines step-by-step.  Enables users to automate common screening tasks (data sources, feature engineering steps, ML algorithms, and hyperparameters) by including them in the ML pipeline.
+## multichannel machine learning
 
-Pipecaster encourages input silos by modifying the sklearn interface from:  
+ML libraries often implicitly encourage concatenation of features from multiple data sources into a single feature matrix (X) prior to feature selection or ML.  In practice, concatenation often reduces performance and greater predictive accuracy can be obtained by siloing the different inputs in separate channels through the initial feature selection and ML steps and then combining inferences at a later stage with voting or model stacking.
+
+Pipecaster provides a *MultichannelPipeline* class to simplify the construction of multichannel architectures, with slice notation for broadcasting operations across multiple input channels and keras-like layer-by-layer construction.  The library encourages input silos by modifying the sklearn predictor interface from:  
 `pipeline.fit(X, y).predict(X)`  
-to   
+to:  
 `pipeline.fit(Xs, y).predict(Xs).`
 
-### motivation
-ML libraries often implicitly encourage concatenation of features from multiple data sources into a single feature matrix (X) prior to feature selection or ML.  In practice, concatenation often reduces performance and greater predictive accuracy can be obtained by siloing the different inputs through the initial feature selection and ML steps and combining inferences at a later stage using voting or stacked generalization.
 ## in-pipeline screening
-A typical ML workflow may involve screening different input sources, feature engineering steps, models, and model hyperparameters.  Pipecaster allows you to semi-automate each of these screening tasks by including them in the ML pipeline.  This can be useful when you are developing a large number of different pipelines in parallel and don't have time to optimize each one separately, and it may accelerate ML workflows in general.  I wasn't able to find these in-pipeline operations in scikit-learn, Dask, or Spark ML.
+A typical ML workflow involves screening input sources, feature engineering steps, ML algorithms, and model hyperparameters.  Pipecaster allows you to semi-automate each of these screening tasks by including them in the ML pipeline.  This can be useful when you are developing a large number of different pipelines in parallel and don't have time to optimize each one separately, and it may accelerate ML workflows in general.
 
+## blazing fast distributed computing
+Pipecaster uses the ray library to speed up multiprocessing by passing arguments through the plasma in-memory object store without the usual serialization/deserialization overhead.  Ray also enables pipecaster to distribute jobs between computers in a cluster.
 
 # sample architecture
 ![Use case 1](/images/architecture_1.png)
@@ -72,4 +74,4 @@ The different input channels passed to pipecaster pipelines (Xs) may come from d
 Pipecaster allows in-pipeline screening of ML models and their hyperparameters with the *SelectiveEnsemble* class.  A *SelectiveEnsemble*, which operates on a single input, is a voting or concatenating ensemble that selects only the most performant models from within the ensemble. Model performance is assessed with an internal cross validation run within the training set during calls to pipeline.fit().  
 
 ## fast distributed computing
-Pipecaster uses Ray to distribute parallel computations to multiple processors and computers (.e.g for cross validation runs, hyperparameter screens, etc.).  Apart from enabling cluster computing, Ray dramatically increases the speed of single-computer multiprocessing relative to joblib or the Python standard library's multiprocessing package by reducing or eliminating serialization/de-serialization overhead with an in-memory object store.  Ray's plasma object store is also used by Apache Arrow & Apache Spark.  The plasma store is also useful for reducing your memory footprint by allowing all processes on a given computer to share a single copy of large objects.  
+Pipecaster uses Ray to distribute parallel computations to multiple processors and computers (.e.g for cross validation runs, hyperparameter screens, etc.).  Apart from enabling cluster computing, Ray dramatically increases the speed of single-computer multiprocessing relative to joblib or the Python standard library's multiprocessing package by reducing or eliminating serialization/de-serialization overhead with an in-memory object store.  Ray's plasma object store is also used by Apache Arrow & Apache Spark.  The plasmas store is also useful for reducing your memory footprint by allowing all processes on a given computer to share a single copy of large objects.  

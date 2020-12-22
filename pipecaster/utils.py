@@ -3,12 +3,20 @@ import sklearn.base
 import joblib
 import ray
 
-__all__ = ['is_classifier', 'is_regressor', 
-           'detect_estimator_type', 'is_multi_input',
-           'get_clone', 'get_list_clone', 'save_model', 'load_model', 'get_transform_method', 'get_predict_method', 
-           'is_predictor', 'FitError', 'get_descriptor', 'get_param_names']
+__all__ = ['is_classifier', 'is_regressor', 'is_predictor', 'is_transformer'
+           'detect_estimator_type', 'is_multichannel',
+           'get_clone', 'get_sklearn_clone', 'get_list_clone',
+           'save_model', 'load_model', 'get_transform_method', 'get_predict_method', 
+           'is_predictor', 'FitError', 'ParallelBackendError', 'get_descriptor', 
+           'get_param_names', 'get_param_clone', 'Cloneable', 'Saveable', 'encode_labels']
+
+# defines the methods used by pipecaster to detect predictor objects and make predictions
+recognized_pred_methods = set(['predict', 'predict_proba', 'decision_function', 'predict_log_proba'])
     
 def is_classifier(obj):
+    """
+    Detect a classifier algorithm.
+    """    
     if hasattr(obj, '_estimator_type'):
         if getattr(obj, '_estimator_type', None) == 'classifier':
             return True
@@ -18,6 +26,9 @@ def is_classifier(obj):
         return False
      
 def is_regressor(obj):
+    """
+    Detect a regressor algorithm.
+    """
     if hasattr(obj, '_estimator_type'):
         if getattr(obj, '_estimator_type', None) == 'regressor':
             return True
@@ -26,22 +37,85 @@ def is_regressor(obj):
     else:
         return False
     
-def detect_estimator_type(obj):
-    if is_classifier(obj):
+def is_predictor(pipe):
+    """
+    Detect a predictor algorithm.
+    """
+    for method in recognized_pred_methods:
+        if hasattr(pipe, method):
+            return True
+    return False
+
+def is_transformer(pipe):
+    """
+    Detect a transformer algorithm.
+    """
+    if hasattr(pipe, 'transform'):
+        return True
+    else:
+        return False
+    
+def detect_estimator_type(pipe):
+    """
+    Determine if an algorithm is a classifier, regressor, or neither (unknown).
+    """
+    if is_classifier(pipe):
         _estimator_type = 'classifier'
-    elif is_regressor(obj):
+    elif is_regressor(pipe):
         _estimator_type = 'regressor'
     else:
         _estimator_type = 'unknown'
     return _estimator_type
 
-def is_multi_input(pipe):
-    """Detect if a pipeline component is multi-input by determining if the first argument to fit() is 'Xs' 
+def enforce_fit(pipe):
+    """
+    Throw error if pipe lacks a required fit method.
+    """
+    if hasattr(pipe, 'fit'):
+        return
+    else:
+        raise TypeError('{} lacks a required fit method'.format(pipe.__class__.__name__))
+        
+def enforce_predict(pipe):
+    """
+    Throw error if pipe lacks a recognized method for predicting.
+    """
+    if is_predictor(pipe):
+        return
+    else:
+        raise TypeError('{} lacks a recognized method for prediction'.format(pipe.__class__.__name__))
+        
+def enforce_output(pipe):
+    """
+    Throw error if pipe has no recognized method for generating outpub (predicting or transforming).
+    """
+    if is_predictor(pipe) or is_transformer(pipe):
+        return
+    else:
+        raise TypeError('{} lacks a required method for generating output (tranform or predict)'
+                        .format(pipe.__class__.__name__))
+        
+def check_pipe_interface(pipe):
+    """
+    Throw error if pipe lack a fit method or has no recognized method for generating output.
+    """
+    enforce_fit(pipe)
+    enforce_output(pipe)
+
+def is_multichannel(pipe):
+    """
+    Detect if a pipeline component is multi-input by determining if the first argument to fit() is 'Xs' 
     """
     first_param = list(signature(pipe.fit).parameters.keys())[0]
     return first_param == 'Xs'
 
-def get_clone(pipe, disable_custom_cloning = False):
+def get_prediction_method_names(pipe):
+    """
+    Return a list of all recongized prediction methods or None
+    """
+    return [m for m in recognized_pred_methods if hasattr(pipe, m)]
+
+def get_clone(pipe, disable_custom_cloning=False):
     
     """Get a new copy of a transformer/estimator/predictor instance. 
     Parameters
@@ -63,46 +137,20 @@ def get_clone(pipe, disable_custom_cloning = False):
     else:
         return sklearn.base.clone(pipe)
     
-def get_list_clone(pipes):
+def get_sklearn_clone(pipe):
+    return get_clone(pipe, disable_custom_cloning=True)
+    
+def get_clones(pipes):
     if isinstance(pipes, (list, tuple, np.ndarray)):
-        return get_clone(pipes)
-    else:
         return [get_clone(p) if p is not None else None for p in pipes]
+    else:
+        return get_clone(pipes) if p is not None else None
     
 def save_model(model, filepath):
     joblib.dump(model, filepath) 
     
 def load_model(filepath):
     return joblib.load(filepath) 
-    
-def get_transform_method(pipe):
-    if hasattr(pipe, 'transform'):
-        transform_method = getattr(pipe, 'transform')
-    elif hasattr(pipe, 'predict_proba'):
-        transform_method = getattr(pipe, 'predict_proba')
-    elif hasattr(pipe, 'decision_function'):
-        transform_method = getattr(pipe, 'decision_function')
-    elif hasattr(pipe, 'predict'):
-        transform_method = getattr(pipe, 'predict')
-    else:
-        transform_method = None
-            
-    return transform_method
-
-def get_predict_method(pipe):
-    if hasattr(pipe, 'predict'):
-        predict_method = getattr(pipe, 'predict')
-    elif hasattr(pipe, 'predict_proba'):
-        predict_method = getattr(pipe, 'predict_proba')
-    elif hasattr(pipe, 'decision_function'):
-        predict_method = getattr(pipe, 'decision_function')
-    else:
-        predict_method = None
-            
-    return predict_method
-
-def is_predictor(pipe):
-    return False if get_predict_method(pipe) is None else True
 
 class FitError(Exception):
     """Exception raised when calls to fit() fail
@@ -147,12 +195,9 @@ def get_param_names(callable_, omit_self = True):
 def get_param_clone(pipe):
     return pipe.__class__(**pipe.get_params())
 
-class Clonable:
+class Cloneable:
     
-    state_variables = [] # override me with a list of state attributes to set on calls to get_clone
-    
-    def __init__(self, **params):
-        self._init_params(locals())
+    state_variables = [] # override me with a list of state attributes to copy on calls to get_clone
         
     @property
     def param_names(self):

@@ -15,14 +15,14 @@ __all__ = ['cross_val_score', 'cross_val_predict']
 def fit_and_predict(predictor, Xs, y, train_indices, test_indices, predict_method, fit_params):
         predictor = utils.get_clone(predictor)
         fit_params = {} if fit_params is None else fit_params
-        if utils.is_multi_input(predictor):
+        if utils.is_multichannel(predictor):
             X_trains = [X[train_indices] if X is not None else None for X in Xs]
             predictor.fit(X_trains, y[train_indices], **fit_params)
         else:
             predictor.fit(Xs[train_indices], y[train_indices], **fit_params)
         if hasattr(predictor, predict_method):
             predict_method = getattr(predictor, predict_method)
-            if utils.is_multi_input(predictor):
+            if utils.is_multichannel(predictor):
                 X_tests = [X[test_indices] if X is not None else None for X in Xs]
                 predictions = predict_method(X_tests)
             else:
@@ -43,8 +43,8 @@ def cross_val_predict(predictor, Xs, y=None, groups=None, predict_method='predic
     ----------
     predictor : predictor instance implementing 'fit' and 'predict'
         
-    Xs : array-like of shape (n_samples, n_features)
-        The data to fit. Can be, for example a list, or an array at least 2d.
+    Xs : array-like of shape (n_samples, n_features) or list of array-likes
+        A single feature matrix, or a list of feature matrices with the same samples in the same order.  
     y : array-like of shape (n_samples,) or (n_samples, n_outputs), \
             default=None
         The target variable to try to predict in the case of
@@ -58,22 +58,14 @@ def cross_val_predict(predictor, Xs, y=None, groups=None, predict_method='predic
         Possible inputs for cv are:
         - None, to use the default 5-fold cross validation,
         - int, to specify the number of folds in a '(Stratified)KFold',
-        - :term:'CV splitter',
         - An iterable yielding (train, test) splits as arrays of indices.
         For int/None inputs, if the predictor is a classifier and 'y' is
         either binary or multiclass, :class:'StratifiedKFold' is used. In all
         other cases, :class:'KFold' is used.
-        Refer :ref:'User Guide <cross_validation>' for the various
-        cross-validation strategies that can be used here.
-        .. versionchanged:: 0.22
-            'cv' default value if None changed from 3-fold to 5-fold.
     n_processes : int, default='max'
         The number of parallel processes to use to do the computation.
-        
-    verbose : int, default=0
-        The verbosity level.
     fit_params : dict, defualt=None
-        Parameters to pass to the fit method of the predictor.
+        Auxiliary parameters to pass to the fit method of the predictor.
     method : str, default='predict'
         Invokes the passed method name of the passed predictor. For
         method='predict_proba', the columns correspond to the classes
@@ -105,6 +97,8 @@ def cross_val_predict(predictor, Xs, y=None, groups=None, predict_method='predic
                 y_enc[:, i_label] = LabelEncoder().fit_transform(y[:, i_label])
             y = y_enc
             
+    cv = int(5) if cv is None else cv
+            
     if type(cv) == int:
         if groups is not None:
             cv = GroupKFold(n_splits=cv, random_state=split_seed)
@@ -114,7 +108,7 @@ def cross_val_predict(predictor, Xs, y=None, groups=None, predict_method='predic
             else:
                 cv = KFold(n_splits=cv, random_state=split_seed)
                 
-    if utils.is_multi_input(predictor):
+    if utils.is_multichannel(predictor):
         live_Xs = [X for X in Xs if X is not None]
         splits = list(cv.split(live_Xs[0], y, groups))
     else:
@@ -132,7 +126,6 @@ def cross_val_predict(predictor, Xs, y=None, groups=None, predict_method='predic
             print('parallel processing request failed with message {}'.format(e))
             print('defaulting to single processor')
             n_processes = 1       
-
     if n_processes == 1:
         # print('running a single process with {} jobs'.format(len(args_list)))
         prediction_blocks = [fit_and_predict(*args) for args in args_list]
@@ -158,10 +151,9 @@ def cross_val_score(predictor, Xs, y=None, groups=None, scorer=None, predict_met
         
     Parameters
     ----------
-    estimator : estimator object implementing 'fit'
-        The object to use to fit the data.
-    X : array-like of shape (n_samples, n_features)
-        The data to fit. Can be for example a list, or an array.
+    predictor : Scikit-learn conformant predictor instance
+    Xs : array-like of shape (n_samples, n_features) or list of array-likes
+        A single feature matrix, or a list of feature matrices with the same samples in the same order.  
     y : array-like of shape (n_samples,) or (n_samples, n_outputs), \
             default=None
         The target variable to try to predict in the case of
@@ -170,9 +162,9 @@ def cross_val_score(predictor, Xs, y=None, groups=None, scorer=None, predict_met
         Group labels for the samples used while splitting the dataset into
         train/test set. Only used in conjunction with a "Group" :term:'cv'
         instance (e.g., :class:'GroupKFold').
-    scoring : callable, default=None
+    scorer : callable, default=None
         a scorer callable object / function with signature
-        'scorer(y_pred, t_true)' which should return only
+        'scorer(y_true, y_pred)' which should return only
         a single value.
     cv : int, cross-validation generator or an iterable, default=None
         Determines the cross-validation splitting strategy.

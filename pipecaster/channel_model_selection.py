@@ -1,77 +1,101 @@
 import numpy as np
 import ray
 
+from sklearn.metrics import accuracy_score
+
 import pipecaster.utils as utils
-from pipecaster.transforming_predictors import CvPredictor
+from pipecaster.utils import Cloneable, Saveable
+from pipecaster.predicting_transformers import CvTranformer
 from pipecaster.score_selection import RankScoreSelector
 from pipecaster.channel_scoring import CvPerformanceScorer
 from pipecaster.cross_validation import cross_val_score 
-from sklearn.metrics import accuracy_score
 
-__all__ = ['SelectKBestModels']
+__all__ = ['CvModelScorer', 'ChannelModelSelector', 'SelectKBestModels']
 
-class CvModelScorer:
+class CvModelScorer(Cloneable):
     
-    def __init__(self, cv, scorer, channel_jobs=1, cv_jobs=1):
-        self.cv = cv
-        self.scorer = scorer
-        self.channel_jobs = channel_jobs
-        self.cv_jobs = cv_jobs
+    def __init__(self, cv, scorer, channel_processes=1, cv_processes=1):
+        super()._init_params(locals())
     
     def __call__(self, predictor, X, y, **fit_params):
         if X is None:
             return None
         else:
-            scores = cross_val_score(predictor, X, y, scorer=self.scorer, cv=self.cv, n_jobs=self.cv_jobs, 
+            scores = cross_val_score(predictor, X, y, scorer=self.scorer, cv=self.cv, n_jobs=self.cv_processes, 
                                      verbose=0, fit_params=fit_params)
             return np.mean(scores)
     
-    def get_clone(self):
-        return PerformanceScorer(self.cv, self.scorer, self.channel_jobs, self.cv_jobs)
+class ChannelModelSelector(Cloneable, Saveable):
+    """
     
-class ChannelModelSelector:
+    notes
+    -----
+    predictors can be list of predictors or single to be broadcast
     
-    def __init__(self, predictors, model_scorer, score_selector, channel_jobs=1, cv_jobs=1):
-        self.predictors = predictors
-        self.model_scorer = model_scorer
-        self.score_selector = score_selector
-        self.channel_jobs = channel_jobs
-        self.cv_jobs = cv_jobs
+    """
+    
+    def __init__(self, predictors=None, internal_cv=5, scorer=explained_variance_score, 
+                 score_selector=RankScoreSelector(3), channel_processes=1, cv_processes=1):
+        super()._init_params(locals())
     
     @staticmethod
-    def _get_score(model_scorer, predictor, X, y, **fit_params):
-        if X is None:
-            return None
+    def _fit_job(predictor, X, y, fit_params):
+        model = utils.get_clone(predictor)
+        if y is None:
+            predictions = model.fit_transform(X, **fit_params)
         else:
-            return model_scorer(model_scorer, X, y, **fit_params)
-    
-    @ray.remote
-    def _ray_get_score(model_scorer, predictor, X, y, **fit_params):
-        return _get_score(model_scorer, predictor, X, y, **fit_params)
-    
-    def fit(self, Xs, y, **fit_params):
+            predictions = model.fit_transform(X, y, **fit_params)
+            
+        return model, predictions
+        
+    def fit(self, Xs, y=None, **fit_params):
         
         is_listlike = isinstance(self.predictors, (list, tuple, np.ndarray))
         if is_listlike:
             if len(Xs) != len(self.predictors):
                 raise ValueError('predictor list length does not match input list length')
             else:
-                self.predictors = [utils.get_clone(p) if X is not None else None for X, p in zip(Xs, self.predictors)]
+                predictors = [p if X is not None else None for X, p in zip(Xs, self.predictors)]
         else:
-            self.predictors = [utils.get_clone(self.predictors) if X is not None else None for X in Xs]
-        self.predictors = [CvPredictor(p) if X is not None else None for X, p in zip(Xs, self.predictors)]
-            
-        if self.channel_jobs < 2:
-            performance_scores = [ChannelModelSelector._get_score(self.model_scorer, predictor, X, y, **fit_params) 
-                                  for predictor, X in zip(self.predictors, Xs)]
-        else:
-            y = ray.put(y)
-            model_scorer = ray.put(self.model_scorer)
-            jobs = [ChannelModelSelector._ray_get_score.remote(model_scorer, ray.put(predictor), 
-                                                               ray.put(X), y, **fit_params) 
-                    for predictor, X in zip(self.predictors, Xs)]
-            performance_scores = ray.get(jobs)
+            predictors = [self.predictors if X is not None else None for X in Xs]
         
+        for i, p in enumerate(predictors):
+            if Xs[i] is None:
+                predictors[i] = None
+                continue
+            if type(p) == CvTransformer:
+                raise TypeError('CvTransformer found in predictors. Disallowed to enable uniform CvTransformer scoring')
+            predictors[i] = CvTransformer(p, internal_cv=self.internal_cv, scorer=self.scorer, cv_processes=1)
+        
+        active_X_indices = [i for i, X in enumerate(Xs) if X is not None]
+        args_list = [(p, X, y, fit_params) for p, X in zip(predictors, Xs) if X is not None]
+        
+        n_processes = self.channel_processes
+        if n_processes is not None and n_processes > 1:
+            try:
+                shared_mem_objects = [X, y, fit_params]
+                fit_results = parallel.starmap_jobs(ChannelModelSelector._fit_job, args_list, 
+                                                    n_cpus=self.n_processes, 
+                                                    shared_mem_objects=shared_mem_objects)
+            except Exception as e:
+                print('parallel processing request failed with message {}'.format(e))
+                print('defaulting to single processor')
+                n_processes = 1       
+        if n_processes is None or n_processes <= 1:
+            # print('running a single process with {} jobs'.format(len(args_list)))
+            fit_results = [ChannelModelSelector._fit_job(**args) for args in args_list]
+                
+        models, predictions_list = zip(*fit_results)
+        if self.scorer is not None and self.score_selector is not None: 
+            model_scores = [p.score_ for p in models]
+            selected_indices = self.score_selector(model_scores)
+            
+        channel_models = [None for X in Xs]
+        channel_predictions = [None for X in Xs]
+        for i in selected_indices:
+            self.models[active_X_indices[i]] = models[i]
+            channel_predictions[active_X_indices[i]] = predictions_list[i]
+           
         selected_indices = set(self.score_selector(performance_scores))
         self.predictors = [self.predictors[i] if i in selected_indices else None for i in range(len(Xs))]
             
@@ -86,12 +110,12 @@ class ChannelModelSelector:
         return {'predictors':self.predictors,
                 'model_scorer':self.model_scorer,
                 'score_selector':self.score_selector,
-                'channel_jobs':self.channel_jobs,
-                'cv_jobs':self.cv_jobs}
+                'channel_processes':self.channel_processes,
+                'cv_processes':self.cv_processes}
     
     def set_params(self, **params):
         for key, value in params.items():
-            if key in ['predictors', 'model_scorer','score_selector', 'channel_jobs', 'cv_jobs']:
+            if key in ['predictors', 'model_scorer','score_selector', 'channel_processes', 'cv_processes']:
                 setattr(self, key, value)
             else:
                 raise AttributeError('{} not a valid ChannelModelSelector parameter'.format(key))
@@ -101,41 +125,11 @@ class ChannelModelSelector:
                 
     def get_clone(self):
         clone = ChannelModelSelector(utils.get_list_clone(self.predictors), self.model_scorer, 
-                                     self.score_selector, self.channel_jobs, self.cv_jobs)
+                                     self.score_selector, self.channel_processes, self.cv_processes)
         return clone
     
 class SelectKBestModels(ChannelModelSelector):
     
-    def __init__(self, predictors, cv=3, scorer=accuracy_score, k=1, channel_jobs=1, cv_jobs=1):
-        self.predictors = predictors
-        self.cv = cv
-        self.scorer = scorer
-        self.k = k
-        self.channel_jobs = channel_jobs
-        self.cv_jobs = cv_jobs
-        super().__init__(predictors, CvModelScorer(cv, scorer, channel_jobs, cv_jobs), RankScoreSelector(k))
-
-    def __str__(self, verbose = True):
-        return utils.get_descriptor(self.__class__.__name__, self.get_params(), verbose)
-    
-    def __repr__(self, verbose = True):
-        return self.__str__(verbose)  
-    
-    def get_params(self):
-        return {'predictors':self.predictors,
-                'cv':self.cv,
-                'scorer':self.scorer,
-                'k':self.k,
-                'channel_jobs':self.channel_jobs,
-                'cv_jobs':self.cv_jobs}
-    
-    def set_params(self, **params):
-        for key, value in params.items():
-            if key in ['predictors', 'cv', 'scorer', 'k', 'channel_jobs', 'cv_jobs']:
-                setattr(self, key, value)
-            else:
-                raise AttributeError('{} not a valid SelectKBestModels parameter'.format(key))   
-                
-    def get_clone(self):
-        return SelectKBestModels(utils.get_clone(self.predictors), self.cv, self.scorer, 
-                                     self.k, self.channel_jobs, self.cv_jobs)
+    def __init__(self, predictors, cv=3, scorer=accuracy_score, k=1, channel_processes=1, cv_processes=1):
+        super()._init_params(locals())
+        super().__init__(predictors, CvModelScorer(cv, scorer, channel_processes, cv_processes), RankScoreSelector(k))
