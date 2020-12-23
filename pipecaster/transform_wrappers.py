@@ -1,9 +1,14 @@
+import functools
+
 import pipecaster.utils as utils
 from pipecaster.utils import Cloneable, Saveable
 from pipecaster.cross_validation import cross_val_predict
 
 """
-Wrapper classes that provide single channel and multichannel predictors with transform/fit_transform methods, internal cv_training, and internal_cv performance scoring.  Used for meta-prediction and model selection.
+Wrapper classes that provide single channel and multichannel predictors with transform/fit_transform methods, internal cv_training, and internal_cv performance scoring.  Used for meta-prediction and model selection.  Conversion of 
+prediction methods to tranform methods is done using the transform_method_name argument, but this argument can usually
+be left at it's default value of None to allow autoconversion using the precedence of prediction functions defined in the 
+transform_method_precedence module variable.
 
 Examples
 --------
@@ -63,24 +68,28 @@ class SingleChannel(Cloneable, Saveable):
     transiently during pipeline fitting and are not persisted for subsequent inferences.  Inferences are made on 
     a differnt, persistent model that is trained on the full training set during calls to fit_transform() -- or fit().
     The predictor is not cloned during construction or calls to fit(), but is cloned on get_clone() call. 
+    
+    This class uses reflection to expose the predictor methods found in the object that it wraps, so 
+    the method attributes in a SingleChannel instance are not identical to the method attributes of the SingleChannel class.
     """
     state_variables = ['classes_']
     
-    def __init__(self, predictor=None):
-        self._init_params(locals())
+    def __init__(self, predictor=None, transform_method_name=None):
+        self._params_to_attributes(locals())
         utils.enforce_fit(predictor)
-        self.transform_method_name = get_transform_method_name(predictor)
-        if self.transform_method_name is None:
-            raise NameError('predictor lacks a recognized method for conversion to transformer')
+        if transform_method_name is None:
+            self.transform_method_name = get_transform_method_name(predictor)
+            if self.transform_method_name is None:
+                raise NameError('predictor lacks a recognized method for conversion to transformer')
         self._expose_predictor_interface(predictor)
-        self._esimtator_type = utils.detect_estimator_type(predictor)
-        if self._esimtator_type is None:
-            raise TypeError('could not detect predictor type')
+        self._estimator_type = utils.detect_estimator_type(predictor)
+        if self._estimator_type is None:
+            raise TypeError('could not detect predictor type for {}'.format(predictor))
         
     def _expose_predictor_interface(self, predictor):
-        for method_name in utils.regognized_pred_methods:
+        for method_name in utils.recognized_pred_methods:
             if hasattr(predictor, method_name):
-                prediction_method = lambda self, X : self.predict_with_method(X, method_name)
+                prediction_method = functools.partial(self.predict_with_method, method_name=method_name)
                 setattr(self, method_name, prediction_method)
         
     def set_transform_method(self, method_name):
@@ -98,14 +107,13 @@ class SingleChannel(Cloneable, Saveable):
         return self
     
     def predict_with_method(self, X, method_name):
-        if hasattr(self, 'model'):
-            if hasattr(self.model, method_name):
-                predict_method = getattr(self.model, method_name)
-                return predict_method(X)
-            else:
-                raise NameError('prediction method: {} not found in {}'.format(method_name, self.model))
-        else:
+        if hasattr(self, 'model') == False:
             raise utils.FitError('prediction attempted before model fitting') 
+        if hasattr(self.model, method_name):
+            predict_method = getattr(self.model, method_name)
+            return predict_method(X)
+        else:
+            raise NameError('prediction method {} not found in {} attributes'.format(method_name, self.model))
             
     def transform(self, X):
         if hasattr(self, 'model'):
@@ -137,6 +145,7 @@ class SingleChannel(Cloneable, Saveable):
         return {'multichannel': False}
     
     def get_clone(self):
+        ## finish implementation
         clone = super().get_clone()
         if hasattr(self, 'model'):
             clone.model = utils.get_clone(self.model)
@@ -167,13 +176,17 @@ class SingleChannelCV(SingleChannel):
     The model fit on the entire dataset is stored for inference on subsequent calls to predict(), predict_proba(), 
     decision_function(), or tranform().  The models fit on cv splits are used to make the predictions returned 
     by fit_transform but are not stored for future use. 
+
+    This class uses reflection to expose the predictor methods found in the object that it wraps, so 
+    the method attributes in a SingleChannelCV instance are not identical to the method attributes of the SingleChannelCV class.
     """
     
-    state_variables = ['transform_method_', '_estimator_type', 'classes_', 'score_']
+    state_variables = ['score_']
     
-    def __init__(self, predictor, internal_cv=5, split_seed=None, cv_processes=1, scorer=None):
-        super()._init_params(locals())
-        super().__init__(predictor)
+    def __init__(self, predictor, transform_method_name=None, internal_cv=5, split_seed=None, cv_processes=1, scorer=None):
+        self._params_to_attributes(locals())
+        self._inherit_state_variables(super())
+        super().__init__(predictor, transform_method_name)
                 
     def fit_transform(self, X, y=None, groups=None, **fit_params):
         self.fit(X, y, **fit_params)
@@ -184,14 +197,11 @@ class SingleChannelCV(SingleChannel):
         # internal cv training is enabled
         else:
             X_t = cross_val_predict(self.predictor, X, y, groups=groups, predict_method=self.transform_method_name, 
-                                    cv=self.internal_cv, n_processes=self.cv_processes, 
-                                    split_seed=self.split_seed, fit_params=fit_params)
-            
-            cross_val_predict(predictor, Xs, y=None, groups=None, predict_method='predict', cv=None,
-                      combine_splits=True, n_processes='max', split_seed=None, fit_params=None)
+                                     cv=self.internal_cv, combine_splits=True, n_processes=self.cv_processes, 
+                                     split_seed=self.split_seed, fit_params=fit_params)
             
             if self.scorer is not None:
-                self.score_ = self.scorer(y, X)
+                self.score_ = self.scorer(y, X_t)
             X_t = X_t.reshape(-1, 1) if self._estimator_type == 'regressor' and len(X_t.shape) == 1 else X_t
         
         return X_t
@@ -210,6 +220,7 @@ class SingleChannelCV(SingleChannel):
         return {'multichannel': False}
     
     def get_clone(self):
+        ## finish implementation
         clone = CvPredictor(utils.get_clone(self.predictor), transform_method=self.transform_method,
                            internal_cv=self.internal_cv, scorer=self.scorer, cv_processes=self.cv_processes)
         for var in CvPredictor.state_variables:
@@ -217,23 +228,34 @@ class SingleChannelCV(SingleChannel):
                 setattr(clone, var, getattr(self, var))
         return clone
     
-    
 class Multichannel(Cloneable, Saveable):
+    """
+    Wrapper class that provides MultichannelPredictor instances with transform methods.
     
-    def __init__(self, mutlichannel_predictor=None):
-        super()._init_params(locals())
+    Notes
+    -----
+    This class uses reflection to expose the predictor methods found in the object that it wraps, so 
+    the method attributes in a Multichannel instance are not identical to the method attributes of the Multichannel class.
+    """
+    state_variables = ['classes_']
+    
+    def __init__(self, mutlichannel_predictor=None, transform_method_name=None):
+        self._params_to_attributes(locals())
         utils.enforce_fit(predictor)
         utils.enforce_predictor(predictor)        
         self._estimator_type = utils.detect_estimator_type(mutlichannel_predictor)
         if self._estimator_type is None:
             raise AttributeError('could not detect predictor type')
-        self.transform_method_name = get_transform_method_name(mutlichannel_predictor)
+        if transform_method_name is None:
+            self.transform_method_name = get_transform_method_name(mutlichannel_predictor)
+            if self.transform_method_name is None:
+                raise TypeError('missing recognized method for transforming with a predictor')
         self._expose_predictor_interface(mutlichannel_predictor)
         
     def _expose_predictor_interface(self, mutlichannel_predictor):
         for method_name in utils.recognized_pred_methods:
             if hasattr(mutlichannel_predictor, method_name):
-                prediction_method = lambda self, Xs : self.predict_with_method(Xs, method_name)
+                prediction_method = functools.partial(self.predict_with_method, method_name=method_name)
                 setattr(self, method_name, prediction_method)
                 
     def fit(self, Xs, y=None, **fit_params):
@@ -263,11 +285,23 @@ class Multichannel(Cloneable, Saveable):
         self.fit(Xs, y=None, **fit_params)
         return self.transform(Xs)
     
-class MultichannelCV(Cloneable, Saveable):
+class MultichannelCV(Multichannel):
+    """
+    Wrapper class that provides MultichannelPredictor instances with transform methods and internal cv training.
+    
+    Notes
+    -----
+    This class uses reflection to expose the predictor methods found in the object that it wraps, so 
+    the method attributes in a MultichannelCV instance are not identical to the method attributes of the 
+    MultichannelCV class. 
+    """
+    
+    state_variables = ['score_']
     
     def __init__(self, mutlichannel_predictor=None, internal_cv=5, split_seed=None, cv_processes=1, scorer=None):
         super().__init__(mutlichannel_predictor)
-        super()._init_params(locals())
+        self._params_to_attributes(locals())
+        self._inherit_state_variables(super())
         
     def fit_transform(self, Xs, y=None, groups=None, **fit_params):
         self.fit(Xs, y, **fit_params)
@@ -277,12 +311,13 @@ class MultichannelCV(Cloneable, Saveable):
             Xs_t = self.transform(Xs)
         # internal cv training is enabled
         else:
-            Xs_t = cross_val_predict(self.predictor, Xs, y, groups=groups, predict_method=self.transform_method_name, 
+            Xs_t = cross_val_predict(self.mutlichannel_predictor, Xs, y, groups=groups, 
+                                     predict_method=self.transform_method_name, 
                                      cv=self.internal_cv, combine_splits=True, n_processes=self.cv_processes, 
                                      split_seed=self.split_seed, fit_params=fit_params)
             
             if self.scorer is not None:
                 self.score_ = self.scorer(y, Xs_t[0])
-            X_t = X_t.reshape(-1, 1) if self._estimator_type == 'regressor' and len(X_t.shape) == 1 else X_t
+            X_t[0] = Xs_t[0].reshape(-1, 1) if self._estimator_type == 'regressor' and len(Xs_t[0].shape) == 1 else Xs_t[0]
         
-        return X_t
+        return Xs_t

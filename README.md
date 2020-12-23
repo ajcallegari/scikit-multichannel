@@ -16,7 +16,7 @@ to:
 A typical ML workflow involves screening input sources, feature engineering steps, ML algorithms, and model hyperparameters.  Pipecaster allows you to semi-automate each of these screening tasks by including them in the ML pipeline.  This can be useful when you are developing a large number of different pipelines in parallel and don't have time to optimize each one separately, and it may accelerate ML workflows in general.
 
 ## blazing fast distributed computing
-Pipecaster uses the ray library to speed up multiprocessing by passing arguments through the plasma in-memory object store without the usual serialization/deserialization overhead.  Ray also enables pipecaster to distribute jobs between computers in a cluster.
+Pipecaster uses the ray library to speed up multiprocessing by passing arguments through the plasma in-memory object store without the usual serialization/deserialization overhead.  Ray also enables pipecaster to rapidly distribute jobs among computers in a cluster.
 
 # sample architecture
 ![Use case 1](/images/architecture_1.png)

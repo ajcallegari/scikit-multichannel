@@ -1,6 +1,7 @@
 import numpy as np
 import ray
 import scipy.stats
+import functools
 
 from sklearn.metrics import explained_variance_score
 
@@ -9,8 +10,8 @@ from pipecaster.utils import Cloneable, Saveable
 import pipecaster.transform_wrappers as transform_wrappers
 from pipecaster.score_selection import RankScoreSelector
 
-__all__ = ['SoftVotingClassifier', 'HardVotingClassifier', 'AggregatingRegressor', 'SelectiveStack', 'ChannelConcatenator',
-          'MultichannelPredictor']
+__all__ = ['SoftVotingClassifier', 'HardVotingClassifier', 'AggregatingRegressor', 
+           'SelectivePredictorStack', 'ChannelConcatenator', 'MultichannelPredictor']
 
 class SoftVotingClassifier(Cloneable, Saveable):
     """
@@ -23,7 +24,7 @@ class SoftVotingClassifier(Cloneable, Saveable):
     matrix columns.  
     """
     
-    state_variables = ['classes_', '_estimator_type']
+    state_variables = ['classes_']
     
     def __init__(self):
         self._estimator_type = 'classifier'
@@ -70,7 +71,7 @@ class HardVotingClassifier(Cloneable, Saveable):
     - shape (n_samples, n_classes).
     
     """    
-    state_variables = ['classes_', '_estimator_type']
+    state_variables = ['classes_']
     
     def __init__(self):
         self._estimator_type = 'classifier'
@@ -118,7 +119,7 @@ class AggregatingRegressor(Cloneable, Saveable):
     Currently supports only supports single output regressors.
     """
     
-    state_variables = ['_estimator_type']
+    state_variables = []
     
     def __init__(self, aggregator=np.mean):
         self._init_params(locals())
@@ -136,7 +137,7 @@ class AggregatingRegressor(Cloneable, Saveable):
     def fit_transform(self, X, y=None, **fit_params):
         return self.transform(X)
 
-class SelectiveStack(Cloneable, Saveable):
+class SelectivePredictorStack(Cloneable, Saveable):
     
     """
     A single-input channel ensemble predictor that selects base predictors based on internal cross validation performance. 
@@ -169,8 +170,7 @@ class SelectiveStack(Cloneable, Saveable):
     Predictor cloning occurs at fit time.
     
     """
-                             
-    state_variables = ['classes_', '_estimator_type', 'predict_prob', 'decision_function']
+    state_variables = ['classes_']
     
     def __init__(self, base_predictors=None, meta_predictor=None, internal_cv=5, 
                  scorer=explained_variance_score, score_selector=RankScoreSelector(k=3), 
@@ -183,12 +183,13 @@ class SelectiveStack(Cloneable, Saveable):
         if meta_predictor._estimator_type != estimator_types[0]:
             raise TypeError('meta_predictor must be same type as base_predictors (e.g. classifier or regressor)')
         self._estimator_type = estimator_types[0]
-                             
-        # expose classifier methods that can be used for transforming, e.g. if this class if wrapped with PredictTransformer
-        if hasattr(meta_predictor, 'predict_proba'):
-            setattr(self, 'predict_proba', 'latent_predict_proba')
-        if hasattr(meta_predictor, 'decision_function'):
-            setattr(self, 'decision_function', 'latent_decision_function')
+        self._expose_predictor_interface(meta_predictor)
+            
+    def _expose_predictor_interface(self, meta_predictor):
+        for method_name in utils.recognized_pred_methods:
+            if hasattr(meta_predictor, method_name):
+                prediction_method = functools.partial(self.predict_with_method, method_name=method_name)
+                setattr(self, method_name, prediction_method)
         
     @staticmethod
     def _fit_job(predictor, X, y, fit_params):
@@ -238,43 +239,36 @@ class SelectiveStack(Cloneable, Saveable):
             self.classes = self.meta_model.classes_
             
         return self
+    
+    def predict_with_method(self, X, method_name):
+        """
+        Make inferences by calling the indicated method on the metaclassifier after creating meta-features
         
-    def predict(self, X):
-        if hasattr(self, 'base_models') and hasattr(self, 'meta_model'): 
-            predictions_list = [p.transform(X) for p in self.base_models]
-            meta_X = np.concatenate(predictions_list, axis=1)
-            predictions = self.meta_model.predict(meta_X)
-            if self._estimator_type == 'classifier':
-                predictions = self.classes_[predictions]
-            return predictions
-        else:
+        Parameters
+        ----------
+        X: ndarray.shape(n_samples, n_features)
+        method_name: str
+        
+        Returns
+        -------
+        ndarray(n_samples,) for regressions or classifiers called with "predict"
+        ndarray(n_sample, n_classes) for classifiers called with predict_proba, decision_function, or predict_log_proba
+        """
+        if hasattr(self, 'base_models') == False or hasattr(self, 'meta_model') == False: 
             raise utils.FitError('prediction attempted before model fitting')
-    
-    def latent_predict_proba(self, X):
-        if hasattr(self, 'base_models') and hasattr(self, 'meta_model'): 
-            predictions_list = [p.transform(X) for p in self.base_models]
-            meta_X = np.concatenate(predictions_list, axis=1)
-            predictions = self.meta_model.predict_proba(meta_X)
-            return predictions
-        else:
-            raise utils.FitError('prediction attempted before model fitting')
-    
-    def latent_decision_function(self, X):
-        if hasattr(self, 'base_models') and hasattr(self, 'meta_model'): 
-            predictions_list = [p.transform(X) for p in self.base_models]
-            meta_X = np.concatenate(predictions_list, axis=1)
-            predictions = self.meta_model.decision_function(meta_X)
-            return predictions
-        else:
-            raise utils.FitError('prediction attempted before model fitting')
+        predictions_list = [p.transform(X) for p in self.base_models]
+        meta_X = np.concatenate(predictions_list, axis=1)
+        prediction_method = getattr(self.meta_model, method_name)
+        predictions = self.prediction_method(meta_X)
+        if self._estimator_type == 'classifier' and method_name == 'predict':
+            predictions = self.classes_[predictions]
+        return predictions
                 
     def _more_tags(self):
         return {'multichannel': False}
     
     def get_clone(self):
         clone = super().get_clone()
-        clone.base_predictors = [p for p in self.base_predictors]
-        clone.meta_predictor = self.meta_predictor
         if hasattr(self, 'base_models'):
             clone.base_models = [utils.get_clone(m) for m in self.base_models]
         if hasattr(self, 'meta_model'):
@@ -314,8 +308,7 @@ class MultichannelPredictor(Cloneable, Saveable):
     skip the wrapper step and make all predictors also transformers by default.
     
     """
-    
-    state_variables = ['classes_', '_estimator_type']
+    state_variables = ['classes_']
     
     def __init__(self, predictor=None):
         self._init_params(locals())
@@ -329,7 +322,7 @@ class MultichannelPredictor(Cloneable, Saveable):
     def _expose_predictor_interface(self, predictor):
         for method_name in utils.recognized_pred_methods:
             if hasattr(predictor, method_name):
-                prediction_method = lambda self, Xs : self.predict_with_method(Xs, method_name)
+                prediction_method = functools.partial(self.predict_with_method, method_name=method_name)
                 setattr(self, method_name, prediction_method)
                 
     def fit(self, Xs, y=None, **fit_params):
@@ -361,3 +354,9 @@ class MultichannelPredictor(Cloneable, Saveable):
                            
     def _more_tags(self):
         return {'multichannel':True}
+    
+    def get_clone(self):
+        clone = super().get_clone()
+        if hasattr(self, 'model'):
+            clone.model = utils.get_clone(self.model)
+        return clone

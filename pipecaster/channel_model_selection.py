@@ -15,7 +15,7 @@ __all__ = ['CvModelScorer', 'ChannelModelSelector', 'SelectKBestModels']
 class CvModelScorer(Cloneable):
     
     def __init__(self, cv, scorer, channel_processes=1, cv_processes=1):
-        super()._init_params(locals())
+        self._params_to_attributes(locals())
     
     def __call__(self, predictor, X, y, **fit_params):
         if X is None:
@@ -36,7 +36,7 @@ class ChannelModelSelector(Cloneable, Saveable):
     
     def __init__(self, predictors=None, internal_cv=5, scorer=explained_variance_score, 
                  score_selector=RankScoreSelector(3), channel_processes=1, cv_processes=1):
-        super()._init_params(locals())
+        self._params_to_attributes(locals())
     
     @staticmethod
     def _fit_job(predictor, X, y, fit_params):
@@ -131,5 +131,5 @@ class ChannelModelSelector(Cloneable, Saveable):
 class SelectKBestModels(ChannelModelSelector):
     
     def __init__(self, predictors, cv=3, scorer=accuracy_score, k=1, channel_processes=1, cv_processes=1):
-        super()._init_params(locals())
+        self._params_to_attributes(locals())
         super().__init__(predictors, CvModelScorer(cv, scorer, channel_processes, cv_processes), RankScoreSelector(k))

@@ -1,4 +1,5 @@
 import numpy as np
+import functools
 
 import pipecaster.utils as utils
 from pipecaster.utils import Cloneable, Saveable, FitError
@@ -15,31 +16,29 @@ def get_live_channels(channel_indices, Xs):
     return live_channels
 
 def has_live_channels(channel_indices, Xs):
-    return True if get_live_channels(channel_indices, Xs) > 0 else False
+    return True if len(get_live_channels(channel_indices, Xs)) > 0 else False
        
 class Layer(Cloneable, Saveable):
     """A list of transformer and/or predictor instances with channel mappings to con
     
     Examples
     --------
-    
+        
+        
+    Notes
+    -----
+    This class uses reflection to expose the predictor methods found in the last layer, so 
+        the method attributes in a MultichannelPipeline instance are not identical to the method attributes of the 
+        MultichannelPipeline class.     
     """
     
-    state_variables = [] 
+    state_variables = ['_all_channels', '_mapped_channels', '_estimator_type'] 
     
     def __init__(self, n_channels):
-        self.n_channels = n_channels
+        self._params_to_attributes(locals())
         self.pipe_list = []
         self._all_channels = set(range(n_channels))
         self._mapped_channels = set()
-        
-    def get_estimator_types(self):
-        pipe_list = self.model_list if hasattr(self, 'model_list') else self.pipe_list
-        estimator_types = []
-        for pipe, _, _ in pipe_list:
-            if hasattr(pipe, '_etimator_type'):
-                estimator_types.append(pipe._estimator_type)
-        return estimator_types
     
     def _get_slice_indices(self, slice_):
         if type(slice_) == int:
@@ -202,9 +201,9 @@ class Layer(Cloneable, Saveable):
                 
         return Xs_t
     
-    def fit_final(self, Xs, y=None, internal_cv=5, **fit_params):
+    def fit_last(self, Xs, y=None, internal_cv=5, **fit_params):
         """
-        Fit the final layer of a MultiChannelPipeline. Exposes available prediction and transform 
+        Fit the last layer of a MultiChannelPipeline. Exposes available prediction and transform 
         methods on the layer and returns a list of prediction methods.
         
         Parameters
@@ -229,8 +228,9 @@ class Layer(Cloneable, Saveable):
 
         """
         
-        model_list = []
+        self.model_list = []
         prediction_method_names = []
+        estimator_types = []
         for pipe, slice_, channel_indices in self.pipe_list:
             if has_live_channels(channel_indices, Xs):
                 model = utils.get_clone(pipe)
@@ -242,21 +242,31 @@ class Layer(Cloneable, Saveable):
                     else:
                         model = transform_wrappers.SingleChannel(model)
                         
-                if y is not None:
+                if y is None:
                     model.fit(input_, **fit_params)
                 else:
                     model.fit(input_, y, **fit_params)
             
                 prediction_method_names.extend(utils.get_prediction_method_names(model))
+                estimator_type = utils.detect_estimator_type(model)
+                if estimator_type is None:
+                    raise TypeError('unable to detect estimator type')
+                else:
+                    estimator_types.append(estimator_type)
+                    
                 self.model_list.append((model, slice_, channel_indices))
                 
         prediction_method_names = set(prediction_method_names)
         # expose predictor interface
         for method_name in prediction_method_names:
-            prediction_method = lambda self, Xs : self.predict_with_method(Xs, method_name)
+            prediction_method = functools.partial(self.predict_with_method, method_name=method_name)
             setattr(self, method_name, prediction_method)
-                
-        return prediction_method_names
+            
+        estimator_types = set(estimator_types)
+        if len(estimator_types) > 1:
+            raise TypeError('more than 1 predictor type found')
+        elif len(estimator_types) == 1:
+            self._estimator_type = list(estimator_types)[0]
     
     def transform(self, Xs):
         """
@@ -308,7 +318,7 @@ class Layer(Cloneable, Saveable):
         for model, slice_, channel_indices in self.model_list:
             input_ = Xs[slice_] if utils.is_multichannel(model) else Xs[slice_][0]
             if hasattr(model, method_name):
-                prediction_method = getattr(self.model, method_name)
+                prediction_method = getattr(model, method_name)
                 if utils.is_multichannel(model):
                     predictions[slice_] = prediction_method(input_)
                 else:
@@ -321,6 +331,13 @@ class Layer(Cloneable, Saveable):
         else:
             # atypical pattern: pipeline has not converged and final layer makes multiple predictions
             return predictions
+        
+    def get_clone(self):
+        clone = super().get_clone()
+        clone.pipe_list = [(utils.get_clone(p), s, i.copy()) for p, s, i in self.pipe_list]
+        if hasattr(self, 'model_list'):
+            clone.model_list = [(utils.get_clone(p), s, i.copy()) for p, s, i in self.model_list]
+        return clone
 
 class MultichannelPipeline(Cloneable, Saveable):
     """
@@ -328,6 +345,9 @@ class MultichannelPipeline(Cloneable, Saveable):
     
     Notes:
     ------
+    This class uses reflection to expose the predictor methods found in the last layer, so 
+    the method attributes in a MultichannelPipeline instance are not identical to the method attributes of the 
+    MultichannelPipeline class. 
     
     Fitting, Predicting, and Transforming
     --------------------------------------
@@ -370,11 +390,16 @@ class MultichannelPipeline(Cloneable, Saveable):
     """
     
     def __init__(self, n_channels=1, internal_cv=5):
-        super()._init_params(locals())
+        self._params_to_attributes(locals())
         self.layers = []
         
     def get_new_layer(self):
         return Layer(self.n_channels)
+    
+    def get_next_layer(self):
+        layer = self.get_new_layer()
+        self.layers.append(layer)
+        return layer
             
     def add_layer(self, *pipe_mapping):
         """
@@ -402,6 +427,12 @@ class MultichannelPipeline(Cloneable, Saveable):
         clf = pc.MultichanelPipeline(n_channels=6)
         clf.add_layer(3, LogisticRegression(), 3, KNeightborsClassifier())
         clf.add_layer(pc.MultichannelPredictor(SVC()))
+        
+        Note:
+        -----
+        There is no stateless sklearn-like clone implemented because MultiChannelPipeline arguments
+        are not sufficient to reproduce the pipeline.  Use MultiChannelPipeline.get_clone() to
+        get a stateful clone or rebuild pipeline from scratch to get a stateless clone(). 
         
         """
         if len(pipe_mapping) == 1 and type(pipe_mapping) == Layer:
@@ -433,14 +464,15 @@ class MultichannelPipeline(Cloneable, Saveable):
         return self
             
     def fit(self, Xs, y=None, **fit_params):
-        n_layers = len(self.layers)
-        for i in range(n_layers - 1):
-            try:
-                Xs = self.layers[i].fit_transform(Xs, y, **fit_params)
-            except Exception as e:
-                raise utils.FitError('Error raised during fit() call on layer {}: {}'.format(i, e))
+        for layer in self.layers[:-1]:
+            Xs = layer.fit_transform(Xs, y, **fit_params)
         # fit the last layer without transforming:
-        self.layers[-1].fit(Xs, y, **fit_params)
+        self.layers[-1].fit_last(Xs, y, **fit_params)
+        
+        # expose the prediction methods found in the last layer
+        for method_name in utils.get_prediction_method_names(self.layers[-1]):
+            prediction_method = functools.partial(self.predict_with_method, method_name=method_name)
+            setattr(self, method_name, prediction_method)
     
     def transform(self, Xs, y=None):
         for layer in self.layers:
@@ -452,35 +484,18 @@ class MultichannelPipeline(Cloneable, Saveable):
             Xs = layer.fit_transform(Xs, y, **fit_params)
         return Xs
     
-    def predict(self, Xs):
+    def predict_with_method(self, Xs, method_name):
         Xs = [np.array(X, dtype=float) for X in Xs]
-        Xs = [X.reshape(1, -1) if len(X.shape) == 1 else X for X in Xs]
-        n_layers = len(self.layers)
-        for i in range(n_layers - 1):
-            Xs = self.layers[i].transform(Xs)
-        return self.layers[-1].predict(Xs)
-    
-    def predict_proba(self, Xs):
-        Xs = [np.array(X, dtype=float) for X in Xs]
-        Xs = [X.reshape(1, -1) if len(X.shape) == 1 else X for X in Xs]
-        n_layers = len(self.layers)
-        for i in range(n_layers - 1):
-            Xs = self.layers[i].transform(Xs)
-        return self.layers[-1].predict_proba(Xs)
-    
-    def decision_function(self, Xs):
-        Xs = [np.array(X, dtype=float) for X in Xs]
-        Xs = [X.reshape(1, -1) if len(X.shape) == 1 else X for X in Xs]
-        n_layers = len(self.layers)
-        for i in range(n_layers - 1):
-            Xs = self.layers[i].transform(Xs)
-        return self.layers[-1].decision_function(Xs)
+        for layer in self.layers[:-1]:
+            Xs = layer.transform(Xs)
+        prediction_method = getattr(self.layers[-1], method_name)
+        return prediction_method(Xs)
     
     def get_pipe(self, input_index, layer_index):
         return self.layers[layer_index].get_pipe_from_input(input_index)
     
     def get_clone(self):
-        new_pipline = Pipeline(self.n_channels)
-        new_pipline.layers = [layer.get_clone() for layer in self.layers]
-        return new_pipline
+        clone = super().get_clone()
+        clone.layers = [layer.get_clone() for layer in self.layers]
+        return clone
     

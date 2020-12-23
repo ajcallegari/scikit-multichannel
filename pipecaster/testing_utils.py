@@ -2,7 +2,7 @@ import random
 import numpy as np
 from sklearn.datasets import make_classification, make_regression
 
-from pipecaster.utils import Clonable
+from pipecaster.utils import Cloneable
 
 def make_multi_input_classification(n_informative_Xs=3, 
                                     n_weak_Xs=0,
@@ -126,12 +126,12 @@ def make_multi_input_regression(n_informative_Xs=3,
     
     return list(Xs), y, list(X_types)
 
-class DummyClassifier(Clonable):
+class DummyClassifier(Cloneable):
     
     def __init__(self, futile_cycles_fit=1000000, futile_cycles_pred=10):
         self.futile_cycles_fit = futile_cycles_fit
         self.futile_cycles_pred = futile_cycles_pred
-        self.estimator_type = 'classifier'
+        self._estimator_type = 'classifier'
         
     def fit(self, X, y=None, **fit_params):
         
@@ -139,17 +139,21 @@ class DummyClassifier(Clonable):
             self.classes_, y_enc = np.unique(y, return_inverse=True)
         else:
             y_enc = y
-        
         a = 0
         for i in range(self.futile_cycles_fit):
             a += 1 
+        return self
             
     def predict(self, X):
-        
         a = 0
         for i in range(self.futile_cycles_pred):
             a += 1 
-            
         return np.random.choice(self.classes_ , X.shape[0])
+    
+    def predict_proba(self, X):
+        a = 0
+        for i in range(self.futile_cycles_pred):
+            a += 1 
+        return np.random.rand(X.shape[0], len(self.classes_))
                             
                             

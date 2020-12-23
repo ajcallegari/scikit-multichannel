@@ -64,7 +64,7 @@ def detect_estimator_type(pipe):
     elif is_regressor(pipe):
         _estimator_type = 'regressor'
     else:
-        _estimator_type = 'unknown'
+        _estimator_type = None
     return _estimator_type
 
 def enforce_fit(pipe):
@@ -202,10 +202,14 @@ class Cloneable:
     @property
     def param_names(self):
         return get_param_names(self.__init__)
-                
-    def _init_params(self, locals_):
+    
+    def _params_to_attributes(self, locals_):
         for param_name in self.param_names:
             setattr(self, param_name, locals_[param_name])
+        
+    def _inherit_state_variables(self, super_):
+        if hasattr(self, 'state_variables') and hasattr(super_, 'state_variables'):
+            self.state_variables = super_.state_variables + self.state_variables 
     
     def __str__(self, verbose=True):
         return get_descriptor(self.__class__.__name__, self.get_params(), verbose)

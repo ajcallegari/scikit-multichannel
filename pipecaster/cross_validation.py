@@ -12,16 +12,18 @@ __all__ = ['cross_val_score', 'cross_val_predict']
 
 #### SINGLE MATRIX INPUTS ####
 
-def fit_and_predict(predictor, Xs, y, train_indices, test_indices, predict_method, fit_params):
+def fit_and_predict(predictor, Xs, y, train_indices, test_indices, predict_method_name, fit_params):
         predictor = utils.get_clone(predictor)
         fit_params = {} if fit_params is None else fit_params
+        
         if utils.is_multichannel(predictor):
             X_trains = [X[train_indices] if X is not None else None for X in Xs]
             predictor.fit(X_trains, y[train_indices], **fit_params)
         else:
             predictor.fit(Xs[train_indices], y[train_indices], **fit_params)
-        if hasattr(predictor, predict_method):
-            predict_method = getattr(predictor, predict_method)
+            
+        if hasattr(predictor, predict_method_name):
+            predict_method = getattr(predictor, predict_method_name)
             if utils.is_multichannel(predictor):
                 X_tests = [X[test_indices] if X is not None else None for X in Xs]
                 predictions = predict_method(X_tests)
