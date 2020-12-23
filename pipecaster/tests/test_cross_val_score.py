@@ -3,6 +3,7 @@ import numpy as np
 import unittest
 import warnings
 import timeit
+import multiprocessing
 
 from sklearn.datasets import make_classification, make_regression
 from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
@@ -11,11 +12,12 @@ from sklearn.model_selection import KFold
 
 import sklearn.model_selection as sk_model_selection
 import pipecaster.cross_validation as pc_cross_validation
-from pipecaster.pipeline import Pipeline
+from pipecaster.multichannel_pipeline import MultichannelPipeline
 import pipecaster.parallel as parallel
+from pipecaster.testing_utils import DummyClassifier
 
 test_seed = None
-n_cpus = parallel.count_local_cpus()
+n_cpus = multiprocessing.cpu_count()
     
 class TestCrossValScore(unittest.TestCase):
     
@@ -46,18 +48,22 @@ class TestCrossValScore(unittest.TestCase):
         self.assertTrue(np.array_equal(self.cls_scores, pc_scores), 'classifier scores from pipecaster.cross_validation.cross_val_score did not match sklearn control (single input predictor)')
         
     def test_multi_input_classification(self):
-        mclf = Pipeline(n_inputs=1)
+        mclf = MultichannelPipeline(n_channels=1)
         mclf.get_next_layer()[:] = self.clf   
         pc_scores = pc_cross_validation.cross_val_score(mclf, [self.X_cls], self.y_cls, scorer=roc_auc_score,
                                                        cv=self.cv, n_processes=1) 
         self.assertTrue(np.array_equal(self.cls_scores, pc_scores), 'classifier scores from pipecaster.cross_validation.cross_val_score did not match sklearn control (multi input predictor)')
         
     def test_multi_input_classification_parallel(self):
-        mclf = Pipeline(n_inputs=1)
-        mclf.get_next_layer()[:] = self.clf   
-        pc_scores = pc_cross_validation.cross_val_score(mclf, [self.X_cls], self.y_cls, scorer=roc_auc_score,
-                                                       cv=self.cv, n_processes=n_cpus) 
-        self.assertTrue(np.array_equal(self.cls_scores, pc_scores), 'classifier scores from pipecaster.cross_validation.cross_val_score did not match sklearn control (multi input predictor)')
+        if n_cpus > 1:
+            warnings.filterwarnings("ignore")
+            parallel.start_if_needed()
+            mclf = MultichannelPipeline(n_channels=1)
+            mclf.get_next_layer()[:] = self.clf   
+            pc_scores = pc_cross_validation.cross_val_score(mclf, [self.X_cls], self.y_cls, scorer=roc_auc_score,
+                                                           cv=self.cv, n_processes=n_cpus) 
+            self.assertTrue(np.array_equal(self.cls_scores, pc_scores), 'classifier scores from pipecaster.cross_validation.cross_val_score did not match sklearn control (multi input predictor)')
+            warnings.resetwarnings()
                                                                     
     def test_single_input_regression(self):
         pc_scores = pc_cross_validation.cross_val_score(self.rgr, self.X_rgr, self.y_rgr, scorer=explained_variance_score,
@@ -65,28 +71,36 @@ class TestCrossValScore(unittest.TestCase):
         self.assertTrue(np.array_equal(self.rgr_scores, pc_scores), 'regressor scores from pipecaster.cross_validation.cross_val_score did not match sklearn control (single input predictor)')
 
     def test_multi_input_regression(self):
-        mrgr = Pipeline(n_inputs=1)
+        mrgr = MultichannelPipeline(n_channels=1)
         mrgr.get_next_layer()[:] = self.rgr  
         pc_scores = pc_cross_validation.cross_val_score(mrgr, [self.X_rgr], self.y_rgr, scorer=explained_variance_score, 
                                                        cv=self.cv, n_processes=1) 
         self.assertTrue(np.array_equal(self.rgr_scores, pc_scores), 'regressor scores from pipecaster.cross_validation.cross_val_score did not match sklearn control (multi input predictor)')
         
     def test_multi_input_regression_parallel(self):
-        mrgr = Pipeline(n_inputs=1)
-        mrgr.get_next_layer()[:] = self.rgr  
-        pc_scores = pc_cross_validation.cross_val_score(mrgr, [self.X_rgr], self.y_rgr, scorer=explained_variance_score,
-                                                       cv=self.cv, n_processes=n_cpus) 
-        self.assertTrue(np.array_equal(self.rgr_scores, pc_scores), 'regressor scores from pipecaster.cross_validation.cross_val_score did not match sklearn control (multi input predictor)')
+        if n_cpus > 1:
+            warnings.filterwarnings("ignore")
+            parallel.start_if_needed(n_cpus=n_cpus)        
+            mrgr = MultichannelPipeline(n_channels=1)
+            mrgr.get_next_layer()[:] = self.rgr  
+            pc_scores = pc_cross_validation.cross_val_score(mrgr, [self.X_rgr], self.y_rgr, scorer=explained_variance_score,
+                                                           cv=self.cv, n_processes=n_cpus) 
+            self.assertTrue(np.array_equal(self.rgr_scores, pc_scores), 'regressor scores from pipecaster.cross_validation.cross_val_score did not match sklearn control (multi input predictor)')
+            warnings.resetwarnings()
        
-    def test_multiprocessing_speedup(self):
-        X, y = self.X_cls, self.y_cls
-        
-        mclf = Pipeline(n_inputs=1)
-        mclf.get_next_layer()[:] = self.clf   
+    def test_multiprocessing_speedup(self, verbose=0):
+ 
 
         if n_cpus > 1:
-            # shut off warnings because ray and redis generate massive numbers
             warnings.filterwarnings("ignore")
+            parallel.start_if_needed(n_cpus=n_cpus)
+            X, y = self.X_cls, self.y_cls = make_classification(n_classes=2, n_samples=500, n_features=40, 
+                                             n_informative=20, random_state=test_seed)
+            mclf = MultichannelPipeline(n_channels=1)
+            mclf.get_next_layer()[:] = DummyClassifier(futile_cycles_fit=2000000, futile_cycles_pred=10)
+            
+            # shut off warnings because ray and redis generate massive numbers
+            
             
             SETUP_CODE = ''' 
 import pipecaster.cross_validation'''
@@ -104,6 +118,10 @@ pipecaster.cross_validation.cross_val_score(mclf, [X], y, cv = 5, n_processes = 
                                   number = 5) 
             
             warnings.resetwarnings()
+            
+            if verbose > 0:
+                print('serial run mean time = {} s'.format(t_serial))
+                print('parallel run mean time = {} s'.format(t_parallel))
     
             if t_serial <= t_parallel:
                 warnings.warn('mulitple cpus detected, but parallel cross_val_score not faster than serial, possible problem with multiprocessing')

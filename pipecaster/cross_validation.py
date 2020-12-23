@@ -146,7 +146,7 @@ def cross_val_predict(predictor, Xs, y=None, groups=None, predict_method='predic
 
         return predictions[test_indices]
         
-def cross_val_score(predictor, Xs, y=None, groups=None, scorer=None, predict_method='predict',
+def cross_val_score(predictor, Xs, y=None, groups=None, scorer=explained_variance_score, predict_method='predict',
                     cv=3, n_processes=1, split_seed=None, **fit_params):
     """
     Multichannel channel version of scikit-learn's cross_val_score function.  
