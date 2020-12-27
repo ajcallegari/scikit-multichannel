@@ -75,7 +75,7 @@ class SingleChannel(Cloneable, Saveable):
     state_variables = ['classes_']
     
     def __init__(self, predictor=None, transform_method_name=None):
-        self._params_to_attributes(locals())
+        self._params_to_attributes(SingleChannel.__init__, locals())
         utils.enforce_fit(predictor)
         if transform_method_name is None:
             self.transform_method_name = get_transform_method_name(predictor)
@@ -119,7 +119,7 @@ class SingleChannel(Cloneable, Saveable):
         if hasattr(self, 'model'):
             transform_method = getattr(self.model, self.transform_method_name)
             X_t = transform_method(X)
-            X_t = X_t.reshape(-1, 1) if self._estimator_type == 'regressor' and len(X_t.shape) == 1 else X_t
+            X_t = X_t.reshape(-1, 1) if (X_t is not None and len(X_t.shape) == 1 ) else X_t
             return X_t
         else:
             raise utils.FitError('transform called before model fitting')
@@ -138,6 +138,7 @@ class SingleChannel(Cloneable, Saveable):
                 self.fit(X, y, **fit_params)
             transform_method = getattr(self.model, self.transform_method_name)
             X_t = transform_method(X)
+            Xs_t = [X.reshape(-1, 1) if len(X.shape) == 1 else X for X in Xs_t]
             
         return X_t
 
@@ -145,7 +146,6 @@ class SingleChannel(Cloneable, Saveable):
         return {'multichannel': False}
     
     def get_clone(self):
-        ## finish implementation
         clone = super().get_clone()
         if hasattr(self, 'model'):
             clone.model = utils.get_clone(self.model)
@@ -184,7 +184,7 @@ class SingleChannelCV(SingleChannel):
     state_variables = ['score_']
     
     def __init__(self, predictor, transform_method_name=None, internal_cv=5, split_seed=None, cv_processes=1, scorer=None):
-        self._params_to_attributes(locals())
+        self._params_to_attributes(SingleChannelCV.__init__, locals())
         self._inherit_state_variables(super())
         super().__init__(predictor, transform_method_name)
                 
@@ -201,32 +201,20 @@ class SingleChannelCV(SingleChannel):
                                      split_seed=self.split_seed, fit_params=fit_params)
             
             if self.scorer is not None:
-                self.score_ = self.scorer(y, X_t)
-            X_t = X_t.reshape(-1, 1) if self._estimator_type == 'regressor' and len(X_t.shape) == 1 else X_t
+                if self.transform_method_name in ['predict_proba', 'decision_function', 'predict_log_proba']:
+                    self.score_ = self.scorer(y, utils.classify_samples(X_t))
+                else:
+                    self.score_ = self.scorer(y, X_t)
+                    
+        X_t = X_t.reshape(-1, 1) if (X_t is not None and len(X_t.shape) == 1) else X_t
         
         return X_t
-
-    def get_params(self, deep=False):
-        return {p:getattr(self, p) for p in CvPredictor.params}
-    
-    def set_params(self, params):
-        for key, value in params.items():
-            if key in CvPredictor.params:
-                setattr(self, key, value)
-            else:
-                raise AttributeError('invalid parameter name')
 
     def _more_tags(self):
         return {'multichannel': False}
     
     def get_clone(self):
-        ## finish implementation
-        clone = CvPredictor(utils.get_clone(self.predictor), transform_method=self.transform_method,
-                           internal_cv=self.internal_cv, scorer=self.scorer, cv_processes=self.cv_processes)
-        for var in CvPredictor.state_variables:
-            if hasattr(self, var):
-                setattr(clone, var, getattr(self, var))
-        return clone
+        return super().get_clone()
     
 class Multichannel(Cloneable, Saveable):
     """
@@ -240,9 +228,9 @@ class Multichannel(Cloneable, Saveable):
     state_variables = ['classes_']
     
     def __init__(self, mutlichannel_predictor=None, transform_method_name=None):
-        self._params_to_attributes(locals())
-        utils.enforce_fit(predictor)
-        utils.enforce_predictor(predictor)        
+        self._params_to_attributes(Multichannel.__init__, locals())
+        utils.enforce_fit(mutlichannel_predictor)
+        utils.enforce_predict(mutlichannel_predictor)        
         self._estimator_type = utils.detect_estimator_type(mutlichannel_predictor)
         if self._estimator_type is None:
             raise AttributeError('could not detect predictor type')
@@ -279,7 +267,9 @@ class Multichannel(Cloneable, Saveable):
         if hasattr(self, 'model') == False:
             raise FitError('transform attempted before call to fit()')
         transform_method = getattr(self.model, self.transform_method_name)
-        return transform_method(Xs)
+        Xs_t = transform_method(Xs)
+        Xs_t = [X.reshape(-1, 1) if (X is not None and len(X.shape) == 1) else X for X in Xs_t]
+        return Xs_t
     
     def fit_transform(self, Xs, y=None, **fit_params):
         self.fit(Xs, y=None, **fit_params)
@@ -295,12 +285,11 @@ class MultichannelCV(Multichannel):
     the method attributes in a MultichannelCV instance are not identical to the method attributes of the 
     MultichannelCV class. 
     """
-    
     state_variables = ['score_']
     
     def __init__(self, mutlichannel_predictor=None, internal_cv=5, split_seed=None, cv_processes=1, scorer=None):
         super().__init__(mutlichannel_predictor)
-        self._params_to_attributes(locals())
+        self._params_to_attributes(MultichannelCV.__init__, locals())
         self._inherit_state_variables(super())
         
     def fit_transform(self, Xs, y=None, groups=None, **fit_params):
@@ -315,9 +304,16 @@ class MultichannelCV(Multichannel):
                                      predict_method=self.transform_method_name, 
                                      cv=self.internal_cv, combine_splits=True, n_processes=self.cv_processes, 
                                      split_seed=self.split_seed, fit_params=fit_params)
-            
-            if self.scorer is not None:
-                self.score_ = self.scorer(y, Xs_t[0])
-            X_t[0] = Xs_t[0].reshape(-1, 1) if self._estimator_type == 'regressor' and len(Xs_t[0].shape) == 1 else Xs_t[0]
+            scores = []
+            for X_t in Xs_t:
+                if X_t is not None and self.scorer is not None:
+                    scores.append(self.scorer(y, X_t))
+                else:
+                    scores.append(X_t)
+                                  
+            if len(scores) > 0:
+                self.scores_ = np.nanmean(scores)
+                                  
+        Xs_t = [X.reshape(-1, 1) if (X is not None and len(X.shape) == 1) else X for X in Xs_t]
         
         return Xs_t

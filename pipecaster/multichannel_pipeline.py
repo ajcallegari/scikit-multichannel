@@ -5,7 +5,7 @@ import pipecaster.utils as utils
 from pipecaster.utils import Cloneable, Saveable, FitError
 import pipecaster.transform_wrappers as transform_wrappers
 
-__all__ = ['Layer', 'MultichannelPipeline']
+__all__ = ['Layer', 'MultichannelPipeline', 'ChannelConcatenator']
 
         
 def get_live_channels(channel_indices, Xs):
@@ -35,7 +35,7 @@ class Layer(Cloneable, Saveable):
     state_variables = ['_all_channels', '_mapped_channels', '_estimator_type'] 
     
     def __init__(self, n_channels):
-        self._params_to_attributes(locals())
+        self._params_to_attributes(Layer.__init__, locals())
         self.pipe_list = []
         self._all_channels = set(range(n_channels))
         self._mapped_channels = set()
@@ -53,8 +53,10 @@ class Layer(Cloneable, Saveable):
         if is_listlike:
             for pipe in val:
                 utils.check_pipe_interface(pipe)
+                self.expose_predictor_type(pipe)
         else:
             utils.check_pipe_interface(val)
+            self.expose_predictor_type(val)
         
         if type(slice_) == slice:
             if slice_.step not in [None, 1]:
@@ -91,6 +93,15 @@ class Layer(Cloneable, Saveable):
         self._mapped_channels = self._mapped_channels.union(channel_indices)
         
         return self
+    
+    def expose_predictor_type(self, pipe):
+        if hasattr(pipe, '_estimator_type') == True:
+            predictor_type = pipe._estimator_type
+            if hasattr(self, '_estimator_type') == False:
+                self._estimator_type = predictor_type
+            else:
+                if self._estimator_type != predictor_type:
+                    raise ValueError('All predictors in a layer must have the same type (e.g. classifier or regressor)')
         
     def get_pipe_from_input(self, input_index):
         for pipe, slice_ in layer.pipe_list:
@@ -134,7 +145,7 @@ class Layer(Cloneable, Saveable):
         """
         
         Xs_t = Xs.copy() 
-        model_list = []
+        self.model_list = []
         for i, (pipe, slice_, channel_indices) in enumerate(self.pipe_list):
             if has_live_channels(channel_indices, Xs):
                 input_ = Xs[slice_] if utils.is_multichannel(pipe) else Xs[slice_][0]                
@@ -198,7 +209,7 @@ class Layer(Cloneable, Saveable):
                                            .format(model.__class__.__name__, e))
                     
                 self.model_list.append((model, slice_, channel_indices))
-                
+        
         return Xs_t
     
     def fit_last(self, Xs, y=None, internal_cv=5, **fit_params):
@@ -238,7 +249,7 @@ class Layer(Cloneable, Saveable):
                 
                 if hasattr(model, 'transform') == False:
                     if utils.is_multichannel(model):
-                        model = transform_wrappers.MultiChannel(model)
+                        model = transform_wrappers.Multichannel(model)
                     else:
                         model = transform_wrappers.SingleChannel(model)
                         
@@ -249,9 +260,7 @@ class Layer(Cloneable, Saveable):
             
                 prediction_method_names.extend(utils.get_prediction_method_names(model))
                 estimator_type = utils.detect_estimator_type(model)
-                if estimator_type is None:
-                    raise TypeError('unable to detect estimator type')
-                else:
+                if estimator_type is not None:
                     estimator_types.append(estimator_type)
                     
                 self.model_list.append((model, slice_, channel_indices))
@@ -281,12 +290,12 @@ class Layer(Cloneable, Saveable):
         list of [ndarray.shape(n_sample, n_feature) of None]
             contains values received in Xs argument unless transformed by a pipe in this layer.
         """
-        if hasattr(self, model_list) == False:
+        if hasattr(self, 'model_list') == False:
             raise utils.FitError('tranform attempted before fitting')
         Xs_t = Xs.copy()
         for model, slice_, channel_indices in self.model_list:
             input_ = Xs[slice_] if utils.is_multichannel(model) else Xs[slice_][0]
-            if utils.is_multichannel(pipe):
+            if utils.is_multichannel(model):
                 Xs_t[slice_] = model.transform(input_)
             else:
                 Xs_t[channel_indices[0]] = model.transform(input_)           
@@ -343,54 +352,60 @@ class MultichannelPipeline(Cloneable, Saveable):
     """
     Machine learning or data processing pipeline that accepts multiple inputs and outputs transormed data or predictions.
     
-    Notes:
-    ------
-    This class uses reflection to expose the predictor methods found in the last layer, so 
-    the method attributes in a MultichannelPipeline instance are not identical to the method attributes of the 
-    MultichannelPipeline class. 
-    
     Fitting, Predicting, and Transforming
     --------------------------------------
     
-        Fitting:
+        Fitting: pipeline.fit(Xs_train, y_train)
+        
         Call pipeline.fit(Xs_train, y_train) to fit the transformers and predictors in the pipeline to 
         training data.  This method invokes layer.fit_transform() on each layer and then layer.final_fit() 
-        on the last layer, and exposes all prediction methods found in the final layer (i.e. predict(), 
-        predict_proba(), or decision_function()) so that they can be called directly on the pipeline itself.
+        on the last layer, and exposes all prediction methods found in the final layer (i.e. predict, 
+        predict_proba, decision_function, or predict_log_proba) so that they can be called directly on the pipeline itself.
             The layer.fit_tranform() method calls fit_transform() - or falls back on fit()/transform() - on each
-                transformer in the layer.  The method also automatically wrap predictors in tranform_wrappers to add a 
+                transformer in the layer.  The method also automatically wraps predictors in tranform_wrappers to add a 
                 fit_transform() method and to provide internal cv training for meta-prediction (default is 
                 5-fold KFold for regressor or StratifiedKFold for classifiers; custom cv available by specifying 
                 internal_cv in fit_params).
             The layer.final_fit() method fits the final transformer or predictor.  Predictors are automatically wrapped
                 to give them transform methods.  A list of all prediction methods identified are returned to 
                 MultichannelPipeline.
+        To override or inactivate default 5-fold internal cv training, pass an 'internal_cv' argument to fit() 
+            or fit_transform():
+            pipeline.fit(Xs, y, internal_cv=my_cv)
+            pipeline.fit_transform(Xs, y, internal_cv=my_cv)
+            If my_cv == 1 then internal cv training is inactivated.
         
-        Predicting:
-        Make inferences by calling pipeline.predict().  This call results in NameError if layer.fit() did 
-            not detect a predict() method  in the final layer.  Otherwise it invokes transform() on all 
-            layers except the final layer and then calls predict() on the final layer.  Returns either a 
+        Predicting: pipeline.predict(), pipeline.predict_proba(), 
+                    pipeline.predict_log_proba(), pipeline.decision_function()
+        
+        Calls to prediction methods results in NameError if layer.fit_last() did not detect a the method 
+            in the final layer.  Otherwise it invokes transform() on all 
+            layers except the final layer and calls the prediction method on the final layer.  Returns either a 
             single prediction array.shape(n_samples,) in the typical use case or a list of arrays if more 
             than one prediction() method is present in the final layer's live channels.
-        Make inferences by calling pipeline.predict_proba().  This call results in NameError if layer.fit() did 
-            not detect a predict_proba() method  in the final layer.  Otherwise it invokes transform() on all 
-            layers except the final layer and then calls predict_proba() on the final layer.  Returns either a 
-            single prediction array.shape(n_samples, n_classes) in the typical use case or a list of arrays if more 
-            than one predict_proba() method is present in the final layer's live channels.
-        Make inferences by calling pipeline.decision_function().  This call results in NameError if layer.fit() did 
-            not detect a decision_function() method  in the final layer.  Otherwise it invokes transform() on all 
-            layers except the final layer and then calls decision_function() on the final layer.  Returns either a 
-            single prediction array.shape(n_samples, n_classes) in the typical use case or a list of arrays if more 
-            than one decision_function() method is present in the final layer's live channels.
         
         Transforming:
         Transform data by calling pipeline.transform().  This call invokes layer.transform() on each layer, 
             including the last layer.
-    
+            
+        CvTransforming:
+        Calling fit_transform() on a pipeline results in outputs where the inferences are made on training
+            samples.  In specific cases were the outputs of a pipeline are to be used in meta-prediction
+            external to the pipeline, this can be avoided by calling cv_fit_transform() on 
+            the pipeline instead of fit_transform().
+            
+    Notes:
+    ------
+    This class uses reflection to expose the predictor methods found in the last layer, so 
+        the method attributes in a MultichannelPipeline instance are not identical to the method 
+        attributes of the MultichannelPipeline class.
+    Internally (i.e. on calls to layer.fit_tranform()), fit_transform() is a signal that predictors 
+        need to be wrapped with transform_wrappers with cross validation training.  However, calling
+        fit_transform on a MultichannelPipeline will not wrap
     """
     
     def __init__(self, n_channels=1, internal_cv=5):
-        self._params_to_attributes(locals())
+        self._params_to_attributes(MultichannelPipeline.__init__, locals())
         self.layers = []
         
     def get_new_layer(self):
@@ -407,9 +422,9 @@ class MultichannelPipeline(Cloneable, Saveable):
         
         Parameters
         ----------
-        pipe_mapping: layer, single pipe, iterable, or multiple arguments in format int, pipe, int, pipe etc ...
+        pipe_mapping: layer, single pipe, or multiple arguments in format int, pipe, int, pipe etc ...
             If pipe_mapping is a layer, add the layer and return.
-            If pipe_mapping is a single argument, the pipe_mapping argument will be atomatically repeated to 
+            If pipe_mapping is a single argument, the argument will be atomatically repeated to 
                 fill all channels if it is a single channel pipe, or set to receive all channels as inputs 
                 into a single pipe if it is a multichannel pipe.
             If pipe_mapping contains multiple arguments, it must be a list of alternating integers / pipes.  The integer
@@ -435,6 +450,7 @@ class MultichannelPipeline(Cloneable, Saveable):
         get a stateful clone or rebuild pipeline from scratch to get a stateless clone(). 
         
         """
+        
         if len(pipe_mapping) == 1 and type(pipe_mapping) == Layer:
             if pipe_mapping.n_channels <= self.n_channels:
                 self.layers.append(pipe_mapping[0])
@@ -464,6 +480,13 @@ class MultichannelPipeline(Cloneable, Saveable):
         return self
             
     def fit(self, Xs, y=None, **fit_params):
+        if hasattr(self.layers[-1], '_estimator_type'):
+            self._estimator_type = self.layers[-1]._estimator_type
+            # encode labels as integers
+            if self._estimator_type == 'classifier':
+                if y is not None:
+                    self.classes_, y = np.unique(y, return_inverse=True)
+            
         for layer in self.layers[:-1]:
             Xs = layer.fit_transform(Xs, y, **fit_params)
         # fit the last layer without transforming:
@@ -480,16 +503,27 @@ class MultichannelPipeline(Cloneable, Saveable):
         return Xs
     
     def fit_transform(self, Xs, y, **fit_params):
-        for layer in self.layers:
+        for layer in self.layers[:-1]:
             Xs = layer.fit_transform(Xs, y, **fit_params)
-        return Xs
+        self.layers[-1].fit_last(Xs, y, **fit_params)
+        return self.layers[-1].transform(Xs)
+    
+    def cv_fit_transform(self, Xs, y, internal_cv=5, **fit_params):
+        fit_params['internal_cv'] = internal_cv
+        for layer in self.layers[:-1]:
+            Xs = layer.fit_transform(Xs, y, **fit_params)
+        return self.layers[-1].fit_transform(Xs)
     
     def predict_with_method(self, Xs, method_name):
         Xs = [np.array(X, dtype=float) for X in Xs]
         for layer in self.layers[:-1]:
             Xs = layer.transform(Xs)
         prediction_method = getattr(self.layers[-1], method_name)
-        return prediction_method(Xs)
+        predictions = prediction_method(Xs)
+        # decode class names
+        if utils.is_classifier(self) and method_name == 'predict':
+            prediction = self.classes_[predictions]
+        return predictions
     
     def get_pipe(self, input_index, layer_index):
         return self.layers[layer_index].get_pipe_from_input(input_index)
@@ -498,4 +532,19 @@ class MultichannelPipeline(Cloneable, Saveable):
         clone = super().get_clone()
         clone.layers = [layer.get_clone() for layer in self.layers]
         return clone
+    
+class ChannelConcatenator(Cloneable, Saveable):
+    
+    def fit(self, Xs, y=None, **fit_params):
+        pass
+    
+    def transform(self, Xs):
+        live_Xs = [X for X in Xs if X is not None]
+        Xs_t = [None for X in Xs]
+        Xs_t[0] = np.concatenate(live_Xs, axis=1) if len(live_Xs) > 0 else None
+        return Xs_t
+    
+    def fit_transform(self, Xs, y=None, **fit_params):
+        self.fit(Xs, y, **fit_params)
+        return self.transform(Xs)
     

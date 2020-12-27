@@ -1,16 +1,17 @@
 import numpy as np
 
+from sklearn.metrics import explained_variance_score
 from sklearn.feature_selection import f_classif
 
 from pipecaster.cross_validation import cross_val_score
+from pipecaster.utils import Cloneable, Saveable
 
 __all__ = ['AggregateFeatureScorer', 'CvPerformanceScorer']
 
-class AggregateFeatureScorer:
+class AggregateFeatureScorer(Cloneable, Saveable):
     
     def __init__(self, feature_scorer=f_classif, aggregator=np.sum):
-        self.feature_scorer = feature_scorer
-        self.aggregator = aggregator
+        self._params_to_attributes(AggregateFeatureScorer.__init__, locals())
         
     def __call__(self, X, y):
         if X is None:
@@ -23,24 +24,16 @@ class AggregateFeatureScorer:
                 scores = np.array(score_func_ret).astype(float)
             return self.aggregator(scores)
     
-    def get_clone(self):
-        return AggregateFeatureScorer(self.feature_scorer, self.aggregator)
+class CvPerformanceScorer(Cloneable, Saveable):
     
-class CvPerformanceScorer:
-    
-    def __init__(self, predictor, cv, scorer, channel_jobs=1, cv_jobs=1):
-        self.predictor = predictor
-        self.cv = cv
-        self.scorer = scorer
-        self.channel_jobs = channel_jobs
-        self.cv_jobs = cv_jobs
+    def __init__(self, predictor_probe=None, cv=5, scorer=explained_variance_score, cv_processes=1):
+        self._params_to_attributes(CvPerformanceScorer.__init__, locals())
     
     def __call__(self, X, y, **fit_params):
         if X is None:
             return None
         else:
-            scores = cross_val_score(self.predictor, X, y, scorer=self.scorer, cv=self.cv, n_jobs=self.cv_jobs, **fit_params)
+            scores = cross_val_score(self.predictor_probe, X, y, scorer=self.scorer, cv=self.cv, 
+                                     n_processes=self.cv_processes, **fit_params)
             return np.mean(scores)
     
-    def get_clone(self):
-        return PerformanceScorer(self.cv, self.scorer, self.channel_jobs, self.cv_jobs)

@@ -1,3 +1,4 @@
+import numpy as np
 from inspect import signature, getfullargspec
 import sklearn.base
 import joblib
@@ -203,8 +204,8 @@ class Cloneable:
     def param_names(self):
         return get_param_names(self.__init__)
     
-    def _params_to_attributes(self, locals_):
-        for param_name in self.param_names:
+    def _params_to_attributes(self, callable_, locals_):
+        for param_name in get_param_names(callable_):
             setattr(self, param_name, locals_[param_name])
         
     def _inherit_state_variables(self, super_):
@@ -245,6 +246,24 @@ class Saveable:
     
 def encode_labels(y):
     if isinstance(y, np.ndarray) and len(y.shape) > 1 and y.shape[1] > 1:
-        raise NotImplementedError('Multilabel and multi-output meta-classification not supported')
+        raise NotImplementedError('Multilabel and multi-output meta-classification not supported.')
     classes_, y = np.unique(y, return_inverse=True)
     return classes_, y_encoded
+
+def classify_sample(class_probs, class_names=None, operating_characteristic=None):
+    if operating_characteristic is None:
+        class_number = np.argmax(class_probs)
+        if class_names is None:
+            return class_number
+        else:
+            return class_names[class_number]
+    else:
+        if len(class_probs) > 2:
+            raise NotImplmentedError('Operating characteristic not implemented for more than 2 classes.')
+        elif len(class_probs) == 2:
+            return 1 if class_probss[1] >= operating_characteristic else 0
+
+def classify_samples(sample_probs, class_names=None, operating_characteristic=None):
+    classes = [classify_sample(ps, class_names, operating_characteristic) for ps in sample_probs]
+    return np.array(classes)
+    

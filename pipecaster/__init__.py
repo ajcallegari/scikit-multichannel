@@ -10,4 +10,5 @@ from pipecaster.transforming_predictors import *
 
 import pipecaster.transform_wrappers as transform_wrappers
 from pipecaster.multichannel_pipeline import *
-from pipecaster.model_stacking import *
+from pipecaster.ensemble_learning import *
+from pipecaster.channel_selection import *

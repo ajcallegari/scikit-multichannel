@@ -11,7 +11,7 @@ import pipecaster.transform_wrappers as transform_wrappers
 from pipecaster.score_selection import RankScoreSelector
 
 __all__ = ['SoftVotingClassifier', 'HardVotingClassifier', 'AggregatingRegressor', 
-           'SelectivePredictorStack', 'ChannelConcatenator', 'MultichannelPredictor']
+           'SelectivePredictorStack', 'ConcatenatingPredictor']
 
 class SoftVotingClassifier(Cloneable, Saveable):
     """
@@ -122,7 +122,7 @@ class AggregatingRegressor(Cloneable, Saveable):
     state_variables = []
     
     def __init__(self, aggregator=np.mean):
-        self._init_params(locals())
+        self._params_to_attributes(AggregatingRegressor.__init__, locals())
         self._estimator_type = 'regressor'
     
     def fit(self, X=None, y=None, **fit_params):
@@ -175,13 +175,11 @@ class SelectivePredictorStack(Cloneable, Saveable):
     def __init__(self, base_predictors=None, meta_predictor=None, internal_cv=5, 
                  scorer=explained_variance_score, score_selector=RankScoreSelector(k=3), 
                  base_processes=1, cv_processses=1):
-        self._init_params(locals())
+        self._params_to_attributes(SelectivePredictorStack.__init__, locals())
                              
         estimator_types = [p._estimator_type for p in base_predictors]
         if len(set(estimator_types)) != 1:
             raise TypeError('base_predictors must be of uniform type (e.g. all classifiers or all regressors)')
-        if meta_predictor._estimator_type != estimator_types[0]:
-            raise TypeError('meta_predictor must be same type as base_predictors (e.g. classifier or regressor)')
         self._estimator_type = estimator_types[0]
         self._expose_predictor_interface(meta_predictor)
             
@@ -273,25 +271,10 @@ class SelectivePredictorStack(Cloneable, Saveable):
             clone.base_models = [utils.get_clone(m) for m in self.base_models]
         if hasattr(self, 'meta_model'):
             clone.meta_model = utils.get_clone(self.meta_model)
-    
-class ChannelConcatenator(Cloneable, Saveable):
-    
-    def fit(self, Xs, y=None, **fit_params):
-        pass
-    
-    def transform(self, Xs):
-        live_Xs = [X for X in Xs if X is not None]
-        Xs_t = [None for X in Xs]
-        Xs_t[0] = np.concatenate(live_Xs, axis=1) if len(live_Xs) > 0 else None
-        return Xs_t
-    
-    def fit_transform(self, Xs, y=None, **fit_params):
-        self.fit(Xs, y, **fit_params)
-        return self.transform(Xs)
 
-class MultichannelPredictor(Cloneable, Saveable):
-    
-    """Predictor (meta-predictor) that takes matrices from multiple input channels, concatenates them to 
+class ConcatenatingPredictor(Cloneable, Saveable):
+    """
+    Predictor (meta-predictor) that takes matrices from multiple input channels, concatenates them to 
        create a single feature matrix, and outputs a single prediction into the first channel. 
     
     Parameters
@@ -311,7 +294,7 @@ class MultichannelPredictor(Cloneable, Saveable):
     state_variables = ['classes_']
     
     def __init__(self, predictor=None):
-        self._init_params(locals())
+        self._params_to_attributes(ConcatenatingPredictor.__init__, locals())
         utils.enforce_fit(predictor)
         utils.enforce_predict(predictor)
         self._esimtator_type = utils.detect_estimator_type(predictor)

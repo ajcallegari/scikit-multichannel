@@ -22,7 +22,6 @@ n_cpus = multiprocessing.cpu_count()
 class TestCrossValPredict(unittest.TestCase):
     
     def setUp(self):
-            
         # get positive control values from sklearn cross_val_predict selection
         # classification
         self.cv = KFold(n_splits=5)

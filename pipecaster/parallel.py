@@ -6,7 +6,8 @@ import time
 import pipecaster.utils as utils
 from pipecaster.ray_backend import RayDistributor
 
-"""Parallel computing backend for pipecaster.  Users can typically ignore this module 
+"""
+Parallel computing backend for pipecaster.  Users can typically ignore this module 
    unless they want to get information about resources or set a custom backend 
    using set_distributor(my_backend_instance).  For info on building a cluster,
    the the ray_backend module.
