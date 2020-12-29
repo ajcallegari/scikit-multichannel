@@ -366,6 +366,128 @@ class TestMultiChannelRegression(unittest.TestCase):
         linearity = pearsonr(accuracies, n_informatives)[0]
         self.assertTrue(linearity > 0.0, 
                         'SVR stacking linearity of {} below acceptable threshold of 0.80 pearsonr'.format(linearity))
+        
+    def test_add_layer_interface_broadcast(self, verbose=0, seed=42):
+        """
+        Functional test of multichannel regression using the MultichannnelPipeline.add_layer() method to create
+        the pipeline.  Single argument broadcasting is used in pipeline construction.
+        """
+        
+        if n_cpus > 1:
+            # shut off warnings because ray and redis generate massive numbers
+            warnings.filterwarnings("ignore")
+        
+        n_channels = 5
+        accuracies = []
+        
+        sklearn_params = {'n_targets':1, 
+                  'n_samples':1000, 
+                  'n_features':10, 
+                  'n_informative':10}
+
+        for i in range(0, n_channels + 1):
+            
+            Xs, y, _ = make_multi_input_regression(n_informative_Xs=i, 
+                                    n_weak_Xs=0,
+                                    n_random_Xs=n_channels - i,
+                                    weak_noise_sd=None,
+                                    seed = seed,
+                                    **sklearn_params                                   
+                                    )
+
+            mrgr = MultichannelPipeline(n_channels)
+            mrgr.add_layer(StandardScaler())
+            mrgr.add_layer(LinearRegression())
+            mrgr.add_layer(MultichannelPredictor(SVR()))
+
+            split_accuracies = cross_val_score(mrgr, Xs, y, predict_method='predict', 
+                                     scorer=explained_variance_score, cv=3, n_processes=n_cpus)
+            accuracies.append(np.mean(split_accuracies))
+
+            
+        n_informatives = range(0, n_channels + 1)    
+        if verbose > 0:
+            print('explained variance scores')
+            print('informative Xs\t\t svr stacking')
+            for n_informative, ev in zip(n_informatives, accuracies):
+                print('{}\t\t {}'.format(n_informative, ev))
+                
+        if n_cpus > 1:
+            # shut off warnings because ray and redis generate massive numbers
+            warnings.resetwarnings()
+            
+        final_ev = accuracies[-1]
+        linearity = pearsonr(accuracies, n_informatives)[0]
+        
+        if verbose > 0:
+            print('SVR stacking pearsonr = {}'.format(linearity))
+        
+        self.assertTrue(final_ev > 0.1, 
+                        'SVR stacking explained variance of {} is below acceptable threshold of 0.80'.format(final_ev))
+        linearity = pearsonr(accuracies, n_informatives)[0]
+        self.assertTrue(linearity > 0.0, 
+                        'SVR stacking linearity of {} below acceptable threshold of 0.80 pearsonr'.format(linearity))
+        
+    def test_add_layer_interface_mapping(self, verbose=0, seed=42):
+        """
+        Functional test of multichannel regression using the MultichannnelPipeline.add_layer() method to create
+        the pipeline.  Multiple argument channel mapping interface is used in pipeline construction.
+        """
+        
+        if n_cpus > 1:
+            # shut off warnings because ray and redis generate massive numbers
+            warnings.filterwarnings("ignore")
+        
+        n_channels = 5
+        accuracies = []
+        
+        sklearn_params = {'n_targets':1, 
+                  'n_samples':1000, 
+                  'n_features':10, 
+                  'n_informative':10}
+
+        for i in range(0, n_channels + 1):
+            
+            Xs, y, _ = make_multi_input_regression(n_informative_Xs=i, 
+                                    n_weak_Xs=0,
+                                    n_random_Xs=n_channels - i,
+                                    weak_noise_sd=None,
+                                    seed = seed,
+                                    **sklearn_params                                   
+                                    )
+
+            mrgr = MultichannelPipeline(n_channels)
+            mrgr.add_layer(3, StandardScaler(), 3, StandardScaler())
+            mrgr.add_layer(2, LinearRegression(), 3, LinearRegression())
+            mrgr.add_layer(5, MultichannelPredictor(SVR()))
+
+            split_accuracies = cross_val_score(mrgr, Xs, y, predict_method='predict', 
+                                     scorer=explained_variance_score, cv=3, n_processes=n_cpus)
+            accuracies.append(np.mean(split_accuracies))
+
+            
+        n_informatives = range(0, n_channels + 1)    
+        if verbose > 0:
+            print('explained variance scores')
+            print('informative Xs\t\t svr stacking')
+            for n_informative, ev in zip(n_informatives, accuracies):
+                print('{}\t\t {}'.format(n_informative, ev))
+                
+        if n_cpus > 1:
+            # shut off warnings because ray and redis generate massive numbers
+            warnings.resetwarnings()
+            
+        final_ev = accuracies[-1]
+        linearity = pearsonr(accuracies, n_informatives)[0]
+        
+        if verbose > 0:
+            print('SVR stacking pearsonr = {}'.format(linearity))
+        
+        self.assertTrue(final_ev > 0.1, 
+                        'SVR stacking explained variance of {} is below acceptable threshold of 0.80'.format(final_ev))
+        linearity = pearsonr(accuracies, n_informatives)[0]
+        self.assertTrue(linearity > 0.0, 
+                        'SVR stacking linearity of {} below acceptable threshold of 0.80 pearsonr'.format(linearity))
             
 if __name__ == '__main__':
     unittest.main()
