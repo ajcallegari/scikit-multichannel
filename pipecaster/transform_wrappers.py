@@ -1,4 +1,5 @@
 import functools
+import numpy as np
 
 import pipecaster.utils as utils
 from pipecaster.utils import Cloneable, Saveable
@@ -51,24 +52,14 @@ class SingleChannel(Cloneable, Saveable):
     
     arguments
     ---------
-    predictor: object instance 
+    predictor: instance of object with scikit-learn predictor interface, default=None
         The sklearn predictor to be wrapped
-    transform_method: string. indicates the name of the method to use for transformation or 'auto' 
-        for 'predict_proba' -> 'decision_function' -> 'predict'
-    internal_cv: None, int or cross validation splitter (e.g. StratifiedKFold).  
-        Set the traing set subsampling method used for fitting and tranforming when fit_tranform() is called.  If None, 0, or 1, 
-        subsamplish is disabled.  For integers > 1, KFold is automatically used for regressors and StratifiedKFold used for 
-        classifiers.  Cv subsampling ensures that models do not make predictions on their own training data samples, and is
-        useful when predictions will subsequently be used to train a meta-classifier.
-    n_jobs: Number of parallel _fit_and_predict jobs to run during internal cv training (ray multiprocessing).
+    transform_method_name: string, default=none
+        Indicates the name of the prediction method to use for during calls to transform. If None, 
+        the method is automatically chosen using the order in transform_method_precedence.
     
     notes
     -----
-    Models that are trained with internal cross validation subsamples when fit_transform() is called are used 
-    transiently during pipeline fitting and are not persisted for subsequent inferences.  Inferences are made on 
-    a differnt, persistent model that is trained on the full training set during calls to fit_transform() -- or fit().
-    The predictor is not cloned during construction or calls to fit(), but is cloned on get_clone() call. 
-    
     This class uses reflection to expose the predictor methods found in the object that it wraps, so 
     the method attributes in a SingleChannel instance are not identical to the method attributes of the SingleChannel class.
     """
@@ -138,7 +129,7 @@ class SingleChannel(Cloneable, Saveable):
                 self.fit(X, y, **fit_params)
             transform_method = getattr(self.model, self.transform_method_name)
             X_t = transform_method(X)
-            Xs_t = [X.reshape(-1, 1) if len(X.shape) == 1 else X for X in Xs_t]
+            X_t = X_t.reshape(-1, 1) if len(X_t.shape) == 1 else X_t
             
         return X_t
 
@@ -158,20 +149,25 @@ class SingleChannelCV(SingleChannel):
     
     arguments
     ---------
-    predictor: object instance 
-        The sklearn predictor to be wrapped
-    transform_method: string. indicates the name of the method to use for transformation or 'auto' 
-        for 'predict_proba' -> 'decision_function' -> 'predict'
-    internal_cv: None, int or cross validation splitter (e.g. StratifiedKFold).  
-        Set the traing set subsampling method used for fitting and tranforming when fit_tranform() is called.  If None, 0, or 1, 
-        subsamplish is disabled.  For integers > 1, KFold is automatically used for regressors and StratifiedKFold used for 
-        classifiers.  Cv subsampling ensures that models do not make predictions on their own training data samples, and is
-        useful when predictions will subsequently be used to train a meta-classifier.
-    n_jobs: Number of parallel _fit_and_predict jobs to run during internal cv training (ray multiprocessing).
+    predictor: scikit-learn conformant predictor instance
+        The predictor to wrap.
+    transform_method: string, default=None
+        The name of the method to use to generate output when transform is called on the predictor, as occurs
+        when the predictor is not the last layer in the pipeline.
+    internal_cv: None, int, or sklearn cross validation splitter, default=5  
+        Set the internal cv method used for transforming when fit_tranform() is called.  If 1, internal cv 
+        is inactivated. For integers > 1, KFold is used for regressors and StratifiedKFold used for 
+        classifiers.  If None, the default value of 5 is used.
+    cv_processes: int, default=1
+        Number of parallel fit jobs to run during internal cv training.
+    scorer: callable, default=None
+        Callable with the pattern scorer(y_pred, y_true) that computes a figure of merit for the internal_cv
+        run.  The figure of merit is exposed through creation of a score_ attribute. Used by ModelSelector 
+        to select models based on performance.
     
     notes
     -----
-    fit().transform() is not the same as fit_tranform() because the latter uses internal cv training and inference.
+    fit().transform() is not the same as fit_tranform() because only the latter uses internal cv training and inference.
     On calls to fit_transform() the model is fit on both the entire training set and cv splits of the training set.
     The model fit on the entire dataset is stored for inference on subsequent calls to predict(), predict_proba(), 
     decision_function(), or tranform().  The models fit on cv splits are used to make the predictions returned 
@@ -183,10 +179,11 @@ class SingleChannelCV(SingleChannel):
     
     state_variables = ['score_']
     
-    def __init__(self, predictor, transform_method_name=None, internal_cv=5, split_seed=None, cv_processes=1, scorer=None):
+    def __init__(self, predictor, transform_method_name=None, internal_cv=5, cv_processes=1, scorer=None):
         self._params_to_attributes(SingleChannelCV.__init__, locals())
         self._inherit_state_variables(super())
         super().__init__(predictor, transform_method_name)
+        self.internal_cv = 5 if internal_cv is None else internal_cv 
                 
     def fit_transform(self, X, y=None, groups=None, **fit_params):
         self.fit(X, y, **fit_params)
@@ -198,7 +195,7 @@ class SingleChannelCV(SingleChannel):
         else:
             X_t = cross_val_predict(self.predictor, X, y, groups=groups, predict_method=self.transform_method_name, 
                                      cv=self.internal_cv, combine_splits=True, n_processes=self.cv_processes, 
-                                     split_seed=self.split_seed, fit_params=fit_params)
+                                     split_seed=None, fit_params=fit_params)
             
             if self.scorer is not None:
                 if self.transform_method_name in ['predict_proba', 'decision_function', 'predict_log_proba']:
@@ -259,6 +256,7 @@ class Multichannel(Cloneable, Saveable):
     def predict_with_method(self, Xs, method_name):
         if hasattr(self, 'model') == False:
             raise FitError('prediction attempted before call to fit()')
+        live_Xs = [X for X in Xs if X is not None]
         X = np.concatenate(live_Xs, axis=1)
         prediction_method = getattr(self.model, method_name)
         return prediction_method(Xs)
@@ -279,16 +277,41 @@ class MultichannelCV(Multichannel):
     """
     Wrapper class that provides MultichannelPredictor instances with transform methods and internal cv training.
     
-    Notes
+    arguments
+    ---------
+    multichannel_predictor: instance of an pipecaster conformant multichannel predictor
+        The predictor to wrap.
+    transform_method: string, default=None
+        The name of the method to use to generate output when transform is called on the predictor, as occurs
+        when the predictor is not the last layer in the pipeline.
+    internal_cv: None, int, or sklearn cross validation splitter, default=5  
+        Set the internal cv method used for transforming when fit_tranform() is called.  If 1, internal cv 
+        is inactivated. For integers > 1, KFold is used for regressors and StratifiedKFold used for 
+        classifiers.  If None, the default value of 5 is used.
+    cv_processes: int, default=1
+        Number of parallel fit jobs to run during internal cv training.
+    scorer: callable, default=None
+        Callable with the pattern scorer(y_pred, y_true) that computes a figure of merit for the internal_cv
+        run.  The figure of merit is exposed through creation of a score_ attribute. Used by ModelSelector 
+        to select models based on performance.
+    
+    notes
     -----
+    fit().transform() is not the same as fit_tranform() because only the latter uses internal cv training and inference.
+    On calls to fit_transform() the model is fit on both the entire training set and cv splits of the training set.
+    The model fit on the entire dataset is stored for inference on subsequent calls to predict(), predict_proba(), 
+    decision_function(), or tranform().  The models fit on cv splits are used to make the predictions returned 
+    by fit_transform but are not stored for future use. 
+
     This class uses reflection to expose the predictor methods found in the object that it wraps, so 
-    the method attributes in a MultichannelCV instance are not identical to the method attributes of the 
-    MultichannelCV class. 
+    the method attributes in a SingleChannelCV instance are not identical to the method attributes of the SingleChannelCV class.
     """
     state_variables = ['score_']
     
-    def __init__(self, mutlichannel_predictor=None, internal_cv=5, split_seed=None, cv_processes=1, scorer=None):
-        super().__init__(mutlichannel_predictor)
+    def __init__(self, mutlichannel_predictor=None, transform_method_name=None, internal_cv=5, 
+                 cv_processes=1, scorer=None):
+        internal_cv = 5 if internal_cv is None else internal_cv 
+        super().__init__(mutlichannel_predictor, transform_method_name)
         self._params_to_attributes(MultichannelCV.__init__, locals())
         self._inherit_state_variables(super())
         
@@ -303,7 +326,7 @@ class MultichannelCV(Multichannel):
             Xs_t = cross_val_predict(self.mutlichannel_predictor, Xs, y, groups=groups, 
                                      predict_method=self.transform_method_name, 
                                      cv=self.internal_cv, combine_splits=True, n_processes=self.cv_processes, 
-                                     split_seed=self.split_seed, fit_params=fit_params)
+                                     split_seed=None, fit_params=fit_params)
             scores = []
             for X_t in Xs_t:
                 if X_t is not None and self.scorer is not None:

@@ -160,7 +160,8 @@ class RayDistributor:
         if shared_mem_objects is None or len(shared_mem_objects) == 0:
             return arg_lists
         else:
-            plasma_objects = [ray.put(obj) for obj in shared_mem_objects]
+            plasma_objects = [ray.put(ob) if (type(ob) != ray._raylet.ObjectRef) else ob
+                              for ob in shared_mem_objects]
             arg_lists = [[plasma_objects[get_index(obj, shared_mem_objects)] if is_in(obj, shared_mem_objects) 
                           else obj for obj in arg_list] for arg_list in arg_lists]
             return arg_lists

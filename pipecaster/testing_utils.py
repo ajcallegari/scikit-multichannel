@@ -70,7 +70,7 @@ def make_multi_input_regression(n_informative_Xs=3,
                                 n_weak_Xs=0,
                                 n_random_Xs=0,
                                 weak_noise_sd=0.2,
-                                seed = None,
+                                seed=None,
                                 **sklearn_params):
     
     """Get a synthetic regression dataset with multiple feature matrices that are either informative, weak, or random.
@@ -103,7 +103,6 @@ def make_multi_input_regression(n_informative_Xs=3,
     for p in sklearn_params:
         if p in ['n_features', 'n_informative']:
             sklearn_params[p] *= n_Xs
-    
     X, y = make_regression(**sklearn_params)
     
     # split synthetic data into separate matrices

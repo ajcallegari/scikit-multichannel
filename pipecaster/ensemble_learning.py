@@ -11,7 +11,7 @@ import pipecaster.transform_wrappers as transform_wrappers
 from pipecaster.score_selection import RankScoreSelector
 
 __all__ = ['SoftVotingClassifier', 'HardVotingClassifier', 'AggregatingRegressor', 
-           'SelectivePredictorStack', 'ConcatenatingPredictor']
+           'SelectivePredictorStack', 'MultichannelPredictor']
 
 class SoftVotingClassifier(Cloneable, Saveable):
     """
@@ -35,14 +35,14 @@ class SoftVotingClassifier(Cloneable, Saveable):
         self.classes_, y = np.unique(y, return_inverse=True)
         return self
         
-    def _decatenate(self, X):
+    def _decatenate(self, meta_X):
         n_classes = len(self.classes_)
-        if X.shape[1] % n_classes != 0:
+        if meta_X.shape[1] % n_classes != 0:
             raise ValueError('''Number of meta-features not divisible by number of classes. This can happen if 
                                 base classifiers were trained on different subsamples with different number of 
                                 classes.  Pipecaster uses StratifiedKFold to prevent this, but GroupKFold can lead
                                 to violations.  Someone need to make StratifiedGroupKFold''')
-        Xs = [X[:, i:i+n_classes] for i in range(n_classes)]
+        Xs = [meta_X[:, i:i+n_classes] for i in range(0, meta_X.shape[1], n_classes)]
         return Xs
     
     def predict_proba(self, X):
@@ -84,12 +84,12 @@ class HardVotingClassifier(Cloneable, Saveable):
         
     def _decatenate(self, meta_X):
         n_classes = len(self.classes_)
-        if X.shape[1] % n_classes != 0:
+        if meta_X.shape[1] % n_classes != 0:
             raise ValueError('''Number of meta-features not divisible by number of classes. This can happen if 
                                 base classifiers were trained on different subsamples with different number of 
                                 classes.  Pipecaster uses StratifiedKFold to prevent this, but GroupKFold can lead
                                 to violations.  Someone need to make StratifiedGroupKFold''')
-        Xs = [meta_X[:, i : i + n_classes] for i in range(n_classes)]
+        Xs = [meta_X[:, i:i+n_classes] for i in range(0, meta_X.shape[1], n_classes)]
         return Xs
     
     def predict(self, X):
@@ -159,7 +159,10 @@ class SelectivePredictorStack(Cloneable, Saveable):
     scorer : callable, default=explained_variance_score
         a scorer callable object / function with signature
         'scorer(y_true, y_pred)' which should return only
-        a single value.    
+        a single value.  
+    base_transform_method: string or None, default=None
+        Set the prediction method name used to generate meta-features from base predictors.  If None, the 
+        precedence order specified in transform_wrappers will be used to automatically pick a method.
     base_processes: int or 'max', default=1
         The number of parallel processes to run for base predictor fitting. 
     cv_processes: int or 'max', default=1
@@ -174,7 +177,7 @@ class SelectivePredictorStack(Cloneable, Saveable):
     
     def __init__(self, base_predictors=None, meta_predictor=None, internal_cv=5, 
                  scorer=explained_variance_score, score_selector=RankScoreSelector(k=3), 
-                 base_processes=1, cv_processses=1):
+                 base_transform_method=None, base_processes=1, cv_processses=1):
         self._params_to_attributes(SelectivePredictorStack.__init__, locals())
                              
         estimator_types = [p._estimator_type for p in base_predictors]
@@ -204,7 +207,8 @@ class SelectivePredictorStack(Cloneable, Saveable):
         if self._estimator_type == 'classifier' and y is not None:
             self.classes_, y = np.unique(y, return_inverse=True)
         
-        self.base_predictors = [transform_wrappers.SingleChannelCV(p, internal_cv=self.internal_cv, scorer=self.scorer, 
+        self.base_predictors = [transform_wrappers.SingleChannelCV(p, transform_method_name=self.base_transform_method,
+                                                                   internal_cv=self.internal_cv, scorer=self.scorer, 
                                                                    cv_processes=self.cv_processes)
                                 for p in self.base_predictors]
             
@@ -272,7 +276,7 @@ class SelectivePredictorStack(Cloneable, Saveable):
         if hasattr(self, 'meta_model'):
             clone.meta_model = utils.get_clone(self.meta_model)
 
-class ConcatenatingPredictor(Cloneable, Saveable):
+class MultichannelPredictor(Cloneable, Saveable):
     """
     Predictor (meta-predictor) that takes matrices from multiple input channels, concatenates them to 
        create a single feature matrix, and outputs a single prediction into the first channel. 
@@ -294,11 +298,11 @@ class ConcatenatingPredictor(Cloneable, Saveable):
     state_variables = ['classes_']
     
     def __init__(self, predictor=None):
-        self._params_to_attributes(ConcatenatingPredictor.__init__, locals())
+        self._params_to_attributes(MultichannelPredictor.__init__, locals())
         utils.enforce_fit(predictor)
         utils.enforce_predict(predictor)
-        self._esimtator_type = utils.detect_estimator_type(predictor)
-        if self._esimtator_type is None:
+        self._estimator_type = utils.detect_estimator_type(predictor)
+        if self._estimator_type is None:
             raise TypeError('could not detect predictor type')
         self._expose_predictor_interface(predictor)
             

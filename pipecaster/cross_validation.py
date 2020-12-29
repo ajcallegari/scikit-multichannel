@@ -109,6 +109,8 @@ def cross_val_predict(predictor, Xs, y=None, groups=None, predict_method='predic
                 cv = StratifiedKFold(n_splits=cv, random_state=split_seed)
             else:
                 cv = KFold(n_splits=cv, random_state=split_seed)
+    else:
+        cv.random_state=split_seed
                 
     if utils.is_multichannel(predictor):
         live_Xs = [X for X in Xs if X is not None]
@@ -194,7 +196,6 @@ def cross_val_score(predictor, Xs, y=None, groups=None, scorer=explained_varianc
         Array of scores of the estimator for each run of the cross validation.
     
     """
-    
     if scorer is None:
         if utils.is_classifier(predictor):
             scorer = accuracy_score
@@ -203,6 +204,7 @@ def cross_val_score(predictor, Xs, y=None, groups=None, scorer=explained_varianc
         
     split_blocks = cross_val_predict(predictor, Xs, y, groups, predict_method, cv, 
                                      combine_splits=False, n_processes=n_processes, split_seed=split_seed, **fit_params)
+    
     scores = [scorer(y[test_indices], predictions) for predictions, test_indices in split_blocks]
     return scores
     

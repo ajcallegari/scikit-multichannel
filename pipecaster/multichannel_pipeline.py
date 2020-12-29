@@ -112,7 +112,8 @@ class Layer(Cloneable, Saveable):
                 return pipe
         return None
     
-    def fit_transform(self, Xs, y=None, internal_cv=5, **fit_params):
+    def fit_transform(self, Xs, y=None, transform_method_name=None, internal_cv=5, 
+                      cv_processes=1, **fit_params):
         """
         For each pipe in this layer, call fit_transform() if available, fall back on fit() then transform(), 
         or automatically convert predictors into transformers to enable meta-prediction.  
@@ -121,6 +122,9 @@ class Layer(Cloneable, Saveable):
         ----------
         Xs: list of [ndarray.shape(n_samples, n_features) or None]
         y: targets, default=None
+        transform_method_name: string or None, default=None
+            Set the name of the method to be used when transforming with a predictor. If None, the method
+            will be selected automatically by the precedence defined in the transform_wrapper module.
         internal_cv: None, int, or cv split generator, default=5
             Control the autoconversion of predictors into transformers for meta-prediction.
             If an integer above 1 or a split generator, wrap pipes lacking transform methods in CvTransformer
@@ -182,37 +186,31 @@ class Layer(Cloneable, Saveable):
                 elif utils.is_predictor(model):
                     
                     if utils.is_multichannel(model):
-                        if internal_cv is None or (type(internal_cv) == int and internal_cv < 2):
-                            model = transform_wrappers.Multichannel(model)
+                        if type(internal_cv) == int and internal_cv < 2:
+                            model = transform_wrappers.Multichannel(model, transform_method_name)
                         else:
-                            model = transform_wrappers.MultichannelCV(model, internal_cv, cv_processes=1)
-                        try:
-                            if y is None:
-                                Xs_t[channel_indices[0]] = model.fit_transform(input_, **fit_params) 
-                            else:
-                                Xs_t[channel_indices[0]] = model.fit_transform(input_, y, **fit_params)
-                        except Exception as e:
-                            raise FitError('pipe {} raised an error on fit_transform(): {}'
-                                           .format(model.__class__.__name__, e))
+                            model = transform_wrappers.MultichannelCV(model, transform_method_name, 
+                                                                      internal_cv, cv_processes)
+                        if y is None:
+                            Xs_t[channel_indices[0]] = model.fit_transform(input_, **fit_params) 
+                        else:
+                            Xs_t[channel_indices[0]] = model.fit_transform(input_, y, **fit_params)
                     else:
-                        if internal_cv is None or (type(internal_cv) == int and internal_cv < 2):
-                            model = transform_wrappers.SingleChannel(model)
+                        if type(internal_cv) == int and internal_cv < 2:
+                            model = transform_wrappers.SingleChannel(model, transform_method_name)
                         else:
-                            model = transform_wrappers.SingleChannelCv(model, internal_cv, cv_processes=1)
-                        try:
-                            if y is None:
-                                Xs_t[channel_indices[0]] = model.fit_transform(input_, **fit_params) 
-                            else:
-                                Xs_t[channel_indices[0]] = model.fit_transform(input_, y, **fit_params)
-                        except Exception as e:
-                            raise FitError('pipe {} raised an error on fit_transform(): {}'
-                                           .format(model.__class__.__name__, e))
+                            model = transform_wrappers.SingleChannelCV(model, transform_method_name, 
+                                                                       internal_cv, cv_processes)
+                        if y is None:
+                            Xs_t[channel_indices[0]] = model.fit_transform(input_, **fit_params) 
+                        else:
+                            Xs_t[channel_indices[0]] = model.fit_transform(input_, y, **fit_params)
                     
-                self.model_list.append((model, slice_, channel_indices))
+            self.model_list.append((model, slice_, channel_indices))
         
         return Xs_t
     
-    def fit_last(self, Xs, y=None, internal_cv=5, **fit_params):
+    def fit_last(self, Xs, y=None, transform_method_name=None, internal_cv=5, cv_processes=1, **fit_params):
         """
         Fit the last layer of a MultiChannelPipeline. Exposes available prediction and transform 
         methods on the layer and returns a list of prediction methods.
@@ -249,9 +247,9 @@ class Layer(Cloneable, Saveable):
                 
                 if hasattr(model, 'transform') == False:
                     if utils.is_multichannel(model):
-                        model = transform_wrappers.Multichannel(model)
+                        model = transform_wrappers.Multichannel(model, transform_method_name)
                     else:
-                        model = transform_wrappers.SingleChannel(model)
+                        model = transform_wrappers.SingleChannel(model, transform_method_name)
                         
                 if y is None:
                     model.fit(input_, **fit_params)
@@ -350,7 +348,39 @@ class Layer(Cloneable, Saveable):
 
 class MultichannelPipeline(Cloneable, Saveable):
     """
-    Machine learning or data processing pipeline that accepts multiple inputs and outputs transormed data or predictions.
+    Machine learning or data processing pipeline that accepts multiple inputs and returns transormed data 
+    or predictions.
+    
+    Parameters
+    ----------
+    n_channels: int, default=1
+        The number of separate i/o channels throughout the pipeline (except last output, which is a single
+        matrix when the pipeline outputs predictions to a single channel).  The number of live channels
+        is reduced by concatenation and selection operations, but the channel depth remains constant internally 
+        with dead channels indicated by their None value transform outputs.
+    transform_method_name: string, default=None 
+        **Predictors not located in the last layer of the pipeline must have a transform method to output
+        features for meta-prediction or further processing. transform_method_name sets a method 
+        to use for output thoughout the pipeline. If None, pipecaster will automatically assign a method 
+        using the precedence defined in the transform_wrapper module.  
+    internal_cv: None, int, or scikit-learn cv splitter instance, default=5
+        **Set a global internal cross validation training method used for preditors (except predictors last 
+        layer of pipeline).  If 1, internal cv training is inactivated.  If int > 1 then KFold() 
+        for regressors and StratifiedKFold() for classifiers. When providing a cv splitter instance,
+        set the random state to an integer if you want to make the same splits throughout the pipeline 
+        and ensure that sub-predictors don't make inferences from their training samples during meta-predictor
+        training.
+    cv_processes: 'max' or int, default=1
+        **Number of parallel processes to use for internal cv training.  If 'max', all available CPUs will be 
+        available for use.
+        
+    **internal_cv parameters: transform_method_name, internal_cv, and cv_processes
+        These parameters are ignored for predictors that have already have a tranform method when added 
+        to the pipeline.  Local cv parameters can be set for each predictor by wrapping them with 
+        transform_wrappers.  SingleChannelCV or transform_wrapper.MultichannelCV before addition to 
+        the pipeline.  When manually wrapping predictors, parameters should be uniform throughout the pipeline
+        if you want to ensure that no meta-predcitors are trained on their own training examples.
+    
     
     Fitting, Predicting, and Transforming
     --------------------------------------
@@ -404,7 +434,7 @@ class MultichannelPipeline(Cloneable, Saveable):
         fit_transform on a MultichannelPipeline will not wrap
     """
     
-    def __init__(self, n_channels=1, internal_cv=5):
+    def __init__(self, n_channels=1, transform_method_name=None, internal_cv=5, cv_processes=1):
         self._params_to_attributes(MultichannelPipeline.__init__, locals())
         self.layers = []
         
@@ -488,9 +518,11 @@ class MultichannelPipeline(Cloneable, Saveable):
                     self.classes_, y = np.unique(y, return_inverse=True)
             
         for layer in self.layers[:-1]:
-            Xs = layer.fit_transform(Xs, y, **fit_params)
+            Xs = layer.fit_transform(Xs, y, self.transform_method_name, self.internal_cv, 
+                                     self.cv_processes, **fit_params)
         # fit the last layer without transforming:
-        self.layers[-1].fit_last(Xs, y, **fit_params)
+        self.layers[-1].fit_last(Xs, y, self.transform_method_name, self.internal_cv, 
+                                 self.cv_processes, **fit_params)
         
         # expose the prediction methods found in the last layer
         for method_name in utils.get_prediction_method_names(self.layers[-1]):
@@ -504,15 +536,19 @@ class MultichannelPipeline(Cloneable, Saveable):
     
     def fit_transform(self, Xs, y, **fit_params):
         for layer in self.layers[:-1]:
-            Xs = layer.fit_transform(Xs, y, **fit_params)
-        self.layers[-1].fit_last(Xs, y, **fit_params)
+            Xs = layer.fit_transform(Xs, y, self.transform_method_name, self.internal_cv, 
+                                     self.cv_processes, **fit_params)
+        self.layers[-1].fit_last(Xs, y, self.transform_method_name, self.internal_cv, 
+                                 self.cv_processes, **fit_params)
         return self.layers[-1].transform(Xs)
     
-    def cv_fit_transform(self, Xs, y, internal_cv=5, **fit_params):
+    def cv_fit_transform(self, Xs, y, **fit_params):
         fit_params['internal_cv'] = internal_cv
         for layer in self.layers[:-1]:
-            Xs = layer.fit_transform(Xs, y, **fit_params)
-        return self.layers[-1].fit_transform(Xs)
+            Xs = layer.fit_transform(Xs, y, self.transform_method_name, self.internal_cv, 
+                                     self.cv_processes, **fit_params)
+        return self.layers[-1].fit_transform(Xs, y, self.transform_method_name, self.internal_cv, 
+                                     self.cv_processes, **fit_params)
     
     def predict_with_method(self, Xs, method_name):
         Xs = [np.array(X, dtype=float) for X in Xs]
