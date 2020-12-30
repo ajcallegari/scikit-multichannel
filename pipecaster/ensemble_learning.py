@@ -3,7 +3,7 @@ import ray
 import scipy.stats
 import functools
 
-from sklearn.metrics import explained_variance_score
+from sklearn.metrics import explained_variance_score, balanced_accuracy_score
 
 import pipecaster.utils as utils
 from pipecaster.utils import Cloneable, Saveable
@@ -145,7 +145,7 @@ class SelectivePredictorStack(Cloneable, Saveable):
     Parameters
     ---------
     base_predictors: iterable, default=None
-        Ensemble of sklearn conformant classifiers or regressors that generate inferences treated as meta-features.
+        Ensemble of scikit-learn conformant classifiers or regressors that generate inferences treated as meta-features.
         These predictors are automatically wrapped with the transform_wrappers.SingleChannelCV class to provide 
         cross validation training and transformer functionality during calls to fit_transform().
     meta_predictor: predictor, default=None
@@ -156,10 +156,12 @@ class SelectivePredictorStack(Cloneable, Saveable):
             conferred by reducing overfitting can be smaller than the disadvantage of starving the
             base classifiers for limited data.  In these instances, internal cv can be inactivated by setting 
             this argument to None or 1.
-    scorer : callable, default=explained_variance_score
-        a scorer callable object / function with signature
-        'scorer(y_true, y_pred)' which should return only
+    scorer : callable or 'auto', default='auto'
+        Figure of merit score used for selecting models during internal cross validation.
+        If a callable, the object should have the signature 'scorer(y_true, y_pred)' and return
         a single value.  
+        If 'auto' regressors will be scored with explained_variance_score and classifiers
+        with balanced_accuracy_score.
     base_transform_method: string or None, default=None
         Set the prediction method name used to generate meta-features from base predictors.  If None, the 
         precedence order specified in transform_wrappers will be used to automatically pick a method.
@@ -173,17 +175,24 @@ class SelectivePredictorStack(Cloneable, Saveable):
     Predictor cloning occurs at fit time.
     
     """
-    state_variables = ['classes_']
+    state_variables = ['classes_', 'scores_', 'selected_indices_']
     
     def __init__(self, base_predictors=None, meta_predictor=None, internal_cv=5, 
-                 scorer=explained_variance_score, score_selector=RankScoreSelector(k=3), 
-                 base_transform_method=None, base_processes=1, cv_processses=1):
+                 scorer='auto', score_selector=RankScoreSelector(k=3), 
+                 base_transform_method=None, base_processes=1, cv_processes=1):
         self._params_to_attributes(SelectivePredictorStack.__init__, locals())
                              
         estimator_types = [p._estimator_type for p in base_predictors]
         if len(set(estimator_types)) != 1:
             raise TypeError('base_predictors must be of uniform type (e.g. all classifiers or all regressors)')
         self._estimator_type = estimator_types[0]
+        if scorer == 'auto':
+            if utils.is_classifier(self):
+                self.scorer = balanced_accuracy_score
+            elif utils.is_regressor(self):
+                self.scorer = explained_variance_score
+            else:
+                raise AttributeError('predictor type required for automatic assignment of scoring metric')
         self._expose_predictor_interface(meta_predictor)
             
     def _expose_predictor_interface(self, meta_predictor):
@@ -218,7 +227,7 @@ class SelectivePredictorStack(Cloneable, Saveable):
         if n_processes is not None and n_processes > 1:
             try:
                 shared_mem_objects = [X, y, fit_params]
-                fit_results = parallel.starmap_jobs(PredictorStack._fit_job, args_list, n_cpus=n_processes, 
+                fit_results = parallel.starmap_jobs(SelectivePredictorStack._fit_job, args_list, n_cpus=n_processes, 
                                                     shared_mem_objects=shared_mem_objects)
             except Exception as e:
                 print('parallel processing request failed with message {}'.format(e))
@@ -226,7 +235,7 @@ class SelectivePredictorStack(Cloneable, Saveable):
                 n_processes = 1       
         if n_processes is None or n_processes <= 1:
             # print('running a single process with {} jobs'.format(len(args_list)))
-            fit_results = [PredictorStack._fit_job(**args) for args in args_list]
+            fit_results = [SelectivePredictorStack._fit_job(*args) for args in args_list]
                 
         self.base_models, predictions_list = zip(*fit_results)
         if self.scorer is not None and self.score_selector is not None: 
@@ -234,6 +243,8 @@ class SelectivePredictorStack(Cloneable, Saveable):
             selected_indices = self.score_selector(base_model_scores)
             self.base_models = [m for i, m in enumerate(self.base_models) if i in selected_indices]
             predictions_list = [p for i, p in enumerate(predictions_list) if i in selected_indices]
+        self.scores_ = base_model_scores
+        self.selected_indices_ = selected_indices
         meta_X = np.concatenate(predictions_list, axis=1)
         self.meta_model = utils.get_clone(self.meta_predictor)
         self.meta_model.fit(meta_X, y, **fit_params)
@@ -242,6 +253,24 @@ class SelectivePredictorStack(Cloneable, Saveable):
             
         return self
     
+    def get_model_scores(self):
+        if hasattr(self, 'scores_'):
+            return self.scores_
+        else:
+            raise utils.FitError('Base model scores not found. They are only available after call to fit().')
+            
+    def get_support(self):
+        if hasattr(self, 'selected_indices_'):
+            return self.selected_indices_
+        else:
+            raise utils.FitError('Must call fit before getting selection information')
+            
+    def get_base_models(self, unwrap=True):
+        if hasattr(self, 'base_models') == False:
+            raise FitError('No base models found. Call fit() or fit_transform() to create base models')
+        else:
+            return [transform_wrappers.unwrap_model(m) for m in self.base_models]
+            
     def predict_with_method(self, X, method_name):
         """
         Make inferences by calling the indicated method on the metaclassifier after creating meta-features
@@ -261,7 +290,7 @@ class SelectivePredictorStack(Cloneable, Saveable):
         predictions_list = [p.transform(X) for p in self.base_models]
         meta_X = np.concatenate(predictions_list, axis=1)
         prediction_method = getattr(self.meta_model, method_name)
-        predictions = self.prediction_method(meta_X)
+        predictions = prediction_method(meta_X)
         if self._estimator_type == 'classifier' and method_name == 'predict':
             predictions = self.classes_[predictions]
         return predictions
@@ -275,6 +304,7 @@ class SelectivePredictorStack(Cloneable, Saveable):
             clone.base_models = [utils.get_clone(m) for m in self.base_models]
         if hasattr(self, 'meta_model'):
             clone.meta_model = utils.get_clone(self.meta_model)
+        return clone
 
 class MultichannelPredictor(Cloneable, Saveable):
     """
@@ -301,7 +331,7 @@ class MultichannelPredictor(Cloneable, Saveable):
         self._params_to_attributes(MultichannelPredictor.__init__, locals())
         utils.enforce_fit(predictor)
         utils.enforce_predict(predictor)
-        self._estimator_type = utils.detect_estimator_type(predictor)
+        self._estimator_type = utils.detect_predictor_type(predictor)
         if self._estimator_type is None:
             raise TypeError('could not detect predictor type')
         self._expose_predictor_interface(predictor)

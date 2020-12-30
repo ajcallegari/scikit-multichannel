@@ -92,17 +92,17 @@ def is_transformer(pipe):
     else:
         return False
     
-def detect_estimator_type(pipe):
+def detect_predictor_type(pipe):
     """
     Determine if an algorithm is a classifier, regressor, or neither (unknown).
     """
     if is_classifier(pipe):
-        _estimator_type = 'classifier'
+        predictor_type = 'classifier'
     elif is_regressor(pipe):
-        _estimator_type = 'regressor'
+        predictor_type = 'regressor'
     else:
-        _estimator_type = None
-    return _estimator_type
+        predictor_type = None
+    return predictor_type
 
 def enforce_fit(pipe):
     """
@@ -235,9 +235,10 @@ class Cloneable:
     
     def get_clone(self):
         clone = get_param_clone(self)
-        for var in self.__class__.state_variables:
-            if hasattr(self, var):
-                setattr(clone, var, getattr(self, var))
+        if hasattr(self, 'state_variables'):
+            for var in self.__class__.state_variables:
+                if hasattr(self, var):
+                    setattr(clone, var, getattr(self, var))
         return clone
     
 class Saveable:

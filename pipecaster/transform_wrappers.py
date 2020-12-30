@@ -35,15 +35,15 @@ model = pc.transformer_wrappers.MultichannelCV(model, internal_cv, cv_processes=
 transform_method_precedence = ['predict_proba', 'decision_function', 'predict_log_proba', 'predict']
                         
 def get_transform_method(pipe):
-    for method in transform_method_precedence:
-        if hasattr(pipe, method):
-            return getattr(pipe, method)
+    for method_name in transform_method_precedence:
+        if hasattr(pipe, method_name):
+            return getattr(pipe, method_name)
     return None
 
 def get_transform_method_name(pipe):
-    for method in transform_method_precedence:
-        if hasattr(pipe, method):
-            return method
+    for method_name in transform_method_precedence:
+        if hasattr(pipe, method_name):
+            return method_name
     return None
 
 class SingleChannel(Cloneable, Saveable):
@@ -73,7 +73,7 @@ class SingleChannel(Cloneable, Saveable):
             if self.transform_method_name is None:
                 raise NameError('predictor lacks a recognized method for conversion to transformer')
         self._expose_predictor_interface(predictor)
-        self._estimator_type = utils.detect_estimator_type(predictor)
+        self._estimator_type = utils.detect_predictor_type(predictor)
         if self._estimator_type is None:
             raise TypeError('could not detect predictor type for {}'.format(predictor))
         
@@ -224,27 +224,27 @@ class Multichannel(Cloneable, Saveable):
     """
     state_variables = ['classes_']
     
-    def __init__(self, mutlichannel_predictor=None, transform_method_name=None):
+    def __init__(self, multichannel_predictor=None, transform_method_name=None):
         self._params_to_attributes(Multichannel.__init__, locals())
-        utils.enforce_fit(mutlichannel_predictor)
-        utils.enforce_predict(mutlichannel_predictor)        
-        self._estimator_type = utils.detect_estimator_type(mutlichannel_predictor)
+        utils.enforce_fit(multichannel_predictor)
+        utils.enforce_predict(multichannel_predictor)        
+        self._estimator_type = utils.detect_predictor_type(multichannel_predictor)
         if self._estimator_type is None:
             raise AttributeError('could not detect predictor type')
         if transform_method_name is None:
-            self.transform_method_name = get_transform_method_name(mutlichannel_predictor)
+            self.transform_method_name = get_transform_method_name(multichannel_predictor)
             if self.transform_method_name is None:
                 raise TypeError('missing recognized method for transforming with a predictor')
-        self._expose_predictor_interface(mutlichannel_predictor)
+        self._expose_predictor_interface(multichannel_predictor)
         
-    def _expose_predictor_interface(self, mutlichannel_predictor):
+    def _expose_predictor_interface(self, multichannel_predictor):
         for method_name in utils.recognized_pred_methods:
-            if hasattr(mutlichannel_predictor, method_name):
+            if hasattr(multichannel_predictor, method_name):
                 prediction_method = functools.partial(self.predict_with_method, method_name=method_name)
                 setattr(self, method_name, prediction_method)
                 
     def fit(self, Xs, y=None, **fit_params):
-        self.model = utils.get_clone(self.mutlichannel_predictor)
+        self.model = utils.get_clone(self.multichannel_predictor)
         if y is None:
             self.model.fit(Xs, **fit_params)
         else:
@@ -308,10 +308,10 @@ class MultichannelCV(Multichannel):
     """
     state_variables = ['score_']
     
-    def __init__(self, mutlichannel_predictor=None, transform_method_name=None, internal_cv=5, 
+    def __init__(self, multichannel_predictor=None, transform_method_name=None, internal_cv=5, 
                  cv_processes=1, scorer=None):
         internal_cv = 5 if internal_cv is None else internal_cv 
-        super().__init__(mutlichannel_predictor, transform_method_name)
+        super().__init__(multichannel_predictor, transform_method_name)
         self._params_to_attributes(MultichannelCV.__init__, locals())
         self._inherit_state_variables(super())
         
@@ -323,7 +323,7 @@ class MultichannelCV(Multichannel):
             Xs_t = self.transform(Xs)
         # internal cv training is enabled
         else:
-            Xs_t = cross_val_predict(self.mutlichannel_predictor, Xs, y, groups=groups, 
+            Xs_t = cross_val_predict(self.multichannel_predictor, Xs, y, groups=groups, 
                                      predict_method=self.transform_method_name, 
                                      cv=self.internal_cv, combine_splits=True, n_processes=self.cv_processes, 
                                      split_seed=None, fit_params=fit_params)
@@ -340,3 +340,25 @@ class MultichannelCV(Multichannel):
         Xs_t = [X.reshape(-1, 1) if (X is not None and len(X.shape) == 1) else X for X in Xs_t]
         
         return Xs_t
+    
+def unwrap_predictor(pipe):
+    """
+    Return a predictor that is wrapped in a transform wrapper. 
+    """
+    if type(pipe) not in [SingleChannel, SingleChannelCV, Multichannel, MultichannelCV]:
+        return pipe
+    if type(pipe) in [Multichannel, MultichannelCV]:
+        return pipe.multichannel_predictor
+    else:
+        return pipe.predictor
+    
+def unwrap_model(pipe):
+    """
+    Return a model that is wrapped in a transform wrapper. 
+    """
+    if type(pipe) not in [SingleChannel, SingleChannelCV, Multichannel, MultichannelCV]:
+        return pipe
+    if hasattr(pipe, 'model') == True:
+        return pipe.model
+    else:
+        raise utils.FitError('no model found')

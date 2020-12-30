@@ -2,7 +2,7 @@ import numpy as np
 import ray
 import functools
 
-from sklearn.metrics import explained_variance_score
+from sklearn.metrics import explained_variance_score, balanced_accuracy_score
 from sklearn.feature_selection import f_classif
 
 import pipecaster.utils as utils
@@ -51,6 +51,12 @@ class ChannelSelector(Cloneable, Saveable):
         else:
             raise utils.FitError('Channel scores not found. They are only available after call to fit().')
             
+    def get_support(self):
+        if hasattr(self, 'selected_indices_'):
+            return self.selected_indices_
+        else:
+            raise utils.FitError('Must call fit before getting selection information')
+            
     def transform(self, Xs):
         return [Xs[i] if (i in self.selected_indices_) else None for i in range(len(Xs))]
             
@@ -69,7 +75,7 @@ class SelectKBestScores(ChannelSelector):
     
 class SelectKBestProbes(ChannelSelector):
         
-    def __init__(self, predictor_probe=None, cv=3, scorer=explained_variance_score, k=1, channel_processes=1, cv_processes=1):
+    def __init__(self, predictor_probe=None, cv=3, scorer='auto', k=1, channel_processes=1, cv_processes=1):
         self._params_to_attributes(SelectKBestProbes.__init__, locals())
         super().__init__(CvPerformanceScorer(predictor_probe, cv, scorer, cv_processes), 
                          RankScoreSelector(k), channel_processes)
@@ -89,14 +95,15 @@ class ModelSelector(Cloneable, Saveable):
     cv: int or cross validation splitter instance (e.g. StratifiedKFold()), default=5
         Set the cross validation method.  If int, defaults to KFold() for regressors orr
         StratifiedKFold() for classifiers.  
-    scorer : callable, default=explained_variance_score
-        A scorer callable object / function with signature
-        'scorer(y_true, y_pred)' which should return only
-        a single value.
+    scorer : callable or 'auto', default='auto'
+        Figure of merit score used for selecting models via internal cross validation.
+        If a callable, the object should have the signature 'scorer(y_true, y_pred)' and return
+        a single value.  
+        If 'auto' regressors will be scored with explained_variance_score and classifiers
+        with balanced_accuracy_score.
     score_selector: callable, default=RankScoreSelector(3)
-        A scorer callable object / function with signature
-        'score_selector(scores)' which should return a list of the indices
-        of the predictors/channels to be selected
+        A scorer callable object / function with signature 'score_selector(scores)' which should 
+        return a list of the indices of the predictors/channels to be selected
     channel_processes: int
         Number of parallel processes to run for each predictor during model fitting
     cv_processes: int
@@ -110,7 +117,7 @@ class ModelSelector(Cloneable, Saveable):
     """
     state_variables = ['classes_', 'selected_indices_']
     
-    def __init__(self, predictors=None, cv=5, scorer=explained_variance_score, 
+    def __init__(self, predictors=None, cv=5, scorer='auto', 
                  score_selector=RankScoreSelector(3), channel_processes=1, cv_processes=1):
         self._params_to_attributes(ModelSelector.__init__, locals())
         
@@ -123,7 +130,14 @@ class ModelSelector(Cloneable, Saveable):
             estimator_types = [predictors._estimator_type]
         if len(set(estimator_types)) != 1:
             raise TypeError('Predictors must be of uniform type (e.g. all classifiers or all regressors).')
-        self._estimator_type = estimator_types[0]            
+        self._estimator_type = estimator_types[0] 
+        if scorer == 'auto':
+            if utils.is_classifier(self):
+                self.scorer = balanced_accuracy_score
+            elif utils.is_regressor(self):
+                self.scorer = explained_variance_score
+            else:
+                raise AttributeError('predictor type required for automatic assignment of scoring metric')
         self._expose_predictor_interface(predictors)
         
     def _expose_predictor_interface(self, predictors):
@@ -179,6 +193,7 @@ class ModelSelector(Cloneable, Saveable):
                 continue
             if type(predictor) in [transform_wrappers.SingleChannelCV, transform_wrappers.MultichannelCV]:
                 raise TypeError('CV transform_wrapper found in predictors (disallowed to promote uniform wrapping)')
+                
             predictors[i] = transform_wrappers.SingleChannelCV(predictor, internal_cv=self.cv, 
                                                                scorer=self.scorer, cv_processes=self.cv_processes)
         
@@ -243,7 +258,7 @@ class ModelSelector(Cloneable, Saveable):
     
 class SelectKBestModels(ModelSelector):
     
-    def __init__(self, predictors, cv=5, scorer=explained_variance_score, k=1, channel_processes=1, cv_processes=1):
+    def __init__(self, predictors, cv=5, scorer='auto', k=1, channel_processes=1, cv_processes=1):
         self._params_to_attributes(SelectKBestModels.__init__, locals())
         super().__init__(predictors, cv, scorer, RankScoreSelector(k), channel_processes, cv_processes)
             

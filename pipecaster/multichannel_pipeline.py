@@ -102,14 +102,29 @@ class Layer(Cloneable, Saveable):
             else:
                 if self._estimator_type != predictor_type:
                     raise ValueError('All predictors in a layer must have the same type (e.g. classifier or regressor)')
+                    
+    def get_pipe(self, index, unwrap=True):
+        pipe = self.pipe_list[index][0]
+        return transform_wrappers.unwrap_predictor(pipe) if unwrap else pipe
+    
+    def get_model(self, index, unwrap=True):
+        model = self.model_list[index][0]
+        return transform_wrappers.unwrap_model(model) if unwrap else model
         
-    def get_pipe_from_input(self, input_index):
-        for pipe, slice_ in layer.pipe_list:
-            if type(slice_) == int:
-                if slice_ == input_index:
-                    return pipe
-            elif input_index in self._get_slice_indices(slice_):
-                return pipe
+    def get_pipe_from_channel(self, channel_index, unwrap=True):
+        for pipe, slice_, indices in self.pipe_list:
+            if type(slice_) == int and slice_ == channel_index:
+                return transform_wrappers.unwrap_predictor(pipe) if unwrap else pipe
+            elif channel_index in indices:
+                return transform_wrappers.unwrap_predictor(pipe) if unwrap else pipe
+        return None
+    
+    def get_model_from_channel(self, channel_index, unwrap=True):
+        for model, slice_, indices in self.model_list:
+            if type(slice_) == int and slice_ == channel_index:
+                return transform_wrappers.unwrap_model(model) if unwrap else model
+            elif channel_index in indices:
+                return transform_wrappers.unwrap_model(model) if unwrap else model
         return None
     
     def fit_transform(self, Xs, y=None, transform_method_name=None, internal_cv=5, 
@@ -257,7 +272,7 @@ class Layer(Cloneable, Saveable):
                     model.fit(input_, y, **fit_params)
             
                 prediction_method_names.extend(utils.get_prediction_method_names(model))
-                estimator_type = utils.detect_estimator_type(model)
+                estimator_type = utils.detect_predictor_type(model)
                 if estimator_type is not None:
                     estimator_types.append(estimator_type)
                     
@@ -561,8 +576,17 @@ class MultichannelPipeline(Cloneable, Saveable):
             prediction = self.classes_[predictions]
         return predictions
     
-    def get_pipe(self, input_index, layer_index):
-        return self.layers[layer_index].get_pipe_from_input(input_index)
+    def get_pipe(self, layer_index, pipe_index, unwrap=True):
+        return self.layers[layer_index].get_pipe(pipe_index, unwrap)
+    
+    def get_model(self, layer_index, model_index, unwrap=True):
+        return self.layers[layer_index].get_model(model_index, unwrap)
+    
+    def get_pipe_from_channel(self, layer_index, channel_index, unwrap=True):
+        return self.layers[layer_index].get_pipe_from_channel(channel_index, unwrap)
+    
+    def get_model_from_channel(self, layer_index, channel_index, unwrap=True):
+        return self.layers[layer_index].get_model_from_channel(channel_index, unwrap)
     
     def get_clone(self):
         clone = super().get_clone()
