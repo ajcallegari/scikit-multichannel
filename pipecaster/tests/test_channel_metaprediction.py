@@ -35,9 +35,9 @@ class TestMultichannelClassification(unittest.TestCase):
         clf_predictions = clf.predict(X)
         n_channels = 1
         mclf = MultichannelPipeline(n_channels, internal_cv=None)
-        layer1 = mclf.get_next_layer()
+        layer1 = mclf.get_next_layer(pipe_processes=n_cpus)
         layer1[:] = utils.get_clone(clf, stateless=True)
-        layer2 = mclf.get_next_layer()
+        layer2 = mclf.get_next_layer(pipe_processes=n_cpus)
         layer2[:] = MultichannelPredictor(SoftVotingClassifier())
         mclf.fit([X], y)
         mclf_predictions = mclf.predict([X])
@@ -53,9 +53,9 @@ class TestMultichannelClassification(unittest.TestCase):
         clf_predictions = clf.predict(X)
         n_channels = 1
         mclf = MultichannelPipeline(n_channels, internal_cv=None)
-        layer1 = mclf.get_next_layer()
+        layer1 = mclf.get_next_layer(pipe_processes=n_cpus)
         layer1[:] = utils.get_clone(clf, stateless=True)
-        layer2 = mclf.get_next_layer()
+        layer2 = mclf.get_next_layer(pipe_processes=n_cpus)
         layer2[:] = MultichannelPredictor(HardVotingClassifier())
         mclf.fit([X], y)
         mclf_predictions = mclf.predict([X])
@@ -92,11 +92,11 @@ class TestMultichannelClassification(unittest.TestCase):
                                     )
 
             mclf = MultichannelPipeline(n_channels)
-            layer0 = mclf.get_next_layer()
+            layer0 = mclf.get_next_layer(pipe_processes=n_cpus)
             layer0[:] = StandardScaler()
-            layer1 = mclf.get_next_layer()
+            layer1 = mclf.get_next_layer(pipe_processes=n_cpus)
             layer1[:] = KNeighborsClassifier(n_neighbors=5, weights='uniform')
-            layer2 = mclf.get_next_layer()
+            layer2 = mclf.get_next_layer(pipe_processes=n_cpus)
             layer2[:] = MultichannelPredictor(SoftVotingClassifier())
 
             split_accuracies = cross_val_score(mclf, Xs, y, predict_method='predict', 
@@ -104,11 +104,11 @@ class TestMultichannelClassification(unittest.TestCase):
             soft_accuracies.append(np.mean(split_accuracies))
             
             mclf = MultichannelPipeline(n_channels)
-            layer0 = mclf.get_next_layer()
+            layer0 = mclf.get_next_layer(pipe_processes=n_cpus)
             layer0[:] = StandardScaler()
-            layer1 = mclf.get_next_layer()
+            layer1 = mclf.get_next_layer(pipe_processes=n_cpus)
             layer1[:] = KNeighborsClassifier(n_neighbors=5, weights='uniform')
-            layer2 = mclf.get_next_layer()
+            layer2 = mclf.get_next_layer(pipe_processes=n_cpus)
             layer2[:] = MultichannelPredictor(HardVotingClassifier())
             split_accuracies = cross_val_score(mclf, Xs, y, predict_method='predict', 
                                      scorer=roc_auc_score, cv=3, n_processes=1)
@@ -166,15 +166,15 @@ class TestMultichannelClassification(unittest.TestCase):
                                     **sklearn_params                                   
                                     )
             mclf = MultichannelPipeline(n_channels)
-            layer0 = mclf.get_next_layer()
+            layer0 = mclf.get_next_layer(pipe_processes=n_cpus)
             layer0[:] = StandardScaler()
-            layer1 = mclf.get_next_layer()
+            layer1 = mclf.get_next_layer(pipe_processes=n_cpus)
             layer1[:] = KNeighborsClassifier(n_neighbors=5, weights='uniform')
-            layer2 = mclf.get_next_layer()
+            layer2 = mclf.get_next_layer(pipe_processes=1)
             layer2[:] = MultichannelPredictor(SVC())
 
             split_accuracies = cross_val_score(mclf, Xs, y, predict_method='predict', 
-                                     scorer=roc_auc_score, cv=3, n_processes=n_cpus)
+                                     scorer=roc_auc_score, cv=3, n_processes=1)
             accuracies.append(np.mean(split_accuracies))
             
         if n_cpus > 1:
@@ -210,9 +210,9 @@ class TestMultiChannelRegression(unittest.TestCase):
         
         n_channels = 1
         mrgr = MultichannelPipeline(n_channels, internal_cv=None)
-        layer1 = mrgr.get_next_layer()
+        layer1 = mrgr.get_next_layer(pipe_processes=n_cpus)
         layer1[:] = utils.get_clone(rgr, stateless=True)
-        layer2 = mrgr.get_next_layer()
+        layer2 = mrgr.get_next_layer(pipe_processes=n_cpus)
         layer2[:] = MultichannelPredictor(AggregatingRegressor(np.mean))
         mrgr.fit([X], y)
         mrgr_predictions = mrgr.predict([X])
@@ -249,26 +249,26 @@ class TestMultiChannelRegression(unittest.TestCase):
                                     )
 
             mrgr = MultichannelPipeline(n_channels)
-            layer0 = mrgr.get_next_layer()
+            layer0 = mrgr.get_next_layer(pipe_processes=n_cpus)
             layer0[:] = StandardScaler()
-            layer1 = mrgr.get_next_layer()
+            layer1 = mrgr.get_next_layer(pipe_processes=n_cpus)
             layer1[:] = KNeighborsRegressor(n_neighbors=20, weights='distance')
             layer2 = mrgr.get_next_layer()
             layer2[:] = MultichannelPredictor(AggregatingRegressor(np.mean))
 
             split_accuracies = cross_val_score(mrgr, Xs, y, predict_method='predict', 
-                                     scorer=explained_variance_score, cv=3, n_processes=n_cpus)
+                                     scorer=explained_variance_score, cv=3, n_processes=1)
             mean_accuracies.append(np.mean(split_accuracies))
             
             mrgr = MultichannelPipeline(n_channels)
-            layer0 = mrgr.get_next_layer()
+            layer0 = mrgr.get_next_layer(pipe_processes=n_cpus)
             layer0[:] = StandardScaler()
-            layer1 = mrgr.get_next_layer()
+            layer1 = mrgr.get_next_layer(pipe_processes=n_cpus)
             layer1[:] = KNeighborsRegressor(n_neighbors=20, weights='distance')
             layer2 = mrgr.get_next_layer()            
             layer2[:] = MultichannelPredictor(AggregatingRegressor(np.median))
             split_accuracies = cross_val_score(mrgr, Xs, y, predict_method='predict', 
-                                     scorer=explained_variance_score, cv=3, n_processes=n_cpus)
+                                     scorer=explained_variance_score, cv=3, n_processes=1)
             median_accuracies.append(np.mean(split_accuracies))
             
         n_informatives = range(0, n_channels + 1)    
@@ -332,15 +332,15 @@ class TestMultiChannelRegression(unittest.TestCase):
                                     )
 
             mrgr = MultichannelPipeline(n_channels)
-            layer0 = mrgr.get_next_layer()
+            layer0 = mrgr.get_next_layer(pipe_processes=n_cpus)
             layer0[:] = StandardScaler()
-            layer1 = mrgr.get_next_layer()
+            layer1 = mrgr.get_next_layer(pipe_processes=n_cpus)
             layer1[:] = LinearRegression()
             layer2 = mrgr.get_next_layer()
             layer2[:] = MultichannelPredictor(SVR())
 
             split_accuracies = cross_val_score(mrgr, Xs, y, predict_method='predict', 
-                                     scorer=explained_variance_score, cv=3, n_processes=n_cpus)
+                                     scorer=explained_variance_score, cv=3, n_processes=1)
             accuracies.append(np.mean(split_accuracies))
 
             
@@ -396,12 +396,12 @@ class TestMultiChannelRegression(unittest.TestCase):
                                     )
 
             mrgr = MultichannelPipeline(n_channels)
-            mrgr.add_layer(StandardScaler())
-            mrgr.add_layer(LinearRegression())
+            mrgr.add_layer(StandardScaler(), pipe_processes=n_cpus)
+            mrgr.add_layer(LinearRegression(), pipe_processes=n_cpus)
             mrgr.add_layer(MultichannelPredictor(SVR()))
 
             split_accuracies = cross_val_score(mrgr, Xs, y, predict_method='predict', 
-                                     scorer=explained_variance_score, cv=3, n_processes=n_cpus)
+                                     scorer=explained_variance_score, cv=3, n_processes=1)
             accuracies.append(np.mean(split_accuracies))
 
             
@@ -457,12 +457,12 @@ class TestMultiChannelRegression(unittest.TestCase):
                                     )
 
             mrgr = MultichannelPipeline(n_channels)
-            mrgr.add_layer(3, StandardScaler(), 3, StandardScaler())
-            mrgr.add_layer(2, LinearRegression(), 3, LinearRegression())
+            mrgr.add_layer(3, StandardScaler(), 3, StandardScaler(), pipe_processes=n_cpus)
+            mrgr.add_layer(2, LinearRegression(), 3, LinearRegression(), pipe_processes=n_cpus)
             mrgr.add_layer(5, MultichannelPredictor(SVR()))
 
             split_accuracies = cross_val_score(mrgr, Xs, y, predict_method='predict', 
-                                     scorer=explained_variance_score, cv=3, n_processes=n_cpus)
+                                     scorer=explained_variance_score, cv=3, n_processes=1)
             accuracies.append(np.mean(split_accuracies))
 
             

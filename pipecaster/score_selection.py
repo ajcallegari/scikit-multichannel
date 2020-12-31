@@ -31,9 +31,9 @@ class PctRankScoreSelector(Cloneable, Saveable):
             selected_indices = RankScoreSelector(self.n_min)(scores)
         return selected_indices
     
-class CutoffScoreSelector(Cloneable, Saveable, n_min=1):
+class CutoffScoreSelector(Cloneable, Saveable):
     
-    def __init__(self, cutoff=0.0):
+    def __init__(self, cutoff=0.0, n_min=1):
         self._params_to_attributes(CutoffScoreSelector.__init__, locals())
 
         

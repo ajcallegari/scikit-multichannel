@@ -120,8 +120,12 @@ def cross_val_predict(predictor, Xs, y=None, groups=None, predict_method='predic
         
     args_list = [(predictor, Xs, y, train_indices, test_indices, predict_method, fit_params) 
                 for train_indices, test_indices in splits] 
+    
+    n_jobs = len(args_list)
+    n_processes = 1 if n_processes is None else n_processes
+    n_processes = n_jobs if (type(n_processes) == int and n_jobs < n_processes) else n_processes
             
-    if n_processes != 1:
+    if n_processes == 'max' or n_processes > 1:
         try:
             shared_mem_objects = [Xs, y, fit_params]
             prediction_blocks = parallel.starmap_jobs(fit_and_predict, args_list, 

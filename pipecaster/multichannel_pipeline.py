@@ -2,13 +2,15 @@ import numpy as np
 import functools
 
 import pipecaster.utils as utils
+import pipecaster.parallel as parallel
 from pipecaster.utils import Cloneable, Saveable, FitError
 import pipecaster.transform_wrappers as transform_wrappers
 
 __all__ = ['Layer', 'MultichannelPipeline', 'ChannelConcatenator']
 
         
-def get_live_channels(channel_indices, Xs):
+def get_live_channels(Xs, channel_indices=None):
+    channel_indices = range(len(Xs)) if channel_indices is None else channel_indices
     if type(channel_indices) == int:
         live_channels = [] if Xs[channel_indices] is None else [channel_indices]
     else:
@@ -16,7 +18,7 @@ def get_live_channels(channel_indices, Xs):
     return live_channels
 
 def has_live_channels(channel_indices, Xs):
-    return True if len(get_live_channels(channel_indices, Xs)) > 0 else False
+    return True if len(get_live_channels(Xs, channel_indices)) > 0 else False
        
 class Layer(Cloneable, Saveable):
     """A list of transformer and/or predictor instances with channel mappings to con
@@ -34,7 +36,7 @@ class Layer(Cloneable, Saveable):
     
     state_variables = ['_all_channels', '_mapped_channels', '_estimator_type'] 
     
-    def __init__(self, n_channels):
+    def __init__(self, n_channels, pipe_processes=1):
         self._params_to_attributes(Layer.__init__, locals())
         self.pipe_list = []
         self._all_channels = set(range(n_channels))
@@ -127,8 +129,68 @@ class Layer(Cloneable, Saveable):
                 return transform_wrappers.unwrap_model(model) if unwrap else model
         return None
     
-    def fit_transform(self, Xs, y=None, transform_method_name=None, internal_cv=5, 
-                      cv_processes=1, **fit_params):
+    @staticmethod
+    def _fit_transform_job(pipe, Xs, y, fit_params, slice_, channel_indices, 
+                           transform_method_name, internal_cv, cv_processes):
+        
+        input_ = Xs[slice_] if utils.is_multichannel(pipe) else Xs[slice_][0]                
+        model = utils.get_clone(pipe)
+
+        if hasattr(model, 'fit_transform'):
+            try:
+                if utils.is_multichannel(model):
+                    if y is None:
+                        Xs_t = model.fit_transform(input_, **fit_params)
+                    else:
+                        Xs_t = model.fit_transform(input_, y, **fit_params)
+                else:
+                    if y is None:
+                        Xs_t = [model.fit_transform(input_, **fit_params)]
+                    else:
+                        Xs_t = [model.fit_transform(input_, y, **fit_params)]
+            except Exception as e:
+                raise FitError('pipe {} raised an error on fit_transform(): {}'.format(model.__class__.__name__, e))
+
+        elif hasattr(model, 'fit') and hasattr(pipe, 'transform'):
+            try:
+                if y is not None:
+                    model.fit(input_, **fit_params)
+                else:
+                    model.fit(input_, y, **fit_params)
+            except Exception as e:
+                raise FitError('pipe {} raised an error on fit(): {}'.format(model.__class__.__name__, e))
+            if utils.is_multichannel(model):
+                Xs_t = model.transform(input_)
+            else:
+                Xs_t = [model.transform(input_)]     
+
+        elif utils.is_predictor(model):
+
+            if utils.is_multichannel(model):
+                if type(internal_cv) == int and internal_cv < 2:
+                    model = transform_wrappers.Multichannel(model, transform_method_name)
+                else:
+                    model = transform_wrappers.MultichannelCV(model, transform_method_name, 
+                                                              internal_cv, cv_processes)
+                if y is None:
+                    Xs_t = model.fit_transform(input_, **fit_params) 
+                else:
+                    Xs_t = model.fit_transform(input_, y, **fit_params)
+            else:
+                if type(internal_cv) == int and internal_cv < 2:
+                    model = transform_wrappers.SingleChannel(model, transform_method_name)
+                else:
+                    model = transform_wrappers.SingleChannelCV(model, transform_method_name, 
+                                                               internal_cv, cv_processes)
+                if y is None:
+                    Xs_t = [model.fit_transform(input_, **fit_params)]
+                else:
+                    Xs_t = [model.fit_transform(input_, y, **fit_params)] 
+                    
+        return Xs_t, model, slice_, channel_indices
+    
+    def fit_transform(self, Xs, y=None, transform_method_name=None, internal_cv=5, cv_processes=1,
+                      **fit_params):
         """
         For each pipe in this layer, call fit_transform() if available, fall back on fit() then transform(), 
         or automatically convert predictors into transformers to enable meta-prediction.  
@@ -162,67 +224,35 @@ class Layer(Cloneable, Saveable):
         The wrapper and internal cv training is set by the 'internal_cv' parameter in fit_params if available.  
         If there is no 'internal_cv' parameter in fit_params, 
         """
-        
-        Xs_t = Xs.copy() 
-        self.model_list = []
+        args_list = []
+        live_pipes = []
         for i, (pipe, slice_, channel_indices) in enumerate(self.pipe_list):
             if has_live_channels(channel_indices, Xs):
-                input_ = Xs[slice_] if utils.is_multichannel(pipe) else Xs[slice_][0]                
-                model = utils.get_clone(pipe)
+                args_list.append((pipe, Xs, y, fit_params, slice_, channel_indices, 
+                                  transform_method_name, internal_cv, cv_processes))
+                live_pipes.append(i)
                 
-                if hasattr(model, 'fit_transform'):
-                    try:
-                        if utils.is_multichannel(pipe):
-                            if y is None:
-                                Xs_t[slice_] = model.fit_transform(input_, **fit_params)
-                            else:
-                                Xs_t[slice_] = model.fit_transform(input_, y, **fit_params)
-                        else:
-                            if y is None:
-                                Xs_t[channel_indices[0]] = model.fit_transform(input_, **fit_params)
-                            else:
-                                Xs_t[channel_indices[0]] = model.fit_transform(input_, y, **fit_params)
-                    except Exception as e:
-                        raise FitError('pipe {} raised an error on fit_transform(): {}'.format(model.__class__.__name__, e))
-                        
-                elif hasattr(model, 'fit') and hasattr(pipe, 'transform'):
-                    try:
-                        if y is not None:
-                            model.fit(input_, **fit_params)
-                        else:
-                            model.fit(input_, y, **fit_params)
-                    except Exception as e:
-                        raise FitError('pipe {} raised an error on fit(): {}'.format(model.__class__.__name__, e))
-                    if utils.is_multichannel(model):
-                        Xs_t[slice_] = model.transform(input_)
-                    else:
-                        Xs_t[channel_indices[0]] = model.transform(input_)       
-                        
-                elif utils.is_predictor(model):
-                    
-                    if utils.is_multichannel(model):
-                        if type(internal_cv) == int and internal_cv < 2:
-                            model = transform_wrappers.Multichannel(model, transform_method_name)
-                        else:
-                            model = transform_wrappers.MultichannelCV(model, transform_method_name, 
-                                                                      internal_cv, cv_processes)
-                        if y is None:
-                            Xs_t[channel_indices[0]] = model.fit_transform(input_, **fit_params) 
-                        else:
-                            Xs_t[channel_indices[0]] = model.fit_transform(input_, y, **fit_params)
-                    else:
-                        if type(internal_cv) == int and internal_cv < 2:
-                            model = transform_wrappers.SingleChannel(model, transform_method_name)
-                        else:
-                            model = transform_wrappers.SingleChannelCV(model, transform_method_name, 
-                                                                       internal_cv, cv_processes)
-                        if y is None:
-                            Xs_t[channel_indices[0]] = model.fit_transform(input_, **fit_params) 
-                        else:
-                            Xs_t[channel_indices[0]] = model.fit_transform(input_, y, **fit_params)
-                    
-            self.model_list.append((model, slice_, channel_indices))
-        
+        n_jobs = len(args_list)
+        n_processes = 1 if self.pipe_processes is None else self.pipe_processes
+        n_processes = n_jobs if (type(n_processes) == int and n_jobs < n_processes) else n_processes
+        if n_processes == 'max' or n_processes > 1:
+            try:
+                shared_mem_objects = [Xs, y, fit_params, internal_cv, cv_processes]
+                fit_results = parallel.starmap_jobs(Layer._fit_transform_job, args_list, n_cpus=n_processes, 
+                                                    shared_mem_objects=shared_mem_objects)
+            except Exception as e:
+                print('parallel processing request failed with message {}'.format(e))
+                print('defaulting to single processor')
+                n_processes = 1       
+        if n_processes is None or n_processes <= 1:
+            # print('running a single process with {} jobs'.format(len(args_list)))
+            fit_results = [Layer._fit_transform_job(*args) for args in args_list]
+    
+        self.model_list = [(model, slice_, channel_indices) for _, model, slice_, channel_indices in fit_results]
+        Xs_t = [None for X in Xs]
+        for pipe_Xs_t, _, slice_, _ in fit_results:
+            Xs_t[slice_] = pipe_Xs_t
+            
         return Xs_t
     
     def fit_last(self, Xs, y=None, transform_method_name=None, internal_cv=5, cv_processes=1, **fit_params):
@@ -259,7 +289,6 @@ class Layer(Cloneable, Saveable):
             if has_live_channels(channel_indices, Xs):
                 model = utils.get_clone(pipe)
                 input_ = Xs[slice_] if utils.is_multichannel(model) else Xs[slice_][0]                
-                
                 if hasattr(model, 'transform') == False:
                     if utils.is_multichannel(model):
                         model = transform_wrappers.Multichannel(model, transform_method_name)
@@ -453,15 +482,15 @@ class MultichannelPipeline(Cloneable, Saveable):
         self._params_to_attributes(MultichannelPipeline.__init__, locals())
         self.layers = []
         
-    def get_new_layer(self):
-        return Layer(self.n_channels)
+    def get_new_layer(self, pipe_processes=1):
+        return Layer(self.n_channels, pipe_processes)
     
-    def get_next_layer(self):
-        layer = self.get_new_layer()
+    def get_next_layer(self, pipe_processes=1):
+        layer = self.get_new_layer(pipe_processes)
         self.layers.append(layer)
         return layer
             
-    def add_layer(self, *pipe_mapping):
+    def add_layer(self, *pipe_mapping, pipe_processes=1):
         """
         Add a layer of pipes to the pipeline.
         
@@ -477,6 +506,8 @@ class MultichannelPipeline(Cloneable, Saveable):
                 repeated for each input channel specified by the int argument, and multichannel pipes are 
                 automatically set to receive the number of inputs specified by the int arugment.  Input channels
                 are mapped sequentially in the order in which the arguments are entered in the function call.
+        pipe_processes: int or 'max'
+            The number of parallel processes to allow for the layer.
 
         returns:
             self (MultiChannelPipeline)
@@ -514,7 +545,7 @@ class MultichannelPipeline(Cloneable, Saveable):
             if len(pipes) > self.n_channels:
                 raise TypeError('too many arguments: more pipe mappings than pipeline channels')
 
-        new_layer = Layer(self.n_channels)
+        new_layer = Layer(self.n_channels, pipe_processes)
         first_index = 0
         for n, pipe in zip(n_channels, pipes):
             last_index = first_index + n
@@ -523,7 +554,27 @@ class MultichannelPipeline(Cloneable, Saveable):
                     
         self.layers.append(new_layer)
         return self
-            
+    
+    def set_pipe_processes(self, pipe_processes):
+        """
+        Set the number of parallel processes used during fitting of the model.
+        
+        Paramteters
+        -----------
+        pipe_processes: int, 'max', or iterable of int/'max'
+            int: Every layer is set to use the same number of parallel processes.
+            'max': Every layer is set to use up to the maximum number of available processes.
+            iterable: The number of processes is set for each layer according to the values in the list
+        """
+        if isinstance(pipe_processes, (tuple, list, np.array)):
+            if len(pipe_processes) != len(self.layers):
+                raise ValueError('Number of pipe process values do not match the number of layers.')
+            for n, layer in zip(pipe_processes, self.layers):
+                layer.pipe_processes = n
+        else:
+            for layer in self.layers:
+                layer.pipe_processes = pipe_processes
+                
     def fit(self, Xs, y=None, **fit_params):
         if hasattr(self.layers[-1], '_estimator_type'):
             self._estimator_type = self.layers[-1]._estimator_type

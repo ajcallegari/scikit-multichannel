@@ -222,9 +222,10 @@ class SelectivePredictorStack(Cloneable, Saveable):
                                 for p in self.base_predictors]
             
         args_list = [(p, X, y, fit_params) for p in self.base_predictors]
-        
-        n_processes = self.base_processes
-        if n_processes is not None and n_processes > 1:
+        n_jobs = len(args_list)
+        n_processes = 1 if self.base_processes is None else self.base_processes
+        n_processes = n_jobs if (type(n_processes) == int and n_jobs < n_processes) else n_processes
+        if n_processes=='max' or n_processes > 1:
             try:
                 shared_mem_objects = [X, y, fit_params]
                 fit_results = parallel.starmap_jobs(SelectivePredictorStack._fit_job, args_list, n_cpus=n_processes, 
