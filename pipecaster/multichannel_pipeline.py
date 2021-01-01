@@ -419,7 +419,6 @@ class MultichannelPipeline(Cloneable, Saveable):
         the pipeline.  When manually wrapping predictors, parameters should be uniform throughout the pipeline
         if you want to ensure that no meta-predcitors are trained on their own training examples.
     
-    
     Fitting, Predicting, and Transforming
     --------------------------------------
     
@@ -470,6 +469,9 @@ class MultichannelPipeline(Cloneable, Saveable):
     Internally (i.e. on calls to layer.fit_tranform()), fit_transform() is a signal that predictors 
         need to be wrapped with transform_wrappers with cross validation training.  However, calling
         fit_transform on a MultichannelPipeline will not wrap
+    Fit failures are currently not handled / allowed.
+    Multi-output prediction not yet supported.
+    Groups for internal cv not yet supported.
     """
     
     def __init__(self, n_channels=1, transform_method_name=None, internal_cv=5, cv_processes=1):
@@ -518,7 +520,6 @@ class MultichannelPipeline(Cloneable, Saveable):
         There is no stateless sklearn-like clone implemented because MultiChannelPipeline arguments
         are not sufficient to reproduce the pipeline.  Use MultiChannelPipeline.get_clone() to
         get a stateful clone or rebuild pipeline from scratch to get a stateless clone(). 
-        
         """
         
         if len(pipe_mapping) == 1 and type(pipe_mapping) == Layer:

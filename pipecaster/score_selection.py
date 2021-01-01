@@ -14,8 +14,10 @@ class RankScoreSelector(Cloneable, Saveable):
         self.k = k if k >=1 else k
         
     def __call__(self, scores):
+        scores = np.array(scores)
+        scores[scores == None] = np.nan
         k = len(scores) if self.k > len(scores) else self.k
-        return set(np.argsort(scores)[-k:])
+        return np.argsort(scores)[-k:]
     
 class PctRankScoreSelector(Cloneable, Saveable):
         
@@ -23,6 +25,8 @@ class PctRankScoreSelector(Cloneable, Saveable):
         self._params_to_attributes(PctRankScoreSelector.__init__, locals())
         
     def __call__(self, scores):
+        scores = np.array(scores)
+        scores[scores == None] = np.nan
         k = int(len(scores) * self.pct/100.0)
         k = 1 if k < 1 else k
         k = len(scores) if k > len(scores) else k
@@ -35,9 +39,10 @@ class CutoffScoreSelector(Cloneable, Saveable):
     
     def __init__(self, cutoff=0.0, n_min=1):
         self._params_to_attributes(CutoffScoreSelector.__init__, locals())
-
         
     def __call__(self, scores):
+        scores = np.array(scores)
+        scores[scores == None] = np.nan
         selected_indices = np.flatnonzero(np.array(scores) > self.cutoff)
         if len(selected_indices) < self.n_min:
             selected_indices = RankScoreSelector(self.n_min)(scores)
@@ -49,6 +54,8 @@ class VarianceCutoffScoreSelector(Cloneable, Saveable):
         self._params_to_attributes(VarianceCutoffScoreSelector.__init__, locals())
         
     def __call__(self, scores):
+        scores = np.array(scores)
+        scores[scores == None] = np.nan
         scores = np.array(scores)
         variance = self.get_variance(scores)
         baseline = self.get_baseline(scores)
