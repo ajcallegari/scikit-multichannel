@@ -125,6 +125,7 @@ class ModelSelector(Cloneable, Saveable):
             raise ValueError('No predictors found.')
             
         if isinstance(predictors, (list, tuple, np.ndarray)):
+            import pdb; pdb.set_trace()
             estimator_types = [p._estimator_type for p in predictors]
         else:
             estimator_types = [predictors._estimator_type]
@@ -165,8 +166,17 @@ class ModelSelector(Cloneable, Saveable):
             setattr(self, method_name, prediction_method)
     
     @staticmethod
-    def _fit_job(predictor, X, y, fit_params):
+    def _fit_job(predictor, X, y, fit_params, cv, scorer, cv_processes):
+        
+        if X is None:
+            return None, None
+        
+        if type(predictor) in [transform_wrappers.SingleChannelCV, transform_wrappers.MultichannelCV]:
+            raise TypeError('CV transform_wrapper found in predictors (disallowed to promote uniform wrapping)')
+        
         model = utils.get_clone(predictor)
+        model = transform_wrappers.SingleChannelCV(model, internal_cv=cv, scorer=scorer, 
+                                                   cv_processes=cv_processes)            
         if y is None:
             predictions = model.fit_transform(X, **fit_params)
         else:
@@ -186,25 +196,16 @@ class ModelSelector(Cloneable, Saveable):
         else:
             predictors = [self.predictors if X is not None else None for X in Xs]
             
-        # wrap predictors for transforming, remove predictors if channel is dead
-        for i, predictor in enumerate(predictors):
-            if Xs[i] is None:
-                predictors[i] = None
-                continue
-            if type(predictor) in [transform_wrappers.SingleChannelCV, transform_wrappers.MultichannelCV]:
-                raise TypeError('CV transform_wrapper found in predictors (disallowed to promote uniform wrapping)')
-                
-            predictors[i] = transform_wrappers.SingleChannelCV(predictor, internal_cv=self.cv, 
-                                                               scorer=self.scorer, cv_processes=self.cv_processes)
+        cv, scorer, cv_processes = self.cv, self.scorer, self.cv_processes
+        args_list = [(p, X, y, fit_params, cv, scorer, cv_processes) 
+                     for p, X in zip(predictors, Xs)]
         
-        # build list of active channels for parallel processing
-        active_X_indices = [i for i, X in enumerate(Xs) if X is not None]
-        args_list = [(p, X, y, fit_params) for p, X in zip(predictors, Xs) if X is not None]
-        
-        n_processes = self.channel_processes
-        if n_processes is not None and n_processes > 1:
+        n_jobs = len(args_list)
+        n_processes = 1 if self.channel_processes is None else self.channel_processes
+        n_processes = n_jobs if (type(n_processes) == int and n_jobs < n_processes) else n_processes
+        if n_processes == 'max' or n_processes > 1:
             try:
-                shared_mem_objects = [y, fit_params]
+                shared_mem_objects = [y, fit_params, cv, scorer, cv_processes]
                 fit_results = parallel.starmap_jobs(ModelSelector._fit_job, args_list, 
                                                     n_cpus=self.channel_processes, 
                                                     shared_mem_objects=shared_mem_objects)
@@ -212,24 +213,16 @@ class ModelSelector(Cloneable, Saveable):
                 print('parallel processing request failed with message {}'.format(e))
                 print('defaulting to single processor')
                 n_processes = 1    
-                
         if n_processes is None or n_processes <= 1:
             # print('running a single process with {} jobs'.format(len(args_list)))
             fit_results = [ModelSelector._fit_job(*args) for args in args_list]
                 
         models, predictions_list = zip(*fit_results) 
-        model_scores = [p.score_ for p in models]
-            
-        # expand active lists back into channel lists
-        channel_models = [None for X in Xs]
-        channel_scores = [None for X in Xs]
-        for i, j in enumerate(active_X_indices):
-            channel_models[j] = models[i]
-            channel_scores[j] = model_scores[i]
-        self.selected_indices_ = self.score_selector(channel_scores)
+        model_scores = [m.score_ if m is not None else None for m in models]
+        self.selected_indices_ = self.score_selector(model_scores)
         
         # store only the selected models for future use
-        self.models = [m if i in self.selected_indices_ else None for i, m in enumerate(channel_models)]
+        self.models = [m if i in set(self.selected_indices_) else None for i, m in enumerate(models)]
         
         # make predict_proba and decision_function synonymous to enable metaprediction with mixed nomenclature
         for model in self.models:
