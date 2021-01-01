@@ -8,7 +8,7 @@ from pipecaster.cross_validation import cross_val_predict
 """
 Wrapper classes that provide single channel and multichannel predictors with transform/fit_transform methods, internal cv_training, and internal_cv performance scoring.  Used for meta-prediction and model selection.  Conversion of 
 prediction methods to tranform methods is done using the transform_method_name argument, but this argument can usually
-be left at it's default value of None to allow autoconversion using the precedence of prediction functions defined in the 
+be left at its default value of None to allow autoconversion using the precedence of prediction functions defined in the 
 transform_method_precedence module variable.
 
 Examples

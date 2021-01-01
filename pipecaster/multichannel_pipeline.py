@@ -137,28 +137,22 @@ class Layer(Cloneable, Saveable):
         model = utils.get_clone(pipe)
 
         if hasattr(model, 'fit_transform'):
-            try:
-                if utils.is_multichannel(model):
-                    if y is None:
-                        Xs_t = model.fit_transform(input_, **fit_params)
-                    else:
-                        Xs_t = model.fit_transform(input_, y, **fit_params)
+            if utils.is_multichannel(model):
+                if y is None:
+                    Xs_t = model.fit_transform(input_, **fit_params)
                 else:
-                    if y is None:
-                        Xs_t = [model.fit_transform(input_, **fit_params)]
-                    else:
-                        Xs_t = [model.fit_transform(input_, y, **fit_params)]
-            except Exception as e:
-                raise FitError('pipe {} raised an error on fit_transform(): {}'.format(model.__class__.__name__, e))
+                    Xs_t = model.fit_transform(input_, y, **fit_params)
+            else:
+                if y is None:
+                    Xs_t = [model.fit_transform(input_, **fit_params)]
+                else:
+                    Xs_t = [model.fit_transform(input_, y, **fit_params)]
 
         elif hasattr(model, 'fit') and hasattr(pipe, 'transform'):
-            try:
-                if y is not None:
-                    model.fit(input_, **fit_params)
-                else:
-                    model.fit(input_, y, **fit_params)
-            except Exception as e:
-                raise FitError('pipe {} raised an error on fit(): {}'.format(model.__class__.__name__, e))
+            if y is not None:
+                model.fit(input_, **fit_params)
+            else:
+                model.fit(input_, y, **fit_params)
             if utils.is_multichannel(model):
                 Xs_t = model.transform(input_)
             else:
@@ -199,13 +193,17 @@ class Layer(Cloneable, Saveable):
         ----------
         Xs: list of [ndarray.shape(n_samples, n_features) or None]
         y: targets, default=None
+        
+        transform_method_name, internal_cv, and cv_processes override the default parameters for adding 
+            transform functionality to the predictors in this layer.
+        
         transform_method_name: string or None, default=None
-            Set the name of the method to be used when transforming with a predictor. If None, the method
+            Set the name of the prediction method used when transform or fit_transform are called. If None, the method
             will be selected automatically by the precedence defined in the transform_wrapper module.
         internal_cv: None, int, or cv split generator, default=5
-            Control the autoconversion of predictors into transformers for meta-prediction.
-            If an integer above 1 or a split generator, wrap pipes lacking transform methods in CvTransformer
-            If None or int below 2, wrap pipes lacking transform methods in PredictingTransformer
+            Control internal cv training for meta-prediction purposes.
+            int > 1 or splitter: provide predictors with internal cv training
+            None or int < 2: inactivate internal cv training 
         fit_params: dict, default={}
             Auxiliary parameters to be sent to the fit_transform or fit methods of the pipes.
             Currently there is not support for pipe-specific parameters, but this is on the short-list.
@@ -274,11 +272,7 @@ class Layer(Cloneable, Saveable):
         
         Notes
         -----
-        Models are only fit/transformed for active channels.
-        Classes that lack transform methods and have a prediction method are automatically converted 
-            to transformers by wrapping them in the following classes from the transform_wrappers module:
-            SingleChannel, SingleChennelCV, Multichannel, MultichannelCV).  The conversion process is controlled
-            by the transform_method_precedence variable in the transform_wrappers module.
+
 
         """
         

@@ -1,13 +1,13 @@
 # pipecaster
 (in progress)
 
-Pipecaster is a Python library for building multichannel machine learning pipelines and for in-pipeline screening of hyperparameters, models, data sources, and feature engineering steps.  The current version supports algorithms with the scikit-learn transformer and predictor interfaces.
+Pipecaster is a Python library for building multichannel machine learning pipelines and for in-pipeline screening of hyperparameters, models, data sources, feature extraction steps, and feature engineering steps.  The current version supports algorithms with the scikit-learn transformer and predictor interfaces.
 
 ## multichannel machine learning
 
-When building an ML pipeline with inputs from multiple data sources or from multiple feature engineering methods, better predictive accuracy is sometimes obtained by keeping the different inputs siloed in separate channels through initial feature selection and machine learning steps and then generating ensemble predictions via predictor voting or model stacking.  
+When building an ML pipeline with inputs from multiple data sources or from multiple feature extraction/engineering methods, better predictive accuracy is sometimes obtained by keeping the different inputs siloed in separate channels through initial feature selection and machine learning steps before generating ensemble predictions via predictor voting or model stacking.  
 
-Pipecaster provides a *MultichannelPipeline* class to simplify the construction of multichannel ensemble architectures.  Slice notation makes it easy to create wide pipelines (many inputs) by broadcasting operations across multiple input channels. A keras-like layer-by-layer construction makes it easy to build deep pipelines with one or more voting or stacking layers.  
+Pipecaster provides a *MultichannelPipeline* class to simplify the construction of multichannel ensemble architectures.  This class makes it easy to create wide pipelines (many inputs) by broadcasting construction operations across multiple input channels, and deep pipelines (many layers) with a Keras-like layer-by-layer construction workflow.  
 
 *MultichannelPipeline* has the familiar scikit-learn transformer and predictor interfaces but with a list of input matrices in place of a single matrix:  
 
@@ -19,8 +19,12 @@ pipecaster MultichannelPipeline:
 `pipeline.fit(Xs, y).predict(Xs)`  
 `pipeline.fit(Xs, y).transform(Xs).`  
 
+pipecaster MultichannelPipeline with a single input matrix:  
+`pipeline.fit([X], y).predict([X])`  
+`pipeline.fit([X], y).transform([X]).`  
+
 ## in-pipeline screening
-A typical ML workflow involves screening input sources, feature engineering steps, ML algorithms, and model hyperparameters.  Pipecaster allows you to semi-automate each of these screening tasks by including them in the ML pipeline.  This can be useful when you are developing a large number of different pipelines in parallel and don't have time to optimize each one separately, and it may accelerate ML workflows in general.  
+A typical ML workflow involves screening input sources, feature extraction & engineering steps, ML algorithms, and model hyperparameters.  Pipecaster allows you to semi-automate each of these screening tasks by including them in the ML pipeline.  This can be useful when you are developing a large number of different pipelines in parallel and don't have time to optimize each one separately, and it may accelerate ML workflows in general.  
 
 In addition, pipecaster introduces channel selectors that select input channels based on aggregate feature scores or information content estimated using probe ML models or full ML models.  Channel selection is intended to prevent garbage from flowing into and out of your machine learning pipelines.
 

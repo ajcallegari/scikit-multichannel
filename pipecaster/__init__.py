@@ -1,14 +1,6 @@
-"""
-from pipecaster.channel_selection import *
-from pipecaster.cross_validation import *
-from pipecaster.channel_metaprediction import *
-from pipecaster.pipeline import *
-from pipecaster.channel_model_selection import *
-from pipecaster.transforming_predictors import *
-"""
-
-
-import pipecaster.transform_wrappers as transform_wrappers
+from pipecaster.transform_wrappers import *
 from pipecaster.multichannel_pipeline import *
 from pipecaster.ensemble_learning import *
+from pipecaster.channel_scoring import *
+from pipecaster.score_selection import *
 from pipecaster.channel_selection import *

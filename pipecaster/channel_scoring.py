@@ -19,6 +19,7 @@ class AggregateFeatureScorer(Cloneable, Saveable):
         if X is None:
             return None
         else:
+            #import pdb; pdb.set_trace()
             score_func_ret = self.feature_scorer(X, y)
             if isinstance(score_func_ret, (list, tuple)):
                 scores = np.array(score_func_ret[0]).astype(float)
