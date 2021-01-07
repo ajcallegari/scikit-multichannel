@@ -134,7 +134,6 @@ class TestSelectivePredictorStack(unittest.TestCase):
         Determine if SelectivePredictorStack with dummies correctly selects the real predictors and gives similar
         performance to scikit-learn StackingRegressor trained without dummies.
         """
-        
         X, y = make_regression(n_samples=500, n_features=20, n_informative=10, random_state=seed)
         
         regressors = [LinearRegression(), 
