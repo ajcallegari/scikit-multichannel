@@ -38,10 +38,8 @@ class TestChannelSelectors(unittest.TestCase):
                                                          n_random_Xs, weak_noise_sd, seed, **sklearn_params)
 
         clf = MultichannelPipeline(n_channels=n_Xs)
-        layer0 = clf.get_next_layer()
-        layer0[:] = StandardScaler()
-        layer1 = clf.get_next_layer()
-        layer1[:] = channel_selector
+        clf.add_layer(StandardScaler())
+        clf.add_layer(channel_selector)
         clf.fit(Xs, y)
         Xs_t = clf.transform(Xs)
         Xs_selected = ['selected' if X is not None else 'not selected' for X in Xs_t]
@@ -211,10 +209,8 @@ class TestChannelSelectors(unittest.TestCase):
                                                                     n_random_Xs, weak_noise_sd, 
                                                                     seed, **sklearn_params)
         clf = MultichannelPipeline(n_channels=n_Xs)
-        layer0 = clf.get_next_layer()
-        layer0[:] = StandardScaler()
-        layer1 = clf.get_next_layer()
-        layer1[:] = channel_selector
+        clf.add_layer(StandardScaler())
+        clf.add_layer(channel_selector)
         Xs_t = clf.fit_transform(Xs, y)
         Xs_selected = ['selected' if X is not None else 'not selected' for X in Xs_t]
 

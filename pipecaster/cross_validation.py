@@ -1,7 +1,7 @@
 import numpy as np
 import scipy.sparse as sp
 
-from sklearn.metrics import accuracy_score, explained_variance_score
+from sklearn.metrics import balanced_accuracy_score, explained_variance_score
 from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import KFold, StratifiedKFold, GroupKFold
 
@@ -10,31 +10,29 @@ import pipecaster.parallel as parallel
 
 __all__ = ['cross_val_score', 'cross_val_predict']
 
-#### SINGLE MATRIX INPUTS ####
-
 def fit_and_predict(predictor, Xs, y, train_indices, test_indices, predict_method_name, fit_params):
-        predictor = utils.get_clone(predictor)
+        model = utils.get_clone(predictor)
         fit_params = {} if fit_params is None else fit_params
         
-        if utils.is_multichannel(predictor):
+        if utils.is_multichannel(model):
             X_trains = [X[train_indices] if X is not None else None for X in Xs]
-            predictor.fit(X_trains, y[train_indices], **fit_params)
+            model.fit(X_trains, y[train_indices], **fit_params)
         else:
-            predictor.fit(Xs[train_indices], y[train_indices], **fit_params)
+            model.fit(Xs[train_indices], y[train_indices], **fit_params)
             
-        if hasattr(predictor, predict_method_name):
-            predict_method = getattr(predictor, predict_method_name)
-            if utils.is_multichannel(predictor):
+        if hasattr(model, predict_method_name):
+            predict_method = getattr(model, predict_method_name)
+            if utils.is_multichannel(model):
                 X_tests = [X[test_indices] if X is not None else None for X in Xs]
                 predictions = predict_method(X_tests)
             else:
                 predictions = predict_method(Xs[test_indices])
         else:
-            raise AttributeError('invalid predict method')
+            raise AttributeError('Predict method not found.')
             
-        prediction_block = (predictions, test_indices)
+        split_results = (predictions, test_indices)
         
-        return prediction_block
+        return split_results
 
 def cross_val_predict(predictor, Xs, y=None, groups=None, predict_method='predict', cv=None,
                       combine_splits=True, n_processes='max', split_seed=None, fit_params=None):
@@ -83,21 +81,9 @@ def cross_val_predict(predictor, Xs, y=None, groups=None, predict_method='predic
             in the order in which they were provided 
  
     """
-    
-    # If classification methods produce multiple columns of output,
-    # we need to manually encode classes to ensure consistent column ordering.
-    encode = predict_method in ['decision_function', 'predict_proba', 'predict_log_proba'] and y is not None
-    
-    if encode:
-        y = np.asarray(y)
-        if y.ndim == 1:
-            le = LabelEncoder()
-            y = le.fit_transform(y)
-        elif y.ndim == 2:
-            y_enc = np.zeros_like(y, dtype=np.int)
-            for i_label in range(y.shape[1]):
-                y_enc[:, i_label] = LabelEncoder().fit_transform(y[:, i_label])
-            y = y_enc
+    is_classifier = utils.is_classifier(predictor)
+    if is_classifier and y is not None:
+        classes_, y = np.unique(y, return_inverse=True)
             
     cv = int(5) if cv is None else cv
             
@@ -112,7 +98,8 @@ def cross_val_predict(predictor, Xs, y=None, groups=None, predict_method='predic
     else:
         cv.random_state=split_seed
                 
-    if utils.is_multichannel(predictor):
+    is_multichannel = utils.is_multichannel(predictor)
+    if is_multichannel:
         live_Xs = [X for X in Xs if X is not None]
         splits = list(cv.split(live_Xs[0], y, groups))
     else:
@@ -128,7 +115,7 @@ def cross_val_predict(predictor, Xs, y=None, groups=None, predict_method='predic
     if n_processes == 'max' or n_processes > 1:
         try:
             shared_mem_objects = [Xs, y, fit_params]
-            prediction_blocks = parallel.starmap_jobs(fit_and_predict, args_list, 
+            split_results = parallel.starmap_jobs(fit_and_predict, args_list, 
                                                       n_cpus=n_processes, shared_mem_objects=shared_mem_objects)
         except Exception as e:
             print('parallel processing request failed with message {}'.format(e))
@@ -136,23 +123,23 @@ def cross_val_predict(predictor, Xs, y=None, groups=None, predict_method='predic
             n_processes = 1       
     if n_processes == 1:
         # print('running a single process with {} jobs'.format(len(args_list)))
-        prediction_blocks = [fit_and_predict(*args) for args in args_list]
+        split_results = [fit_and_predict(*args) for args in args_list]
         
+    split_predictions, split_indices = zip(*split_results)
+                
     if combine_splits == False:
-        return prediction_blocks
+        if is_classifier and predict_method == 'predict':
+            split_predictions = [classes_[split_prediction] for split_prediction in split_predictions]
+        split_results = zip(split_predictions, split_indices)
+        return split_results
     else:
-        predictions, test_indices = zip(*prediction_blocks)
-        if sp.issparse(predictions[0]):
-            predictions = sp.vstack(predictions, format=predictions[0].format)
-        elif encode and isinstance(predictions[0], list):
-            assert NotImplementedError('Multi-output predictors not supported')
-        else:
-            predictions = np.concatenate(predictions)
-        test_indices = np.concatenate(test_indices)
-
-        return predictions[test_indices]
+        sample_indices = np.concatenate(split_indices)
+        predictions = np.concatenate(split_predictions)
+        if is_classifier and predict_method == 'predict':
+            predictions = classes_[predictions]
+        return predictions[sample_indices]    
         
-def cross_val_score(predictor, Xs, y=None, groups=None, scorer=explained_variance_score, predict_method='predict',
+def cross_val_score(predictor, Xs, y=None, groups=None, scorer='auto',
                     cv=3, n_processes=1, split_seed=None, **fit_params):
     """
     Multichannel channel version of scikit-learn's cross_val_score function.  
@@ -196,19 +183,23 @@ def cross_val_score(predictor, Xs, y=None, groups=None, scorer=explained_varianc
 
     Returns
     -------
-    scores : array of float, shape=(len(list(cv)),)
-        Array of scores of the estimator for each run of the cross validation.
+    scores : list of floats, one for each split  
+        List of performance scores for the predictor.  If the predictor is multichannel with multiple outputs, 
+        each split score is an average of the scores for each output.
     
     """
-    if scorer is None:
+    if scorer is None or scorer == 'auto':
         if utils.is_classifier(predictor):
-            scorer = accuracy_score
+            scorer = balanced_accuracy_score
         elif utils.is_regressor(predictor):
             scorer = explained_variance_score
         
-    split_blocks = cross_val_predict(predictor, Xs, y, groups, predict_method, cv, 
+    prediction_splits = cross_val_predict(predictor, Xs, y, groups, 'predict', cv, 
                                      combine_splits=False, n_processes=n_processes, split_seed=split_seed, **fit_params)
+    try:
+        scores = [scorer(y[split_indices], split_prediction) for split_prediction, split_indices in prediction_splits] 
+    except:
+        import pdb; pdb.set_trace()
     
-    scores = [scorer(y[test_indices], predictions) for predictions, test_indices in split_blocks]
     return scores
     

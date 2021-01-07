@@ -180,11 +180,11 @@ class SingleChannelCV(SingleChannel):
     state_variables = ['score_']
     
     def __init__(self, predictor, transform_method_name=None, internal_cv=5, cv_processes=1, scorer=None):
-        self._params_to_attributes(SingleChannelCV.__init__, locals())
         self._inherit_state_variables(super())
+        self._params_to_attributes(SingleChannelCV.__init__, locals())
         super().__init__(predictor, transform_method_name)
         self.internal_cv = 5 if internal_cv is None else internal_cv 
-                
+
     def fit_transform(self, X, y=None, groups=None, **fit_params):
         self.fit(X, y, **fit_params)
         
@@ -248,16 +248,15 @@ class Multichannel(Cloneable, Saveable):
         if y is None:
             self.model.fit(Xs, **fit_params)
         else:
+            if utils.is_classifier(self.model):
+                self.classes_, y = np.unique(y, return_inverse=True)
             self.model.fit(Xs, y, **fit_params)
-        if hasattr(self.model, 'classes_'):
-            self.classes_ = self.model.classes_
+
         return self
                 
     def predict_with_method(self, Xs, method_name):
         if hasattr(self, 'model') == False:
             raise FitError('prediction attempted before call to fit()')
-        live_Xs = [X for X in Xs if X is not None]
-        X = np.concatenate(live_Xs, axis=1)
         prediction_method = getattr(self.model, method_name)
         return prediction_method(Xs)
     
@@ -266,8 +265,14 @@ class Multichannel(Cloneable, Saveable):
             raise FitError('transform attempted before call to fit()')
         transform_method = getattr(self.model, self.transform_method_name)
         Xs_t = transform_method(Xs)
-        Xs_t = [X.reshape(-1, 1) if (X is not None and len(X.shape) == 1) else X for X in Xs_t]
-        return Xs_t
+        if Xs_t[0] is None:
+            raise ValueError('multichannel predictor failed to output predictions to its first output channel')
+        for X_t in Xs_t[1:]:
+            if X_t is not None:
+                raise ValueError('multichannel predictors may only output predictions to the first output channel.')
+        outputs = [None for X in Xs]
+        outputs[0] = Xs_t[0].reshape(-1, 1) if len(Xs_t[0].shape) == 1 else Xs_t[0]
+        return outputs
     
     def fit_transform(self, Xs, y=None, **fit_params):
         self.fit(Xs, y=None, **fit_params)
@@ -311,11 +316,15 @@ class MultichannelCV(Multichannel):
     def __init__(self, multichannel_predictor=None, transform_method_name=None, internal_cv=5, 
                  cv_processes=1, scorer=None):
         internal_cv = 5 if internal_cv is None else internal_cv 
-        super().__init__(multichannel_predictor, transform_method_name)
         self._params_to_attributes(MultichannelCV.__init__, locals())
         self._inherit_state_variables(super())
+        super().__init__(multichannel_predictor, transform_method_name)
         
     def fit_transform(self, Xs, y=None, groups=None, **fit_params):
+        
+        if y is not None and utils.is_classifier(self):
+            self.classes_, y = np.unique(y, return_inverse=True)
+            
         self.fit(Xs, y, **fit_params)
         
         # internal cv training is disabled
@@ -323,21 +332,19 @@ class MultichannelCV(Multichannel):
             Xs_t = self.transform(Xs)
         # internal cv training is enabled
         else:
-            Xs_t = cross_val_predict(self.multichannel_predictor, Xs, y, groups=groups, 
+            predictions = cross_val_predict(self.multichannel_predictor, Xs, y, groups=groups, 
                                      predict_method=self.transform_method_name, 
                                      cv=self.internal_cv, combine_splits=True, n_processes=self.cv_processes, 
                                      split_seed=None, fit_params=fit_params)
-            scores = []
-            for X_t in Xs_t:
-                if X_t is not None and self.scorer is not None:
-                    scores.append(self.scorer(y, X_t))
-                else:
-                    scores.append(X_t)
-                                  
-            if len(scores) > 0:
-                self.scores_ = np.nanmean(scores)
-                                  
-        Xs_t = [X.reshape(-1, 1) if (X is not None and len(X.shape) == 1) else X for X in Xs_t]
+            
+            Xs_t = [None for X in Xs]          
+            Xs_t[0] = predictions.reshape(-1, 1) if len(predictions.shape) == 1 else predictions
+            
+            if self.scorer is not None:
+                if utils.is_classifier(self) and len(predictions.shape) > 1:
+                    predictions = util.classify_samples(sample_probs=predictions, 
+                                                        class_names=self.classes_)
+                self.score_ = self.scorer(y, predictions)
         
         return Xs_t
     

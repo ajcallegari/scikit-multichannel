@@ -99,7 +99,7 @@ class TestSelectivePredictorStack(unittest.TestCase):
             print('StackingClassifier informative predictors: {}'.format(sk_score_informative))
             print('StackingClassifier all predictors: {}'.format(sk_score_all))
             
-        self.assertTrue(pc_score_all == pc_score_informative, 
+        self.assertTrue(np.round(pc_score_all, 2) == np.round(pc_score_informative, 2), 
                         'SelectivePredictorStack accuracy is not same for all classifiers and informative classifiers.')
         tolerance_pct = 5
         self.assertTrue(pc_score_all >= sk_score_informative * (1 - tolerance_pct / 100.0), 
@@ -175,7 +175,7 @@ class TestSelectivePredictorStack(unittest.TestCase):
             print('StackingRegressor informative predictors: {}'.format(sk_score_informative))
             print('StackingRegressor all predictors: {}'.format(sk_score_all))
             
-        self.assertTrue(pc_score_all == pc_score_informative, 
+        self.assertTrue(np.round(pc_score_all, 2) == np.round(pc_score_informative, 2), 
                         'SelectivePredictorStack accuracy is not same for all regressors and informative regressors.')
         tolerance_pct = 5
         self.assertTrue(pc_score_all >= sk_score_informative * (1 - tolerance_pct / 100.0), 

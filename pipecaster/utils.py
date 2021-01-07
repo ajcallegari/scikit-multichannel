@@ -8,7 +8,7 @@ __all__ = ['is_classifier', 'is_regressor', 'is_predictor', 'is_transformer'
            'detect_estimator_type', 'is_multichannel',
            'get_clone', 'get_sklearn_clone', 'get_list_clone',
            'save_model', 'load_model', 'get_transform_method', 'get_predict_method', 
-           'is_predictor', 'FitError', 'ParallelBackendError', 'get_descriptor', 
+           'is_predictor', 'FitError', 'PredictError', 'ParallelBackendError', 'get_descriptor', 
            'get_param_names', 'get_param_clone', 'Cloneable', 'Saveable', 'encode_labels']
 
 # defines the methods used by pipecaster to detect predictor objects and make predictions
@@ -55,7 +55,7 @@ def is_classifier(obj):
     Detect a classifier algorithm.
     """    
     if hasattr(obj, '_estimator_type'):
-        if getattr(obj, '_estimator_type', None) == 'classifier':
+        if getattr(obj, '_estimator_type') == 'classifier':
             return True
     elif hasattr(obj, 'classes_'):
         return True
@@ -159,9 +159,16 @@ def load_model(filepath):
     return joblib.load(filepath) 
 
 class FitError(Exception):
-    """Exception raised when calls to fit() fail
+    """Exception to raise when calls to fit() fail
     """
     def __init__(self, message="call to fit() method failed"):
+        self.message = message
+        super().__init__(self.message)
+        
+class PredictError(Exception):
+    """Exception to raise when calls to predict() fail
+    """
+    def __init__(self, message="call to predict() method failed"):
         self.message = message
         super().__init__(self.message)
         

@@ -43,7 +43,7 @@ class TestCrossValPredict(unittest.TestCase):
         
     def test_multi_input_classification(self):
         mclf = MultichannelPipeline(n_channels=1)
-        mclf.get_next_layer()[:] = self.clf
+        mclf.add_layer(self.clf) 
         pc_predictions = pc_cross_validation.cross_val_predict(mclf, [self.X_cls], self.y_cls, cv=self.cv, n_processes=1) 
         self.assertTrue(np.array_equal(self.cls_predictions, pc_predictions), 'classifier predictions from pipecaster.cross_validation.cross_val_predict did not match sklearn control (multi input predictor)')
         
@@ -52,7 +52,7 @@ class TestCrossValPredict(unittest.TestCase):
             warnings.filterwarnings("ignore")
             parallel.start_if_needed(n_cpus=n_cpus)           
             mclf = MultichannelPipeline(n_channels=1)
-            mclf.get_next_layer()[:] = self.clf   
+            mclf.add_layer(self.clf)   
             pc_predictions = pc_cross_validation.cross_val_predict(mclf, [self.X_cls], self.y_cls, cv=self.cv, n_processes=n_cpus) 
             self.assertTrue(np.array_equal(self.cls_predictions, pc_predictions), 'parallel predictions from cross_val_predict with all CPUs did not match sklearn control (multi input predictor)')
             warnings.resetwarnings()
@@ -62,7 +62,7 @@ class TestCrossValPredict(unittest.TestCase):
             warnings.filterwarnings("ignore")
             parallel.start_if_needed(n_cpus=n_cpus)      
             mclf = MultichannelPipeline(n_channels=1)
-            mclf.get_next_layer()[:] = self.clf   
+            mclf.add_layer(self.clf)
             pc_predictions = pc_cross_validation.cross_val_predict(mclf, [self.X_cls], self.y_cls, cv=self.cv, n_processes=n_cpus-1) 
             self.assertTrue(np.array_equal(self.cls_predictions, pc_predictions), 'parallel predictions from cross_val_predict made using using chunked jobs did not match sklearn control (multi input predictor)')
             warnings.resetwarnings()
@@ -73,7 +73,7 @@ class TestCrossValPredict(unittest.TestCase):
 
     def test_multi_input_regression(self):
         mrgr = MultichannelPipeline(n_channels=1)
-        mrgr.get_next_layer()[:] = self.rgr  
+        mrgr.add_layer(self.rgr)
         pc_predictions = pc_cross_validation.cross_val_predict(mrgr, [self.X_rgr], self.y_rgr, cv=self.cv, n_processes=1) 
         self.assertTrue(np.array_equal(self.rgr_predictions, pc_predictions), 'regressor predictions from pipecaster.cross_validation.cross_val_predict did not match sklearn control (multi input predictor)')
         
@@ -82,7 +82,7 @@ class TestCrossValPredict(unittest.TestCase):
             warnings.filterwarnings("ignore")
             parallel.start_if_needed(n_cpus=n_cpus)             
             mrgr = MultichannelPipeline(n_channels=1)
-            mrgr.get_next_layer()[:] = self.rgr  
+            mrgr.add_layer(self.rgr)
             pc_predictions = pc_cross_validation.cross_val_predict(mrgr, [self.X_rgr], self.y_rgr, cv=self.cv, n_processes=n_cpus) 
             self.assertTrue(np.array_equal(self.rgr_predictions, pc_predictions), 'regressor predictions from pipecaster.cross_validation.cross_val_predict did not match sklearn control (multi input predictor)')
             warnings.resetwarnings()
@@ -92,7 +92,7 @@ class TestCrossValPredict(unittest.TestCase):
             warnings.filterwarnings("ignore")
             parallel.start_if_needed(n_cpus=n_cpus)   
             mrgr = MultichannelPipeline(n_channels=1)
-            mrgr.get_next_layer()[:] = self.rgr  
+            mrgr.add_layer(self.rgr) 
             pc_predictions = pc_cross_validation.cross_val_predict(mrgr, [self.X_rgr], self.y_rgr, 
                                                                    cv=self.cv, n_processes=n_cpus-1) 
             self.assertTrue(np.array_equal(self.rgr_predictions, pc_predictions), 'regressor predictions from pipecaster.cross_validation.cross_val_predict did not match sklearn control (multi input predictor)')   
@@ -106,7 +106,7 @@ class TestCrossValPredict(unittest.TestCase):
             X, y = self.X_cls, self.y_cls = make_classification(n_classes=2, n_samples=500, n_features=40, 
                                              n_informative=20, random_state=test_seed)
             mclf = MultichannelPipeline(n_channels=1)
-            mclf.get_next_layer()[:] = DummyClassifier(futile_cycles_fit=2000000, futile_cycles_pred=10)
+            mclf.add_layer(DummyClassifier(futile_cycles_fit=2000000, futile_cycles_pred=10))
             
             SETUP_CODE = ''' 
 import pipecaster.cross_validation'''
@@ -141,7 +141,7 @@ pipecaster.cross_validation.cross_val_predict(mclf, [X], y, cv = {}, n_processes
             X, y = self.X_cls, self.y_cls = make_classification(n_classes=2, n_samples=500, n_features=40, 
                                              n_informative=20, random_state=test_seed)
             mclf = MultichannelPipeline(n_channels=1)
-            mclf.get_next_layer()[:] = DummyClassifier(futile_cycles_fit=2000000, futile_cycles_pred=10)
+            mclf.add_layer(DummyClassifier(futile_cycles_fit=2000000, futile_cycles_pred=10)) 
             
             SETUP_CODE = ''' 
 import pipecaster.cross_validation'''

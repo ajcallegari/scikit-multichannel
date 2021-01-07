@@ -49,7 +49,7 @@ class TestCrossValScore(unittest.TestCase):
         
     def test_multi_input_classification(self):
         mclf = MultichannelPipeline(n_channels=1)
-        mclf.get_next_layer()[:] = self.clf   
+        mclf.add_layer(self.clf)
         pc_scores = pc_cross_validation.cross_val_score(mclf, [self.X_cls], self.y_cls, scorer=roc_auc_score,
                                                        cv=self.cv, n_processes=1) 
         self.assertTrue(np.array_equal(self.cls_scores, pc_scores), 'classifier scores from pipecaster.cross_validation.cross_val_score did not match sklearn control (multi input predictor)')
@@ -59,7 +59,7 @@ class TestCrossValScore(unittest.TestCase):
             warnings.filterwarnings("ignore")
             parallel.start_if_needed()
             mclf = MultichannelPipeline(n_channels=1)
-            mclf.get_next_layer()[:] = self.clf   
+            mclf.add_layer(self.clf)
             pc_scores = pc_cross_validation.cross_val_score(mclf, [self.X_cls], self.y_cls, scorer=roc_auc_score,
                                                            cv=self.cv, n_processes=n_cpus) 
             self.assertTrue(np.array_equal(self.cls_scores, pc_scores), 'classifier scores from pipecaster.cross_validation.cross_val_score did not match sklearn control (multi input predictor)')
@@ -72,7 +72,7 @@ class TestCrossValScore(unittest.TestCase):
 
     def test_multi_input_regression(self):
         mrgr = MultichannelPipeline(n_channels=1)
-        mrgr.get_next_layer()[:] = self.rgr  
+        mrgr.add_layer(self.rgr)  
         pc_scores = pc_cross_validation.cross_val_score(mrgr, [self.X_rgr], self.y_rgr, scorer=explained_variance_score, 
                                                        cv=self.cv, n_processes=1) 
         self.assertTrue(np.array_equal(self.rgr_scores, pc_scores), 'regressor scores from pipecaster.cross_validation.cross_val_score did not match sklearn control (multi input predictor)')
@@ -82,7 +82,7 @@ class TestCrossValScore(unittest.TestCase):
             warnings.filterwarnings("ignore")
             parallel.start_if_needed(n_cpus=n_cpus)        
             mrgr = MultichannelPipeline(n_channels=1)
-            mrgr.get_next_layer()[:] = self.rgr  
+            mrgr.add_layer(self.rgr)
             pc_scores = pc_cross_validation.cross_val_score(mrgr, [self.X_rgr], self.y_rgr, scorer=explained_variance_score,
                                                            cv=self.cv, n_processes=n_cpus) 
             self.assertTrue(np.array_equal(self.rgr_scores, pc_scores), 'regressor scores from pipecaster.cross_validation.cross_val_score did not match sklearn control (multi input predictor)')
@@ -97,11 +97,9 @@ class TestCrossValScore(unittest.TestCase):
             X, y = self.X_cls, self.y_cls = make_classification(n_classes=2, n_samples=500, n_features=40, 
                                              n_informative=20, random_state=test_seed)
             mclf = MultichannelPipeline(n_channels=1)
-            mclf.get_next_layer()[:] = DummyClassifier(futile_cycles_fit=2000000, futile_cycles_pred=10)
+            mclf.add_layer(DummyClassifier(futile_cycles_fit=2000000, futile_cycles_pred=10))
             
             # shut off warnings because ray and redis generate massive numbers
-            
-            
             SETUP_CODE = ''' 
 import pipecaster.cross_validation'''
             TEST_CODE = ''' 

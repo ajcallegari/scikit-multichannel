@@ -247,7 +247,7 @@ class Layer(Cloneable, Saveable):
             fit_results = [Layer._fit_transform_job(*args) for args in args_list]
     
         self.model_list = [(model, slice_, channel_indices) for _, model, slice_, channel_indices in fit_results]
-        Xs_t = [None for X in Xs]
+        Xs_t = Xs.copy()
         for pipe_Xs_t, _, slice_, _ in fit_results:
             Xs_t[slice_] = pipe_Xs_t
             
@@ -474,18 +474,12 @@ class MultichannelPipeline(Cloneable, Saveable):
     Groups for internal cv not yet supported.
     """
     
+    state_variables = ['classes_']
+    
     def __init__(self, n_channels=1, transform_method_name=None, internal_cv=5, cv_processes=1):
         self._params_to_attributes(MultichannelPipeline.__init__, locals())
         self.layers = []
-        
-    def get_new_layer(self, pipe_processes=1):
-        return Layer(self.n_channels, pipe_processes)
-    
-    def get_next_layer(self, pipe_processes=1):
-        layer = self.get_new_layer(pipe_processes)
-        self.layers.append(layer)
-        return layer
-            
+                    
     def add_layer(self, *pipe_mapping, pipe_processes=1):
         """
         Add a layer of pipes to the pipeline.
@@ -546,7 +540,9 @@ class MultichannelPipeline(Cloneable, Saveable):
             last_index = first_index + n
             new_layer[first_index:last_index] = pipe
             first_index = last_index
-                    
+        
+        if hasattr(new_layer, '_estimator_type'):
+            self._estimator_type = new_layer._estimator_type
         self.layers.append(new_layer)
         return self
     
@@ -619,8 +615,10 @@ class MultichannelPipeline(Cloneable, Saveable):
         predictions = prediction_method(Xs)
         # decode class names
         if utils.is_classifier(self) and method_name == 'predict':
-            prediction = self.classes_[predictions]
-        return predictions
+            predictions = [self.classes_[p] if p is not None else None for p in predictions]
+        live_predictions = [p for p in predictions if p is not None]
+        
+        return predictions if len(live_predictions) > 1 else live_predictions[0]
     
     def get_pipe(self, layer_index, pipe_index, unwrap=True):
         return self.layers[layer_index].get_pipe(pipe_index, unwrap)

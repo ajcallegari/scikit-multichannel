@@ -12,9 +12,13 @@ from pipecaster.channel_scoring import AggregateFeatureScorer, CvPerformanceScor
 import pipecaster.parallel as parallel
 from pipecaster.cross_validation import cross_val_score 
 import pipecaster.transform_wrappers as transform_wrappers
-from pipecaster.score_selection import RankScoreSelector
+from pipecaster.score_selection import RankScoreSelector, PctRankScoreSelector 
+from pipecaster.score_selection import HighPassScoreSelector, VarianceHighPassScoreSelector
 
-__all__ = ['ChannelSelector', 'ModelSelector', 'SelectKBestScores', 'SelectKBestProbes', 'SelectKBestModels']
+__all__ = ['ChannelSelector', 'ModelSelector', 
+           'SelectKBestScores', 'SelectPercentBestScores', 'SelectHighPassScores', 'SelectVarianceHighPassScores', 
+           'SelectKBestProbes', 'SelectPercentBestProbes', 'SelectHighPassProbes', 'SelectVarianceHighPassProbes',
+           'SelectKBestModels', 'SelectPercentBestModels', 'SelectHighPassModels', 'SelectVarianceHighPassModels']
         
 class ChannelSelector(Cloneable, Saveable):
     
@@ -72,6 +76,30 @@ class SelectKBestScores(ChannelSelector):
     def __init__(self, feature_scorer=f_classif, aggregator=np.sum, k=1, channel_processes=1):
         self._params_to_attributes(SelectKBestScores.__init__, locals())
         super().__init__(AggregateFeatureScorer(feature_scorer, aggregator), RankScoreSelector(k), channel_processes)
+        
+class SelectPercentBestScores(ChannelSelector):
+    
+    def __init__(self, feature_scorer=f_classif, aggregator=np.sum, percent=33, channel_processes=1):
+        self._params_to_attributes(SelectPercentBestScores.__init__, locals())
+        super().__init__(AggregateFeatureScorer(feature_scorer, aggregator), 
+                         PctRankScoreSelector(percent), channel_processes)
+        
+class SelectHighPassScores(ChannelSelector):
+    
+    def __init__(self, feature_scorer=f_classif, aggregator=np.sum, cutoff=0, n_min=1, channel_processes=1):
+        self._params_to_attributes(SelectHighPassScores.__init__, locals())
+        super().__init__(AggregateFeatureScorer(feature_scorer, aggregator), 
+                         HighPassScoreSelector(cutoff, n_min), channel_processes)      
+        
+class SelectVarianceHighPassScores(ChannelSelector):
+    
+    def __init__(self, feature_scorer=f_classif, aggregator=np.sum, 
+                 variance_cutoff=2.0, get_variance=np.nanstd, get_baseline=np.nanmean, n_min=1, 
+                 channel_processes=1):
+        self._params_to_attributes(SelectVarianceHighPassScores.__init__, locals())
+        super().__init__(AggregateFeatureScorer(feature_scorer, aggregator), 
+                         VarianceHighPassScoreSelector(variance_cutoff, get_variance, get_baseline, n_min), 
+                         channel_processes) 
     
 class SelectKBestProbes(ChannelSelector):
         
@@ -79,6 +107,30 @@ class SelectKBestProbes(ChannelSelector):
         self._params_to_attributes(SelectKBestProbes.__init__, locals())
         super().__init__(CvPerformanceScorer(predictor_probe, cv, scorer, cv_processes), 
                          RankScoreSelector(k), channel_processes)
+        
+class SelectPercentBestProbes(ChannelSelector):
+        
+    def __init__(self, predictor_probe=None, cv=3, scorer='auto', percent=33, channel_processes=1, cv_processes=1):
+        self._params_to_attributes(SelectPercentBestProbes.__init__, locals())
+        super().__init__(CvPerformanceScorer(predictor_probe, cv, scorer, cv_processes), 
+                         PctRankScoreSelector(percent), channel_processes)
+        
+class SelectHighPassProbes(ChannelSelector):
+        
+    def __init__(self, predictor_probe=None, cv=3, scorer='auto', cutoff=0.0, n_min=1, channel_processes=1, cv_processes=1):
+        self._params_to_attributes(SelectHighPassProbes.__init__, locals())
+        super().__init__(CvPerformanceScorer(predictor_probe, cv, scorer, cv_processes), 
+                         HighPassScoreSelector(cutoff, n_min), channel_processes)
+        
+class SelectVarianceHighPassProbes(ChannelSelector):
+        
+    def __init__(self, predictor_probe=None, cv=3, scorer='auto', variance_cutoff=2.0, 
+                 get_variance=np.nanstd, get_baseline=np.nanmean, n_min=1, 
+                 channel_processes=1, cv_processes=1):
+        self._params_to_attributes(SelectVarianceHighPassProbes.__init__, locals())
+        super().__init__(CvPerformanceScorer(predictor_probe, cv, scorer, cv_processes), 
+                         VarianceHighPassScoreSelector(variance_cutoff, get_variance, get_baseline, n_min), 
+                         channel_processes)
     
 class ModelSelector(Cloneable, Saveable):
     """
@@ -104,6 +156,9 @@ class ModelSelector(Cloneable, Saveable):
     score_selector: callable, default=RankScoreSelector(3)
         A scorer callable object / function with signature 'score_selector(scores)' which should 
         return a list of the indices of the predictors/channels to be selected
+    cv_transform: bool, default=True
+        True: output cv predictions when fit_transform is called (use for making meta-features)
+        False: output whole training set predictions when fit_transform is called
     channel_processes: int
         Number of parallel processes to run for each predictor during model fitting
     cv_processes: int
@@ -118,14 +173,13 @@ class ModelSelector(Cloneable, Saveable):
     state_variables = ['classes_', 'selected_indices_']
     
     def __init__(self, predictors=None, cv=5, scorer='auto', 
-                 score_selector=RankScoreSelector(3), channel_processes=1, cv_processes=1):
+                 score_selector=RankScoreSelector(3), cv_transform=True, channel_processes=1, cv_processes=1):
         self._params_to_attributes(ModelSelector.__init__, locals())
         
         if predictors is None:
             raise ValueError('No predictors found.')
             
         if isinstance(predictors, (list, tuple, np.ndarray)):
-            import pdb; pdb.set_trace()
             estimator_types = [p._estimator_type for p in predictors]
         else:
             estimator_types = [predictors._estimator_type]
@@ -139,52 +193,34 @@ class ModelSelector(Cloneable, Saveable):
                 self.scorer = explained_variance_score
             else:
                 raise AttributeError('predictor type required for automatic assignment of scoring metric')
-        self._expose_predictor_interface(predictors)
-        
-    def _expose_predictor_interface(self, predictors):
-        if isinstance(predictors, (tuple, list, np.ndarray)):
-            if len(predictors) == 1:
-                method_set = utils.get_prediction_method_names(predictors[0])
-            elif len(predictors) > 1:
-                prediction_methods = [utils.get_prediction_method_names(p) for p in predictors]
-                # make predict_proba and decision_funcion synonymous to enable meta-prediction with transform_wrapper
-                for ms in prediction_methods:
-                    if 'predict_proba' in ms:
-                        ms.append('decision_function')
-                    elif 'decision_function' in ms:
-                        ms.append('predict_proba')
-                method_set = set(prediction_methods[0]).intersection(*prediction_methods[1:])
-        else:
-            method_set = utils.get_prediction_method_names(predictors)
             
-        if len(method_set) == 0:
-            raise TypeError('No uniform predicion interface detected.')
-        if 'predict' not in method_set:
-            raise TypeError('Missing predict method in predictors argument. Predict() method required for all predictors.')
-        for method_name in method_set:
-            prediction_method = functools.partial(self.predict_with_method, method_name=method_name)
-            setattr(self, method_name, prediction_method)
-    
     @staticmethod
-    def _fit_job(predictor, X, y, fit_params, cv, scorer, cv_processes):
+    def _fit_predict_score(predictor, X, y, fit_params, cv, scorer, cv_processes):
         
         if X is None:
-            return None, None
+            return None, None, None
         
         if type(predictor) in [transform_wrappers.SingleChannelCV, transform_wrappers.MultichannelCV]:
             raise TypeError('CV transform_wrapper found in predictors (disallowed to promote uniform wrapping)')
         
+        predictor = transform_wrappers.unwrap_predictor(predictor)
         model = utils.get_clone(predictor)
         model = transform_wrappers.SingleChannelCV(model, internal_cv=cv, scorer=scorer, 
                                                    cv_processes=cv_processes)            
         if y is None:
-            predictions = model.fit_transform(X, **fit_params)
+            cv_predictions = model.fit_transform(X, **fit_params)
         else:
-            predictions = model.fit_transform(X, y, **fit_params)
+            cv_predictions = model.fit_transform(X, y, **fit_params)
             
-        return model, predictions
-        
-    def fit(self, Xs, y=None, **fit_params):
+        return model, cv_predictions, model.score_
+    
+    def _expose_predictor_interface(self, model):
+        method_set = utils.get_prediction_method_names(model)
+        for method_name in method_set:
+            prediction_method = functools.partial(self.predict_with_method, method_name=method_name)
+            setattr(self, method_name, prediction_method)
+            
+    def fit_transform(self, Xs, y=None, **fit_params):
         
         # broadcast predictors if necessary
         is_listlike = isinstance(self.predictors, (list, tuple, np.ndarray))
@@ -206,7 +242,7 @@ class ModelSelector(Cloneable, Saveable):
         if n_processes == 'max' or n_processes > 1:
             try:
                 shared_mem_objects = [y, fit_params, cv, scorer, cv_processes]
-                fit_results = parallel.starmap_jobs(ModelSelector._fit_job, args_list, 
+                job_results = parallel.starmap_jobs(ModelSelector._fit_predict_score, args_list, 
                                                     n_cpus=self.channel_processes, 
                                                     shared_mem_objects=shared_mem_objects)
             except Exception as e:
@@ -215,34 +251,48 @@ class ModelSelector(Cloneable, Saveable):
                 n_processes = 1    
         if n_processes is None or n_processes <= 1:
             # print('running a single process with {} jobs'.format(len(args_list)))
-            fit_results = [ModelSelector._fit_job(*args) for args in args_list]
-                
-        models, predictions_list = zip(*fit_results) 
-        model_scores = [m.score_ if m is not None else None for m in models]
+            job_results = [ModelSelector._fit_predict_score(*args) for args in args_list]
+                            
+        models, cv_predictions, model_scores = zip(*job_results) 
         self.selected_indices_ = self.score_selector(model_scores)
-        
         # store only the selected models for future use
         self.models = [m if i in set(self.selected_indices_) else None for i, m in enumerate(models)]
         
-        # make predict_proba and decision_function synonymous to enable metaprediction with mixed nomenclature
-        for model in self.models:
-            if model is not None:
-                if hasattr(model, 'predict_proba'):
-                    setattr(model, 'decision_function', model.predict_proba)
-                elif hasattr(model, 'decision_function'):
-                    setattr(model, 'predict_proba', model.decision_function)
+        if len(self.selected_indices_ == 1):
+            self._expose_predictor_interface(self.models[self.selected_indices_[0]])
+            
+        if self.cv_transform == True:
+            Xs_t = [p if i in set(self.selected_indices_) else None 
+                                for i, p in enumerate(cv_predictions)] 
+        else:
+            Xs_t = [model.transform(X) if i in set(self.selected_indices_) else None 
+                                for i, (model, X) in enumerate(zip(models, Xs))]            
+        return Xs_t
+    
+    def fit(self, Xs, y=None, **fit_params):
+        self.fit_transform(Xs, y, **fit_params)
+        
+    def transform(self, Xs):
+        if hasattr(self, 'models') == False:
+            raise utils.FitError('Tranform called before model fitting.')
+        return [m.transform(X) if m is not None else None for m, X in zip(self.models, Xs)] 
             
     def predict_with_method(self, Xs, method_name):
-        predictions = [None for X in Xs]
-        for i in self.selected_indices_:
-            prediction_method = getattr(self.models[i], method_name)
-            predictions[i] = prediction_method(Xs[i])
+        if hasattr(self, 'models') == False:
+            raise utils.FitError('prediction attempted before model fitting')
+        if len(self.selected_indices_) != 1:
+            raise ValueErrror('To predict with a ModelSelector, exactly 1 model must be selected.')
+        selected_index = self.selected_indices[0]
+        prediction_method = getattr(self.models[selected_index], method_name)
+        predictions = prediction_method(Xs[selected_index])
+        if utils.is_classifier(self) and method_name == 'predict':
+            predictions = self.classes_[predictions]
 
         return predictions
 
-    def get_selected_indices(self):
+    def get_support(self):
         return self.selected_indices_
-                
+                    
     def get_clone(self):
         clone = super().get_clone()
         if hasattr(self, 'models'):
@@ -255,3 +305,26 @@ class SelectKBestModels(ModelSelector):
         self._params_to_attributes(SelectKBestModels.__init__, locals())
         super().__init__(predictors, cv, scorer, RankScoreSelector(k), channel_processes, cv_processes)
             
+class SelectPercentBestModels(ModelSelector):
+    
+    def __init__(self, predictors, cv=5, scorer='auto', percent=33, channel_processes=1, cv_processes=1):
+        self._params_to_attributes(SelectPercentBestModels.__init__, locals())
+        super().__init__(predictors, cv, scorer, PctRankScoreSelector(percent), channel_processes, cv_processes)
+        
+class SelectHighPassModels(ModelSelector):
+    
+    def __init__(self, predictors, cv=5, scorer='auto', cutoff=0.0, n_min=1, channel_processes=1, cv_processes=1):
+        self._params_to_attributes(SelectHighPassModels.__init__, locals())
+        super().__init__(predictors, cv, scorer, HighPassScoreSelector(cutoff, n_min), 
+                         channel_processes, cv_processes)
+        
+class SelectVarianceHighPassModels(ModelSelector):
+    
+    def __init__(self, predictors, cv=5, scorer='auto', 
+                 variance_cutoff=2.0, get_variance=np.nanstd, get_baseline=np.nanmean, 
+                 n_min=1, channel_processes=1, cv_processes=1):
+        self._params_to_attributes(SelectVarianceHighPassModels.__init__, locals())
+        super().__init__(predictors, cv, scorer, 
+                         VarianceHighPassScoreSelector(variance_cutoff, get_variance, get_baseline, n_min), 
+                         channel_processes, cv_processes)
+        

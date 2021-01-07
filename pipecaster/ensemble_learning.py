@@ -361,14 +361,13 @@ class MultichannelPredictor(Cloneable, Saveable):
         if hasattr(self, 'model') == False:
             raise FitError('prediction attempted before call to fit()')
         live_Xs = [X for X in Xs if X is not None]
-        channel_predictions = [None for X in Xs]
         
         if len(live_Xs) > 0:
             X = np.concatenate(live_Xs, axis=1)
             prediction_method = getattr(self.model, method_name)
-            channel_predictions[0] = prediction_method(X)
+            predictions = prediction_method(X)
         
-        return channel_predictions
+        return predictions
                            
     def _more_tags(self):
         return {'multichannel':True}
