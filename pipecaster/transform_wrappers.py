@@ -264,15 +264,10 @@ class Multichannel(Cloneable, Saveable):
         if hasattr(self, 'model') == False:
             raise FitError('transform attempted before call to fit()')
         transform_method = getattr(self.model, self.transform_method_name)
-        Xs_t = transform_method(Xs)
-        if Xs_t[0] is None:
-            raise ValueError('multichannel predictor failed to output predictions to its first output channel')
-        for X_t in Xs_t[1:]:
-            if X_t is not None:
-                raise ValueError('multichannel predictors may only output predictions to the first output channel.')
-        outputs = [None for X in Xs]
-        outputs[0] = Xs_t[0].reshape(-1, 1) if len(Xs_t[0].shape) == 1 else Xs_t[0]
-        return outputs
+        predictions = transform_method(Xs)
+        Xs_t = [None for X in Xs]
+        Xs_t[0] = predictions[0].reshape(-1, 1) if len(predictions.shape) == 1 else predictions
+        return Xs_t
     
     def fit_transform(self, Xs, y=None, **fit_params):
         self.fit(Xs, y=None, **fit_params)

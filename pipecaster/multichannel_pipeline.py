@@ -251,6 +251,8 @@ class Layer(Cloneable, Saveable):
         for pipe_Xs_t, _, slice_, _ in fit_results:
             Xs_t[slice_] = pipe_Xs_t
             
+        self.output_mask = [True if X_t is not None else False for X_t in Xs_t]
+            
         return Xs_t
     
     def fit_last(self, Xs, y=None, transform_method_name=None, internal_cv=5, cv_processes=1, **fit_params):
@@ -312,6 +314,8 @@ class Layer(Cloneable, Saveable):
             raise TypeError('more than 1 predictor type found')
         elif len(estimator_types) == 1:
             self._estimator_type = list(estimator_types)[0]
+            
+        self.output_mask = [True if X_t is not None else False for X_t in self.transform(Xs)]
     
     def transform(self, Xs):
         """
@@ -327,7 +331,7 @@ class Layer(Cloneable, Saveable):
             contains values received in Xs argument unless transformed by a pipe in this layer.
         """
         if hasattr(self, 'model_list') == False:
-            raise utils.FitError('tranform attempted before fitting')
+            raise utils.FitError('transform attempted before fitting')
         Xs_t = Xs.copy()
         for model, slice_, channel_indices in self.model_list:
             input_ = Xs[slice_] if utils.is_multichannel(model) else Xs[slice_][0]
@@ -413,7 +417,7 @@ class MultichannelPipeline(Cloneable, Saveable):
         available for use.
         
     **internal_cv parameters: transform_method_name, internal_cv, and cv_processes
-        These parameters are ignored for predictors that have already have a tranform method when added 
+        These parameters are ignored for predictors that have already have a transform method when added 
         to the pipeline.  Local cv parameters can be set for each predictor by wrapping them with 
         transform_wrappers.  SingleChannelCV or transform_wrapper.MultichannelCV before addition to 
         the pipeline.  When manually wrapping predictors, parameters should be uniform throughout the pipeline
@@ -428,8 +432,8 @@ class MultichannelPipeline(Cloneable, Saveable):
         training data.  This method invokes layer.fit_transform() on each layer and then layer.final_fit() 
         on the last layer, and exposes all prediction methods found in the final layer (i.e. predict, 
         predict_proba, decision_function, or predict_log_proba) so that they can be called directly on the pipeline itself.
-            The layer.fit_tranform() method calls fit_transform() - or falls back on fit()/transform() - on each
-                transformer in the layer.  The method also automatically wraps predictors in tranform_wrappers to add a 
+            The layer.fit_transform() method calls fit_transform() - or falls back on fit()/transform() - on each
+                transformer in the layer.  The method also automatically wraps predictors in transform_wrappers to add a 
                 fit_transform() method and to provide internal cv training for meta-prediction (default is 
                 5-fold KFold for regressor or StratifiedKFold for classifiers; custom cv available by specifying 
                 internal_cv in fit_params).
@@ -466,7 +470,7 @@ class MultichannelPipeline(Cloneable, Saveable):
     This class uses reflection to expose the predictor methods found in the last layer, so 
         the method attributes in a MultichannelPipeline instance are not identical to the method 
         attributes of the MultichannelPipeline class.
-    Internally (i.e. on calls to layer.fit_tranform()), fit_transform() is a signal that predictors 
+    Internally (i.e. on calls to layer.fit_transform()), fit_transform() is a signal that predictors 
         need to be wrapped with transform_wrappers with cross validation training.  However, calling
         fit_transform on a MultichannelPipeline will not wrap
     Fit failures are currently not handled / allowed.

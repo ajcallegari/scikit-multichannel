@@ -324,8 +324,8 @@ class MultichannelPredictor(Cloneable, Saveable):
     With single channel predictors, you need to wrap them to make them into transformers due to sklearn
     interface limitations.  Since multichannel functionality is native to pipecaster, I opted to
     skip the wrapper step and make all predictors also transformers by default.
-    
     """
+    
     state_variables = ['classes_']
     
     def __init__(self, predictor=None):

@@ -223,12 +223,15 @@ class Cloneable:
     def _inherit_state_variables(self, super_):
         if hasattr(self, 'state_variables') and hasattr(super_, 'state_variables'):
             self.state_variables = super_.state_variables + self.state_variables 
-    
-    def __str__(self, verbose=True):
+            
+    def to_str(self, verbose=True):
         return get_descriptor(self.__class__.__name__, self.get_params(), verbose)
     
+    def __str__(self):
+        return get_descriptor(self.__class__.__name__, self.get_params())
+    
     def __repr__(self):
-        return self.__str__(verbose=True)  
+        return self.to_str(verbose=True)  
     
     def get_params(self, deep=False):
         return {p:getattr(self,p) for p in self.param_names}
