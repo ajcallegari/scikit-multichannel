@@ -1,4 +1,5 @@
 import numpy as np
+import pandas as pd
 import functools
 
 import pipecaster.utils as utils
@@ -641,6 +642,59 @@ class MultichannelPipeline(Cloneable, Saveable):
         clone.layers = [layer.get_clone() for layer in self.layers]
         return clone
     
+    def get_dataframe(self, verbose=False, show_fit=True):
+        
+        def get_pre_fit_descriptors(layer, verbose=False):
+            right_arrow = '\u2192'
+            down_arrow = '\u2193'
+            descriptors = [right_arrow for channel in range(self.n_channels)]
+            for pipe, slice_, indices in layer.pipe_list:
+                descriptors[slice_] = [down_arrow for i in indices]
+                if hasattr(pipe, 'to_str'):
+                    descriptor = pipe.to_str(verbose)
+                else:
+                    descriptor = utils.get_descriptor(pipe.__class__.__name__, 
+                                                      pipe.get_params(), 
+                                                      verbose)
+                descriptors[indices[0]] = descriptor
+            outputs = [right_arrow for i in range(self.n_channels)]
+            return descriptors, outputs
+        
+        def get_post_fit_descriptors(layer, verbose=False):
+            right_arrow = '\u2192'
+            down_arrow = '\u2193'
+            descriptors = [right_arrow for channel in range(self.n_channels)]
+            for model, slice_, indices in layer.model_list:
+                descriptors[slice_] = [down_arrow for i in indices]
+                if hasattr(model, 'to_str'):
+                    descriptor = model.to_str(verbose)
+                else:
+                    descriptor = utils.get_descriptor(model.__class__.__name__, 
+                                                      model.get_params(), 
+                                                      verbose)
+                descriptors[indices[0]] = descriptor
+            outputs = [right_arrow if flag is True else ' ' for flag in layer.output_mask]
+            return descriptors, outputs
+        
+        dataframe = pd.DataFrame({'channel':range(self.n_channels)})
+        dataframe = dataframe.set_index('channel')
+
+        for i, layer in enumerate(self.layers):
+            if hasattr(layer, 'model_list') and show_fit:
+                descriptors, outputs = get_post_fit_descriptors(layer, verbose=False)
+            else:
+                descriptors, outputs = get_pre_fit_descriptors(layer, verbose=False)
+            dataframe['layer_{}'.format(i)] = descriptors
+            dataframe['out_{}'.format(i)] = outputs
+
+        return dataframe
+    
+    def _repr_html_(self):
+        df = self.get_dataframe(verbose=False, show_fit=True)
+        styler = df.style.set_properties(**{'text-align': 'center'}).set_table_styles(
+                                        [ dict(selector='th', props=[('text-align', 'center')] ) ])
+        return styler._repr_html_()
+
 class ChannelConcatenator(Cloneable, Saveable):
     
     def fit(self, Xs, y=None, **fit_params):
