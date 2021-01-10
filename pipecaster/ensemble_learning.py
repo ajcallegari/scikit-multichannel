@@ -103,11 +103,12 @@ class HardVotingClassifier(Cloneable, Saveable):
         Xs = self._decatenate(X)
         input_predictions = [np.argmax(X, axis=1).reshape(-1,1) for X in Xs]
         input_predictions = np.concatenate(input_predictions, axis=1)
-        n_samples = input_predictions.shape[0]
+        n_samples, n_votes = input_predictions.shape
         n_classes = len(self.classes_)
         class_counts = [np.bincount(input_predictions[i,:], minlength=n_classes) for i in range(n_samples)]
-        class_counts = np.stack(class_counts)
-        class_counts /= len(live_Xs)
+        class_counts = np.stack(class_counts).astype(float)
+        class_counts /= n_votes
+
         return class_counts
 
 class AggregatingRegressor(Cloneable, Saveable):

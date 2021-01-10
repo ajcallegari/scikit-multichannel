@@ -689,11 +689,14 @@ class MultichannelPipeline(Cloneable, Saveable):
 
         return dataframe
     
-    def _repr_html_(self):
-        df = self.get_dataframe(verbose=False, show_fit=True)
+    def get_html(self, verbose=False, show_fit=True):
+        df = self.get_dataframe(verbose, show_fit)
         styler = df.style.set_properties(**{'text-align': 'center'}).set_table_styles(
                                         [ dict(selector='th', props=[('text-align', 'center')] ) ])
         return styler._repr_html_()
+    
+    def _repr_html_(self):
+        return self.get_html(verbose=False, show_fit=True)
 
 class ChannelConcatenator(Cloneable, Saveable):
     
