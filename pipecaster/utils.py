@@ -11,13 +11,14 @@ predictor or transformer interfaces, or multichannel analogs of
 these interfaces.
 """
 
-__all__ = ['is_classifier', 'is_regressor', 'is_predictor', 'is_transformer'
-           'detect_estimator_type', 'is_multichannel',
-           'get_clone', 'get_sklearn_clone', 'get_list_clone',
-           'save_model', 'load_model', 'get_transform_method',
-           'get_predict_method', 'is_predictor', 'FitError', 'PredictError',
+__all__ = ['is_classifier', 'is_regressor', 'is_predictor', 'is_transformer',
+           'detect_predictor_type', 'is_multichannel',
+           'get_clone', 'get_sklearn_clone', 'get_clones',
+           'save_pipe', 'load_pipe', 'get_prediction_method_names',
+           'is_predictor', 'FitError', 'PredictError',
            'ParallelBackendError', 'get_descriptor', 'get_param_names',
-           'get_param_clone', 'Cloneable', 'Saveable', 'encode_labels']
+           'get_param_clone', 'Cloneable', 'Saveable', 'encode_labels',
+           'decode_labels', 'classify_sample', 'classify_samples']
 
 # set of methods recognized by pipecaster as prediction methods
 recognized_pred_methods = set(['predict', 'predict_proba',
