@@ -10,6 +10,7 @@ import pipecaster.parallel as parallel
 
 __all__ = ['cross_val_score', 'cross_val_predict']
 
+
 def fit_and_predict(predictor, Xs, y, train_indices, test_indices,
                     predict_method_name, fit_params):
         """
@@ -28,7 +29,8 @@ def fit_and_predict(predictor, Xs, y, train_indices, test_indices,
         if hasattr(model, predict_method_name):
             predict_method = getattr(model, predict_method_name)
             if utils.is_multichannel(model):
-                X_tests = [X[test_indices] if X is not None else None for X in Xs]
+                X_tests = [X[test_indices] if X is not None else None
+                           for X in Xs]
                 predictions = predict_method(X_tests)
             else:
                 predictions = predict_method(Xs[test_indices])
@@ -38,6 +40,7 @@ def fit_and_predict(predictor, Xs, y, train_indices, test_indices,
         split_results = (predictions, test_indices)
 
         return split_results
+
 
 def cross_val_predict(predictor, Xs, y=None, groups=None,
                       predict_method='predict', cv=None, combine_splits=True,
@@ -80,14 +83,12 @@ def cross_val_predict(predictor, Xs, y=None, groups=None,
 
     Returns
     -------
-    predictions: list(tuple) or ndarray
-        Returns the result of calling 'method'.
-        When combine_splits == False:
-            returns a list containing (predictions, sample indices) for each
-            split
-        When combine_splits == True:
-            returns a single list with predictions for each sample in Xs
-            in the order in which they were provided
+    If combine_splits is False:
+        Returns a list containing (predictions, sample indices) for each
+        split.
+    If combine_splits it True:
+        Returns a single array with predictions for each sample in Xs
+        in the order in which they were provided.
     """
     is_classifier = utils.is_classifier(predictor)
     if is_classifier and y is not None:
@@ -111,20 +112,25 @@ def cross_val_predict(predictor, Xs, y=None, groups=None,
     else:
         splits = list(cv.split(Xs, y, groups))
 
-    args_list = [(predictor, Xs, y, train_indices, test_indices, predict_method, fit_params)
-                for train_indices, test_indices in splits]
+    args_list = [(predictor, Xs, y, train_indices, test_indices,
+                  predict_method, fit_params)
+                 for train_indices, test_indices in splits]
 
     n_jobs = len(args_list)
     n_processes = 1 if n_processes is None else n_processes
-    n_processes = n_jobs if (type(n_processes) == int and n_jobs < n_processes) else n_processes
+    if (type(n_processes) == int and n_jobs < n_processes):
+        n_processes = n_jobs
 
     if n_processes == 'max' or n_processes > 1:
         try:
             shared_mem_objects = [Xs, y, fit_params]
-            split_results = parallel.starmap_jobs(fit_and_predict, args_list,
-                                                      n_cpus=n_processes, shared_mem_objects=shared_mem_objects)
+            split_results = parallel.starmap_jobs(
+                                fit_and_predict, args_list,
+                                n_cpus=n_processes,
+                                shared_mem_objects=shared_mem_objects)
         except Exception as e:
-            print('parallel processing request failed with message {}'.format(e))
+            print('parallel processing request failed with message {}'
+                  .format(e))
             print('defaulting to single processor')
             n_processes = 1
     if n_processes == 1:
@@ -133,7 +139,7 @@ def cross_val_predict(predictor, Xs, y=None, groups=None,
 
     split_predictions, split_indices = zip(*split_results)
 
-    if combine_splits == False:
+    if combine_splits is False:
         if is_classifier and predict_method == 'predict':
             split_predictions = [classes_[split_prediction]
                                  for split_prediction in split_predictions]
@@ -146,53 +152,49 @@ def cross_val_predict(predictor, Xs, y=None, groups=None,
             predictions = classes_[predictions]
         return predictions[sample_indices]
 
+
 def cross_val_score(predictor, Xs, y=None, groups=None, scorer='auto',
                     cv=3, n_processes=1, **fit_params):
     """
-    Multichannel channel version of scikit-learn's cross_val_score function.
+    Analog of the scikit-learn cross_val_score function that supports both
+    single and multichannel cross validation.
 
     Parameters
     ----------
-    predictor : Scikit-learn conformant predictor instance
-    Xs : array-like of shape (n_samples, n_features) or list of array-likes
-        A single feature matrix, or a list of feature matrices with the same samples in the same order.
-    y : array-like of shape (n_samples,) or (n_samples, n_outputs), \
-            default=None
-        The target variable to try to predict in the case of
-        supervised learning.
-    groups : array-like of shape (n_samples,), default=None
+    predictor : predictor instance implementing 'fit' and 'predict'
+    Xs: ndarray.shape(n_samples, n_features) or list of ndarrays
+        A single feature matrix, or a list of feature matrices, each with
+        identical samples in the same order.
+    y: nd.array(n_samples,) or list with length n_samples, default=None
+        If list-like: Supervised learning target values.
+        If None: Value used for unsupervised machine learning.
+    groups: ndarray.shape(n_samples,) or list of n_samples, default=None
         Group labels for the samples used while splitting the dataset into
         train/test set. Only used in conjunction with a "Group" :term:'cv'
         instance (e.g., :class:'GroupKFold').
-    scorer : callable, default=None
-        a scorer callable object / function with signature
-        'scorer(y_true, y_pred)' which should return only
-        a single value.
-    cv : int, cross-validation generator or an iterable, default=None
+    scorer : 'auto' or callable, default='auto'
+        If 'auto': balanced_accuracy_score for classifiers or
+            explained_variance_score for regressors
+        If callable: A scorer object with signature
+            'scorer(y_true, y_pred)' which returns a scalar figure of
+            merit.
+    cv: None, int, or cross-validation generator or an iterable, default=None
         Determines the cross-validation splitting strategy.
         Possible inputs for cv are:
         - None, to use the default 5-fold cross validation,
         - int, to specify the number of folds in a '(Stratified)KFold',
-        - :term:'CV splitter',
         - An iterable yielding (train, test) splits as arrays of indices.
-        For int/None inputs, if the estimator is a classifier and 'y' is
+        For int/None inputs, if the predictor is a classifier and 'y' is
         either binary or multiclass, :class:'StratifiedKFold' is used. In all
         other cases, :class:'KFold' is used.
-    n_processes : int, default=None
-        The number of CPUs to use to do the computation.
-        'None' means 1 unless in a :obj:'joblib.parallel_backend' context.
-        '-1' means using all processors. See :term:'Glossary <n_processes>'
-        for more details.
-    verbose : int, default=0
-        The verbosity level.
-    fit_params : dict, default=None
-        Parameters to pass to the fit method of the estimator.
+    n_processes: int, default='max'
+        The number of parallel fit/predict processes to run.
+    fit_params: dict, defualt=None
+        Auxiliary parameters to pass to the fit method of the predictor.
 
     Returns
     -------
-    scores : list of floats, one for each split
-        List of performance scores for the predictor.  If the predictor is multichannel with multiple outputs,
-        each split score is an average of the scores for each output.
+    scores : List of scalar figure of merit scores, one for each split.
 
     """
     if scorer is None or scorer == 'auto':
@@ -201,11 +203,11 @@ def cross_val_score(predictor, Xs, y=None, groups=None, scorer='auto',
         elif utils.is_regressor(predictor):
             scorer = explained_variance_score
 
-    prediction_splits = cross_val_predict(predictor, Xs, y, groups, 'predict', cv,
-                                     combine_splits=False, n_processes=n_processes, **fit_params)
-    try:
-        scores = [scorer(y[split_indices], split_prediction) for split_prediction, split_indices in prediction_splits]
-    except:
-        import pdb; pdb.set_trace()
+    prediction_splits = cross_val_predict(predictor, Xs, y, groups, 'predict',
+                                          cv, combine_splits=False,
+                                          n_processes=n_processes,
+                                          **fit_params)
+    scores = [scorer(y[split_indices], split_prediction)
+              for split_prediction, split_indices in prediction_splits]
 
     return scores
