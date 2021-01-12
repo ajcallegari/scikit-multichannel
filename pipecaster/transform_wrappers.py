@@ -263,7 +263,7 @@ class SingleChannelCV(SingleChannel):
                                     predict_method=self.transform_method_name,
                                     cv=self.internal_cv, combine_splits=True,
                                     n_processes=self.cv_processes,
-                                    split_seed=None, fit_params=fit_params)
+                                    fit_params=fit_params)
 
             if self.scorer is not None:
                 if self.transform_method_name in ['predict_proba',
@@ -436,7 +436,7 @@ class MultichannelCV(Multichannel):
                                   predict_method=self.transform_method_name,
                                   cv=self.internal_cv, combine_splits=True,
                                   n_processes=self.cv_processes,
-                                  split_seed=None, fit_params=fit_params)
+                                  fit_params=fit_params)
 
             Xs_t = [None for X in Xs]
             if len(predictions.shape) == 1:
