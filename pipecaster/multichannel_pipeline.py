@@ -578,6 +578,7 @@ class MultichannelPipeline(Cloneable, Saveable):
     * Sample weights for internal cv performance metrics not yet supported.
     * Caching of intermediate results not yet implemented.
     * fit_params targeted to specific pipes not yet implemented.
+    * GPUs not yet supported.
     """
 
     state_variables = ['classes_']
