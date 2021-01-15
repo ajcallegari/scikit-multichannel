@@ -7,11 +7,11 @@ import pipecaster.utils as utils
 from pipecaster.ray_backend import RayDistributor
 
 """
-Parallel computing backend for pipecaster.  Users can typically ignore this module 
-   unless they want to get information about resources or set a custom backend 
-   using set_distributor(my_backend_instance).  For info on building a cluster,
-   the the ray_backend module.
-   
+Parallel computing back end for pipecaster.  Users can typically ignore this
+module unless they want to get information about resources or set a custom
+backend using set_distributor(my_backend_instance).  For info on building a
+cluster, see the ray_backend module.
+
 Notes
 -----
 Custom parallel backend implementations need to provide a distributor Class with these methods:
@@ -31,10 +31,10 @@ import pipecaster.parallel as parallel
 
 def f(a, b):
     return a + b
-    
+
 As = [1, 2, 3]
 Bs = [4, 5, 6]
-    
+
 results = parallel.map_jobs(f, As, Bs, n_cpus='max')
 print(results)
 
@@ -57,7 +57,7 @@ import pipecaster.parallel as parallel
 
 def f(a, big_arg):
     return a + big_arg
-    
+
 As = [1, 2, 3]
 Bs = [big_arg, big_arg, big_arg]
 
@@ -70,19 +70,19 @@ output:
 
 """
 
-__all__ = ['set_distributor', 'starmap_jobs', 'map_jobs', 'count_local_cpus', 
+__all__ = ['set_distributor', 'starmap_jobs', 'map_jobs', 'count_local_cpus',
            'count_cpus', 'count_gpus']
 
 default_distributor_type = RayDistributor
 distributor_type = default_distributor_type
 distributor = None
-        
+
 def set_distributor(distributor_):
-    """Set a custom distributor.  Should be an instantiated RayDistributor instance or object with similar interface. 
+    """Set a custom distributor.  Should be an instantiated RayDistributor instance or object with similar interface.
     """
     global distributor
     distributor = distributor_
-    
+
 def startup(n_cpus='all', n_gpus='all', object_store_memory='auto'):
     global distributor
     if distributor is not None:
@@ -90,15 +90,15 @@ def startup(n_cpus='all', n_gpus='all', object_store_memory='auto'):
     else:
         distributor = default_distributor_type()
         distributor.startup(n_cpus, n_gpus, object_store_memory)
-            
+
 def start_if_needed(n_cpus='all', n_gpus='all', object_store_memory='auto'):
     if distributor is None or distributor.is_started() == False:
         startup(n_cpus, n_gpus, object_store_memory)
-        
+
 def shutdown():
     if distributor is not None and distributor.is_started():
         distributor.shutdown()
-        
+
 def count_local_cpus():
     return multiprocessing.cpu_count()
 
@@ -113,27 +113,27 @@ def count_gpus():
         return count_local_cpus()
     else:
         return distributor.count_gpus()
-    
+
 def starmap_jobs(f, args_list, n_cpus='max', shared_mem_objects=None):
     '''
     Compute a list of jobs in parallel, where each job is specified by an args tuple in a single list
-       
+
     Arguments
     ---------
     f: callable
         Python callable object that you want to execute in parallel.
-        
+
     arg_lists: iterable
         List of argument tuples or lists, where each tuple/list specifies a job.
         e.g. [(arg1-job1, arg2-job1, arg3-job1), (arg1-job2, arg2-job2, arg3-job2)]
-        
+
     n_cpus: 'max' or int, default='max'
         Number of parallel processes to use for the jobs.  'max' requests all available CPUs.
-        
+
     shared_mem_objects: iterable or None, default=None
-        List of Python objects to pre-store in the plasma in-memory object store to prevent 
+        List of Python objects to pre-store in the plasma in-memory object store to prevent
         repeated storage of large objects.
-    
+
     Example
     -------
     import pipecaster.parallel as parallel
@@ -150,7 +150,7 @@ def starmap_jobs(f, args_list, n_cpus='max', shared_mem_objects=None):
 
     output:
     [5, 7, 9]
-    
+
     '''
     arg_lists = list(zip(*args_list))
     return map_jobs(f, *arg_lists, n_cpus=n_cpus, shared_mem_objects=shared_mem_objects)
@@ -159,23 +159,23 @@ def map_jobs(f, *arg_lists, n_cpus='max', shared_mem_objects=None):
     '''
     Compute a list of jobs in parallel, where each job is specified by an set of lists, with each list
     containing a different argument (standard Python map argument structure)
-    
+
     Arguments
     ---------
     f: callable
         Python callable object that you want to execute in parallel.
-        
+
     *arg_lists: iterable
         List of arg_lists, where each arg_list is list of arguments to be sent to f() ordered by job number.
         e.g. [[arg1-job1, arg1-job2, arg1-job3], [arg2-job1, arg2-job2, arg2-job3]]
-        
+
     n_cpus: 'max' or int, default='max'
         Number of parallel processes to use for the jobs.  'max' requests all available CPUs.
-        
+
     shared_mem_objects: iterable or None, default=None
-        List of Python objects to pre-store in the plasma in-memory object store to prevent 
+        List of Python objects to pre-store in the plasma in-memory object store to prevent
         repeated storage of large objects.
-    
+
     Example
     -------
     import pipecaster.parallel as parallel
@@ -190,8 +190,8 @@ def map_jobs(f, *arg_lists, n_cpus='max', shared_mem_objects=None):
     results = parallel.starmap_jobs(f, args_list, n_cpus='max', shared_mem_objects=[big_arg])
 
     note: This feature only increases speed when a large argument is passed multiple times in your jobs
-        because in those instances ray will copy the argument to the plasma store each time the argument is passed, 
+        because in those instances ray will copy the argument to the plasma store each time the argument is passed,
         whereas shared_mem_objects guarantees that the object will only be placed in the store one time.
     '''
-    start_if_needed()       
+    start_if_needed()
     return distributor.map_jobs(f, *arg_lists, n_cpus=n_cpus, shared_mem_objects=shared_mem_objects)

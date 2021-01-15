@@ -76,8 +76,12 @@ def cross_val_predict(predictor, Xs, y=None, groups=None,
     combine_splits: bool, default=True
         If False: Return results for separate splits.
         If True: Concatenate results for splits into a single array.
-    n_processes: int, default='max'
-        The number of parallel fit/predict processes to run.
+    n_processes: int or 'max', default='max'
+        If 1: Run all split computations in a single process.
+        If 'max': Run each split in a different process, using all available
+            CPUs
+        If int > 1: Run each split in a different process, using up to
+            n_processes number of CPUs
     fit_params: dict, defualt=None
         Auxiliary parameters to pass to the fit method of the predictor.
 
