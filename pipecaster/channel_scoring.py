@@ -55,13 +55,13 @@ class CvPerformanceScorer(Cloneable, Saveable):
 
     Parameters
     ----------
-    predictor_probe: scikit-learn compliant classifier or regressor instance
+    predictor_probe: Scikit-learn compliant classifier or regressor instance
         Machine learning model, usually low complexity and high speed, used
         to estimate the predictive value of a feature matrix in a
         cross_val_score() function call.
     cv: None, int, or callable, default=5
         Set the cross validation method.
-        If 1: Internal cv training is inactivated.
+        If 1: Internal cv training is inactivated
         If int > 1: StratifiedKFold(n_splits=internal_cv) for classifiers and
             KFold(n_splits=internal_cv) for regressors.
         If None: The default value of 5 is used.
