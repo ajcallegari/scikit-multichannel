@@ -1,4 +1,5 @@
 from pipecaster.utils import *
+from pipecaster.parallel import *
 from pipecaster.transform_wrappers import *
 from pipecaster.multichannel_pipeline import *
 from pipecaster.channel_scoring import *

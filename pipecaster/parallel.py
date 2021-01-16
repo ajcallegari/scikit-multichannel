@@ -168,24 +168,21 @@ def count_gpus():
 
 def starmap_jobs(f, args_list, n_cpus='max', shared_mem_objects=None):
     '''
-    Compute a list of jobs in parallel, where each job is specified by an args
-    tuple in a single list.
+    Compute a list of jobs in parallel. Call signature similar to the
+    Python standard library multiprocessing starmap() function.
 
     Arguments
     ---------
     f: callable
         Python callable object that you want to execute in parallel.
-
     arg_lists: list of tuples
         List of argument tuples or lists, where each tuple/list specifies a
             job.
         e.g. [(arg1-job1, arg2-job1, arg3-job1),
               (arg1-job2, arg2-job2, arg3-job2)]
-
     n_cpus: 'max' or int, default='max'
         Number of parallel processes to use for the jobs.
         'max' requests all available CPUs.
-
     shared_mem_objects: iterable or None, default=None
         List of Python objects to pre-store in the plasma in-memory object
         store to prevent repeated storage of large objects.
@@ -218,8 +215,8 @@ def starmap_jobs(f, args_list, n_cpus='max', shared_mem_objects=None):
 
 def map_jobs(f, *arg_lists, n_cpus='max', shared_mem_objects=None):
     '''
-    Compute a list of jobs in parallel, where each argument is specified by
-    a separate list (standard Python map() signatures).
+    Compute a list of jobs in parallel using a signature like that of the
+    standard Python map() function.
 
     Parameters
     ----------
