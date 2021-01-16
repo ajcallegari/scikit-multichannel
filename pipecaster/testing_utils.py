@@ -9,7 +9,7 @@ def make_multi_input_classification(n_informative_Xs=3,
                                     n_weak_Xs=0,
                                     n_random_Xs=0,
                                     weak_noise_sd=0.2,
-                                    seed = None,
+                                    seed=None,
                                     **sklearn_params
                                     ):
     """
@@ -112,7 +112,8 @@ def make_multi_input_regression(n_informative_Xs=3,
         sklearn_params['random_state'] = seed
 
     n_Xs = n_informative_Xs + n_weak_Xs + n_random_Xs
-    n_samples, n_features = sklearn_params['n_samples'], sklearn_params['n_features']
+    n_samples = sklearn_params['n_samples']
+    n_features = sklearn_params['n_features']
 
     for p in sklearn_params:
         if p in ['n_features', 'n_informative']:
@@ -124,7 +125,8 @@ def make_multi_input_regression(n_informative_Xs=3,
 
     # add extra gaussian noise to create weak matrices
     for i in range(n_weak_Xs):
-        Xs[i] += np.random.normal(loc=0, scale=weak_noise_sd, size=(n_samples, n_features))
+        Xs[i] += np.random.normal(loc=0, scale=weak_noise_sd,
+                                  size=(n_samples, n_features))
 
     # shuffle matrices that are neither informative or weak
     for i in range(n_weak_Xs, n_Xs - n_informative_Xs):
@@ -168,7 +170,7 @@ class DummyClassifier(Cloneable):
         a = 0
         for i in range(self.futile_cycles_pred):
             a += 1
-        return np.random.choice(self.classes_ , X.shape[0])
+        return np.random.choice(self.classes_, X.shape[0])
 
     def predict_proba(self, X):
         a = 0
