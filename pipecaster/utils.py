@@ -229,10 +229,10 @@ class ParallelBackendError(Exception):
         super().__init__(self.message)
 
 
-def get_descriptor(class_name, params=None, verbose=0):
+def get_descriptor(obj, verbose=0, params=None):
     """
-    Get a text description of a class (e.g. a pipe) with optional information
-        about parameter values.
+    Get a text description of on object (e.g. a pipe) with optional
+    information about parameter values.
 
     Parameters
     ----------
@@ -247,30 +247,32 @@ def get_descriptor(class_name, params=None, verbose=0):
             e.g. "RandomForestClassifier(n_estimators=50)"
         if -1: return a condensed class name, e.g. "RanForCla",
             (not implemented)
-
     """
-    if verbose == 0:
-        return class_name
-    elif verbose == 1:
-        string_ = class_name + '('
-        argstrings = []
-        for k, v in params.items():
-            argstring = k + '='
-            if hasattr(v, '__name__'):
-                argstring += v.__name__
-            elif hasattr(v, '__str__'):
-                argstring += v.__str__()
-            elif type(v) in [str, int, float]:
-                argstring += v
-            else:
-                argstring += 'NA'
-            argstrings.append(argstring)
-        string_ += ', '.join(argstrings)
-        return string_ + ')'
-    elif verbose == -1:
-        raise NotImplmentedError('Condensed names not implemented yet.')
+    if hasattr(obj, 'get_descriptor'):
+        return obj.get_descriptor(verbose)
     else:
-        raise ValueError('Unsupported value for verbose.')
+        if verbose == 0:
+            return obj.__class__.__name__
+        elif verbose == 1:
+            string_ = obj.__class__.__name__ + '('
+            argstrings = []
+            for k, v in params.items():
+                argstring = k + '='
+                if hasattr(v, '__name__'):
+                    argstring += v.__name__
+                elif hasattr(v, '__str__'):
+                    argstring += v.__str__()
+                elif type(v) in [str, int, float]:
+                    argstring += v
+                else:
+                    argstring += 'NA'
+                argstrings.append(argstring)
+            string_ += ', '.join(argstrings)
+            return string_ + ')'
+        elif verbose == -1:
+            raise NotImplmentedError('Condensed names not implemented yet.')
+        else:
+            raise ValueError('Unsupported value for verbose.')
 
 
 def get_param_names(callable_, omit_self=True):
@@ -333,16 +335,6 @@ class Cloneable:
             self.state_variables = (super_.state_variables +
                                     self.state_variables)
 
-    def to_str(self, verbose=True):
-        return get_descriptor(self.__class__.__name__,
-                              self.get_params(), verbose)
-
-    def __str__(self):
-        return get_descriptor(self.__class__.__name__, self.get_params())
-
-    def __repr__(self):
-        return self.to_str(verbose=True)
-
     def get_params(self, deep=False):
         return {p: getattr(self, p) for p in self.param_names}
 
@@ -360,6 +352,15 @@ class Cloneable:
                 if hasattr(self, var):
                     setattr(clone, var, getattr(self, var))
         return clone
+
+    def to_str(self, verbose=1):
+        return get_descriptor(self, verbose, self.get_params())
+
+    def __str__(self):
+        return self.to_str(verbose=1)
+
+    def __repr__(self):
+        return self.to_str(verbose=1)
 
 
 class Saveable:

@@ -198,6 +198,10 @@ class SingleChannel(Cloneable, Saveable):
             clone.model = utils.get_clone(self.model)
         return clone
 
+    def get_descriptor(self, verbose=1):
+        return '{' + utils.get_descriptor(self.predictor, verbose,
+                                          self.get_params()) + '}tr'
+
 
 class SingleChannelCV(SingleChannel):
     """
@@ -283,6 +287,10 @@ class SingleChannelCV(SingleChannel):
     def get_clone(self):
         return super().get_clone()
 
+    def get_descriptor(self, verbose=1):
+        return '{' + utils.get_descriptor(self.predictor, verbose,
+                                          self.get_params()) + '}cvtr'
+
 
 class Multichannel(Cloneable, Saveable):
     """
@@ -364,6 +372,10 @@ class Multichannel(Cloneable, Saveable):
     def fit_transform(self, Xs, y=None, **fit_params):
         self.fit(Xs, y=None, **fit_params)
         return self.transform(Xs)
+
+    def get_descriptor(self, verbose=1):
+        return '{' + utils.get_descriptor(self.multichannel_predictor, verbose,
+                                          self.get_params()) + '}tr'
 
 
 class MultichannelCV(Multichannel):
@@ -451,6 +463,10 @@ class MultichannelCV(Multichannel):
                 self.score_ = self.scorer(y, predictions)
 
         return Xs_t
+
+    def get_descriptor(self, verbose=1):
+        return '{' + utils.get_descriptor(self.multichannel_predictor, verbose,
+                                          self.get_params()) + '}cvtr'
 
 
 def unwrap_predictor(pipe):

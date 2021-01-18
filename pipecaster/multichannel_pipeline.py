@@ -978,34 +978,24 @@ class MultichannelPipeline(Cloneable, Saveable):
         A dataframe visualization of the pipeline.
         """
 
-        def _get_pre_fit_descriptors(layer, verbose=False):
+        def _get_pre_fit_descriptors(layer, verbose=0):
             right_arrow = '\u2192'
-            down_arrow = '\u2193'
+            down_arrow = '\u25BD'
             descriptors = [right_arrow for channel in range(self.n_channels)]
             for pipe, slice_, indices in layer.pipe_list:
+                descriptor = utils.get_descriptor(pipe, verbose)
                 descriptors[slice_] = [down_arrow for i in indices]
-                if hasattr(pipe, 'to_str'):
-                    descriptor = pipe.to_str(verbose)
-                else:
-                    descriptor = utils.get_descriptor(pipe.__class__.__name__,
-                                                      pipe.get_params(),
-                                                      verbose)
                 descriptors[indices[0]] = descriptor
             outputs = [right_arrow for i in range(self.n_channels)]
             return descriptors, outputs
 
-        def _get_post_fit_descriptors(layer, verbose=False):
+        def _get_post_fit_descriptors(layer, verbose=0):
             right_arrow = '\u2192'
-            down_arrow = '\u2193'
+            down_arrow = '\u25BD'
             descriptors = [right_arrow for channel in range(self.n_channels)]
             for model, slice_, indices in layer.model_list:
+                descriptor = utils.get_descriptor(model, verbose)
                 descriptors[slice_] = [down_arrow for i in indices]
-                if hasattr(model, 'to_str'):
-                    descriptor = model.to_str(verbose)
-                else:
-                    descriptor = utils.get_descriptor(model.__class__.__name__,
-                                                      model.get_params(),
-                                                      verbose)
                 descriptors[indices[0]] = descriptor
             outputs = [right_arrow if flag is True else ' ' for flag in
                        layer.output_mask]
@@ -1026,7 +1016,7 @@ class MultichannelPipeline(Cloneable, Saveable):
 
         return dataframe
 
-    def get_html(self, verbose=False, show_fit=True):
+    def get_html(self, verbose=0, show_fit=True):
         """
         Get an html visual representation of the pipeline.
 
@@ -1056,13 +1046,13 @@ class MultichannelPipeline(Cloneable, Saveable):
         return styler._repr_html_()
 
     def _repr_html_(self):
-        return self.get_html(verbose=False, show_fit=True)
+        return self.get_html(verbose=0, show_fit=True)
 
 
 class ChannelConcatenator(Cloneable, Saveable):
     """
-    Concatenate a block of contigusous channels into a single matrix,
-        outputting the concatomer in the first i/o channel and None into the
+    Concatenate a block of contiguous channels into a single matrix,
+        outputting the concatemer in the first i/o channel and None into the
         remaining channels.
     """
 

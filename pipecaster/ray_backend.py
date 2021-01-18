@@ -110,7 +110,8 @@ class RayDistributor:
 
         if ray.is_initialized():
             ray.shutdown()
-
+            
+        os.system('ulimit -n 8192')
         self.info = ray.init(_redis_password=self.redis_password,
                              num_cpus=self.cpus, num_gpus=self.gpus,
                              object_store_memory=self.memory)
