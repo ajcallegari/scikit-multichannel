@@ -1,6 +1,6 @@
 import numpy as np
 
-from sklearn.metrics import explained_variance_score
+from sklearn.metrics import explained_variance_score, balanced_accuracy_score
 from sklearn.feature_selection import f_classif
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.ensemble import GradientBoostingRegressor
