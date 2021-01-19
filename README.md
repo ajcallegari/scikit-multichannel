@@ -3,6 +3,7 @@
 
 Pipecaster is a Python library for building ensemble machine learning pipelines with multiple inputs silos, and for in-pipeline screening of data sources, feature extraction steps, feature engineering steps, hyperparameters, and models.  The pipecaster interface is loosely based on the Karas interface: pipelines are built layer by layer and there is a visual feedback tool to help manage complexity.  The current version supports algorithms with the scikit-learn transformer and predictor interfaces.
 
+![Use case 1](/images/tutorial_01.svg)
 ## multichannel machine learning
 
 When building an ML pipeline with inputs from multiple data sources or from multiple feature extraction/engineering methods, the best performance is not always obtained by concatenating all the features together into a single matrix.  Better accuracy is sometimes obtained by keeping the inputs in different silos through feature selection and a first round of machine learning.  The outputs of the base learners may then be used for ensemble learning (e.g. voting or model stacking).  Multichannel ML is defined here as ML that uses a pipeline architecture that takes multiple inputs and keeps them siloed through one or more pipeline steps.  Because the inputs are no longer technically still inputs after the first layer of the pipeline, I use the term channel to refer to the silos.
@@ -32,7 +33,6 @@ In addition, pipecaster introduces channel selectors that select input channels 
 Pipecaster uses the ray library to speed up multiprocessing by passing arguments through the plasma in-memory object store without the usual serialization/deserialization overhead and without passing the same object multiple times when needed in multiple jobs.  Ray also enables pipecaster to rapidly distribute jobs among networked computers.
 
 # sample architecture
-![Use case 1](/images/architecture_1.png)
 ![Use case 1](/images/tutorial_01.svg)
 This diagram shows a pipecaster classification pipeline taking 5 numerical input matrices (X0 to X4) and 1 text input (X5).  Code for building this pipeline is given below.  SelectKBestChannels computes a score for each input channel by aggregating their feature scores and then selects the k=3 best channels.  SelectKBestPredictors does an internal cross validation run within the training set during the call to pipeline.fit(Xs, y), estimates the accuracy of models trained on inputs 0 to 4, then selects the k=2 best models and sends their inferences on to a meta-classifier.
 
