@@ -737,6 +737,7 @@ class MultichannelPipeline(Cloneable, Saveable):
             prediction_method = functools.partial(self.predict_with_method,
                                                   method_name=method_name)
             setattr(self, method_name, prediction_method)
+        return self
 
     def transform(self, Xs):
         """

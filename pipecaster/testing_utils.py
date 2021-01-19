@@ -4,6 +4,8 @@ from sklearn.datasets import make_classification, make_regression
 
 from pipecaster.utils import Cloneable
 
+__all__ = ['make_multi_input_classification', 'DummyClassifier']
+
 
 def make_multi_input_classification(n_informative_Xs=3,
                                     n_weak_Xs=0,

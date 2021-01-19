@@ -33,7 +33,7 @@ Pipecaster uses the ray library to speed up multiprocessing by passing arguments
 
 # sample architecture
 ![Use case 1](/images/architecture_1.png)
-
+![Use case 1](/images/tutorial_01.svg)
 This diagram shows a pipecaster classification pipeline taking 5 numerical input matrices (X0 to X4) and 1 text input (X5).  Code for building this pipeline is given below.  SelectKBestChannels computes a score for each input channel by aggregating their feature scores and then selects the k=3 best channels.  SelectKBestPredictors does an internal cross validation run within the training set during the call to pipeline.fit(Xs, y), estimates the accuracy of models trained on inputs 0 to 4, then selects the k=2 best models and sends their inferences on to a meta-classifier.
 
 ## sample code:
