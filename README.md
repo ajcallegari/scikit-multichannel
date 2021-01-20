@@ -6,7 +6,7 @@ Pipecaster is a Python library for building ensemble machine learning pipelines 
 tutorial: https://github.com/ajcallegari/pipecaster/blob/master/tutorial.ipynb
 
 ![Use case 1](/images/tutorial_1.1.svg)
-<img src="/images/performance_comparison.svg" width="300">  
+![Use case 1](/images/performance_comparison.png)
 (Performance results from example 1.1.1 in tutorial.ipynb)
 
 ## multichannel machine learning
