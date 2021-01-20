@@ -6,6 +6,9 @@ Pipecaster is a Python library for building ensemble machine learning pipelines 
 tutorial: https://github.com/ajcallegari/pipecaster/blob/master/tutorial.ipynb
 
 ![Use case 1](/images/tutorial_1.1.svg)
+![Use case 1](/images/performance_comparison.svg)
+Performance results from example 1.1.1 in tutorial.ipynb.
+
 ## multichannel machine learning
 
 ML pipelines often combine input features from multiple data sources or from multiple feature extraction/engineering methods.  In these instances, the best performance is not always obtained by concatenating the features into a single matrix.  Better accuracy can sometimes be obtained by keeping the inputs in different silos through feature selection and a first round of ML, with outputs of the base learners used for ensemble learning (e.g. voting or model stacking).  Multichannel ML is defined here as ML that uses a pipeline architecture that takes multiple inputs and keeps them siloed through one or more pipeline steps.  Because the inputs are no longer technically still inputs after the first layer of the pipeline, I use the term "channel" to refer to the silos.
