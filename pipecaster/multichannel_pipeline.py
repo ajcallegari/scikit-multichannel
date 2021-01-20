@@ -343,7 +343,7 @@ class Layer(Cloneable, Saveable):
                       .format(e))
                 print('defaulting to single processor')
                 n_processes = 1
-        if n_processes is None or n_processes <= 1:
+        if type(n_processes) == int and n_processes <= 1:
             fit_results = [Layer._fit_transform_job(*args)
                            for args in args_list]
 

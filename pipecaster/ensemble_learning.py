@@ -9,6 +9,7 @@ import pipecaster.utils as utils
 from pipecaster.utils import Cloneable, Saveable
 import pipecaster.transform_wrappers as transform_wrappers
 from pipecaster.score_selection import RankScoreSelector
+import pipecaster.parallel as parallel
 
 __all__ = ['SoftVotingClassifier', 'HardVotingClassifier',
            'AggregatingRegressor', 'SelectivePredictorStack',
@@ -258,10 +259,12 @@ class SelectivePredictorStack(Cloneable, Saveable):
                                 for p in self.base_predictors]
 
         args_list = [(p, X, y, fit_params) for p in self.base_predictors]
+
         n_jobs = len(args_list)
         n_processes = 1 if self.base_processes is None else self.base_processes
-        if (type(n_processes) == int and n_jobs < n_processes):
-            n_processes = n_jobs
+        n_processes = (n_jobs
+                       if (type(n_processes) == int and n_jobs < n_processes)
+                       else n_processes)
         if n_processes == 'max' or n_processes > 1:
             try:
                 shared_mem_objects = [X, y, fit_params]
@@ -274,7 +277,7 @@ class SelectivePredictorStack(Cloneable, Saveable):
                       .format(e))
                 print('defaulting to single processor')
                 n_processes = 1
-        if n_processes is None or n_processes <= 1:
+        if type(n_processes) == int and n_processes <= 1:
             fit_results = [SelectivePredictorStack._fit_job(*args)
                            for args in args_list]
 
@@ -286,8 +289,8 @@ class SelectivePredictorStack(Cloneable, Saveable):
                                 if i in selected_indices]
             predictions_list = [p for i, p in enumerate(predictions_list)
                                 if i in selected_indices]
-        self.scores_ = base_model_scores
-        self.selected_indices_ = selected_indices
+            self.scores_ = base_model_scores
+            self.selected_indices_ = selected_indices
         meta_X = np.concatenate(predictions_list, axis=1)
         self.meta_model = utils.get_clone(self.meta_predictor)
         self.meta_model.fit(meta_X, y, **fit_params)
