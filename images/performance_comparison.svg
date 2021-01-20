@@ -8,10 +8,10 @@
    xmlns:xlink="http://www.w3.org/1999/xlink"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
-   height="120pt"
+   height="50pt"
    version="1.1"
-   viewBox="0 0 170 120"
-   width="170pt"
+   viewBox="0 0 70 50"
+   width="70pt"
    id="svg39587"
    sodipodi:docname="performance_comparison.svg"
    inkscape:version="1.0.2 (e86c8708, 2021-01-15)">
@@ -41,12 +41,13 @@
      id="namedview39589"
      showgrid="false"
      inkscape:zoom="2.1215278"
-     inkscape:cx="288"
+     inkscape:cx="219.88871"
      inkscape:cy="192"
      inkscape:window-x="59"
-     inkscape:window-y="36"
+     inkscape:window-y="23"
      inkscape:window-maximized="0"
-     inkscape:current-layer="svg39587" />
+     inkscape:current-layer="svg39587"
+     inkscape:document-rotation="0" />
   <defs
      id="defs39199">
     <style
@@ -57,7 +58,7 @@
   </defs>
   <g
      id="figure_1"
-     transform="matrix(0.33306056,0,0,0.33306056,14.494272,8.4844519)">
+     transform="matrix(0.13584289,0,0,0.13584289,6.716858,5.3027825)">
     <g
        id="patch_1">
       <path
