@@ -1,5 +1,5 @@
-import ray
 import os
+import ray
 
 """
 Module provides a distributor class to back the pipecaster parallel.py
@@ -7,6 +7,7 @@ interface with multiprocessing, a shared in-memory object store, and cluster
 computing.
 """
 
+os.system('ulimit -n 8192')
 default_redis_password = 'gn8GWVrMJ5cSX4'
 
 
@@ -110,8 +111,7 @@ class RayDistributor:
 
         if ray.is_initialized():
             ray.shutdown()
-            
-        os.system('ulimit -n 8192')
+
         self.info = ray.init(_redis_password=self.redis_password,
                              num_cpus=self.cpus, num_gpus=self.gpus,
                              object_store_memory=self.memory)

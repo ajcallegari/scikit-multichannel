@@ -6,6 +6,9 @@ import time
 import pipecaster.utils as utils
 from pipecaster.ray_backend import RayDistributor
 
+__all__ = ['set_distributor', 'starmap_jobs', 'map_jobs', 'count_local_cpus',
+           'count_cpus', 'count_gpus']
+
 """
 Parallel computing interface for pipecaster.  Users can typically ignore this
 module unless they want to get information about resources or set a custom
@@ -75,8 +78,6 @@ output:
 [2.0, 3.0, 4.0]
 """
 
-__all__ = ['set_distributor', 'starmap_jobs', 'map_jobs', 'count_local_cpus',
-           'count_cpus', 'count_gpus']
 default_distributor_type = RayDistributor
 distributor_type = default_distributor_type
 distributor = None
