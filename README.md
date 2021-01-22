@@ -1,7 +1,7 @@
 # pipecaster
 (in progress)
 
-Pipecaster is a Python library for building ensemble machine learning pipelines with multiple input silos, and for in-pipeline screening of data sources, feature extraction steps, feature engineering steps, hyperparameters, and ML algorithms.  The pipecaster interface is loosely based on Keras layers: pipelines are built layer by layer and there is a visual feedback tool to help manage complexity.  The current version supports algorithms with the scikit-learn estimator/transformer/predictor interfaces.
+Pipecaster is a Python library for building ensemble machine learning pipelines with multiple input channels and for semi-automated-ML.  Screening of data sources, feature extraction steps, feature engineering steps, hyperparameters, and ML algorithms can all be automated within pipecaster's **MultichannelPipeline** class.  The MultiChannelPipeline construction workflow is loosely based on Keras layers: pipelines are built layer by layer and there is visual feedback to help manage complex architectures.  The current version supports algorithms with the scikit-learn estimator/transformer/predictor interfaces.
 
 tutorial: https://github.com/ajcallegari/pipecaster/blob/master/tutorial.ipynb
 
@@ -12,7 +12,7 @@ tutorial: https://github.com/ajcallegari/pipecaster/blob/master/tutorial.ipynb
 ML pipelines often combine input features from multiple data sources or from multiple feature extraction/engineering methods.  In these instances, the best performance is not always obtained by concatenating the different feature vectors into a single input vector.  Better accuracy can sometimes be obtained by keeping the inputs in different silos through feature selection and a first round of ML (fig. 1), with outputs of the base learners used for ensemble learning (e.g. voting or model stacking).  This improved accuracy may be due to increased feature diversity enforced by the silos.  Multichannel ML is defined here as ML with a pipeline architecture that takes multiple feature vectors as inputs and keeps their processing siloed through one or more pipeline steps.  Because the inputs are no longer technically still inputs after the first layer of the pipeline, I use the term "channel" to refer to the silos.
 
 ![figure 1.](/images/performance_comparison.png)  
-figure 1. Performance results from example 1.1.1 in [tutorial.ipynb](https://github.com/ajcallegari/pipecaster/blob/master/tutorial.ipynb).  
+**figure 1**. Performance results from example 1.1.1 in [tutorial.ipynb](https://github.com/ajcallegari/pipecaster/blob/master/tutorial.ipynb).  
 
 Pipecaster provides a *MultichannelPipeline* class to simplify the construction and visualization of multichannel ensemble architectures.  This class makes it easy to create wide pipelines (many inputs) by broadcasting construction operations across multiple input channels, and deep pipelines (many layers) with a layer-by-layer construction workflow and internal cross validation training (1).  
 (1) Wolpert, David H. "Stacked generalization." Neural networks 5.2 (1992): 241-259.

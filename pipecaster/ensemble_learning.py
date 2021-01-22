@@ -252,13 +252,13 @@ class SelectivePredictorStack(Cloneable, Saveable):
         if self._estimator_type == 'classifier' and y is not None:
             self.classes_, y = np.unique(y, return_inverse=True)
 
-        self.base_predictors = [transform_wrappers.SingleChannelCV(
+        predictors = [transform_wrappers.SingleChannelCV(
                                     p, self.base_transform_method,
                                     self.internal_cv, self.cv_processes,
                                     self.scorer)
-                                for p in self.base_predictors]
+                      for p in self.base_predictors]
 
-        args_list = [(p, X, y, fit_params) for p in self.base_predictors]
+        args_list = [(p, X, y, fit_params) for p in predictors]
 
         n_jobs = len(args_list)
         n_processes = 1 if self.base_processes is None else self.base_processes
@@ -295,7 +295,7 @@ class SelectivePredictorStack(Cloneable, Saveable):
         self.meta_model = utils.get_clone(self.meta_predictor)
         self.meta_model.fit(meta_X, y, **fit_params)
         if hasattr(self.meta_model, 'classes_'):
-            self.classes = self.meta_model.classes_
+            self.classes_ = self.meta_model.classes_
 
         return self
 
