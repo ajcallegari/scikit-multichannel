@@ -11,8 +11,11 @@ tutorial: https://github.com/ajcallegari/pipecaster/blob/master/tutorial.ipynb
 
 ML pipelines often combine input features from multiple data sources or from multiple feature extraction/engineering methods.  In these instances, the best performance is not always obtained by concatenating the features into a single vector.  Better accuracy can sometimes be obtained by keeping the inputs in different silos through feature selection and a first round of ML (fig. 1), with outputs of the base learners used for ensemble learning (e.g. voting or model stacking).  This improved accuracy may be due to increased feature diversity enforced by the silos.  Multichannel ML is defined here as ML with a pipeline architecture that takes multiple inputs and keeps them siloed through one or more pipeline steps.  Because the inputs are no longer technically still inputs after the first layer of the pipeline, I use the term "channel" to refer to the silos.
 
-![Use case 1](/images/performance_comparison.pdf)  
-figure 1. Performance results from example 1.1.1 in tutorial.ipynb.
+![Use case 1](/images/performance_comparison.ps)  
+figure 1. Performance results from example 1.1.1 in tutorial.ipynb.  
+
+![Use case 1](/images/performance_comparison.html)  
+
 
 Pipecaster provides a *MultichannelPipeline* class to simplify the construction and visualization of multichannel ensemble architectures.  This class makes it easy to create wide pipelines (many inputs) by broadcasting construction operations across multiple input channels, and deep pipelines (many layers) with a layer-by-layer construction workflow and internal cross validation training (1).  
 (1) Wolpert, David H. "Stacked generalization." Neural networks 5.2 (1992): 241-259.
