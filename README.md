@@ -9,9 +9,9 @@ tutorial: https://github.com/ajcallegari/pipecaster/blob/master/tutorial.ipynb
 
 ## multichannel machine learning
 
-ML pipelines often combine input features from multiple data sources or from multiple feature extraction/engineering methods.  In these instances, the best performance is not always obtained by concatenating the features into a single vector.  Better accuracy can sometimes be obtained by keeping the inputs in different silos through feature selection and a first round of ML (fig. 1), with outputs of the base learners used for ensemble learning (e.g. voting or model stacking).  Multichannel ML is defined here as ML with a pipeline architecture that takes multiple inputs and keeps them siloed through one or more pipeline steps.  Because the inputs are no longer technically still inputs after the first layer of the pipeline, I use the term "channel" to refer to the silos.
+ML pipelines often combine input features from multiple data sources or from multiple feature extraction/engineering methods.  In these instances, the best performance is not always obtained by concatenating the features into a single vector.  Better accuracy can sometimes be obtained by keeping the inputs in different silos through feature selection and a first round of ML (fig. 1), with outputs of the base learners used for ensemble learning (e.g. voting or model stacking).  This improved accuracy may be due to increased feature diversity enforced by the silos.  Multichannel ML is defined here as ML with a pipeline architecture that takes multiple inputs and keeps them siloed through one or more pipeline steps.  Because the inputs are no longer technically still inputs after the first layer of the pipeline, I use the term "channel" to refer to the silos.
 
-![Use case 1](/images/performance_comparison.png)  
+![Use case 1](/images/performance_comparison.pdf)  
 figure 1. Performance results from example 1.1.1 in tutorial.ipynb.
 
 Pipecaster provides a *MultichannelPipeline* class to simplify the construction and visualization of multichannel ensemble architectures.  This class makes it easy to create wide pipelines (many inputs) by broadcasting construction operations across multiple input channels, and deep pipelines (many layers) with a layer-by-layer construction workflow and internal cross validation training (1).  
@@ -34,7 +34,7 @@ pipecaster MultichannelPipeline with a single input matrix:
 ## semi-auto-ML
 A typical ML workflow involves screening input sources, feature extraction & engineering steps, ML algorithms, and model hyperparameters.  Pipecaster allows you to semi-automate each of these screening tasks by including them in the ML pipeline and executing the screens during calls to pipeline.fit().  This can be useful when you are developing a large number of different pipelines in parallel and don't have time to optimize each one separately, and it may accelerate ML workflows in general.  
 
-In addition, pipecaster introduces channel selectors that select input channels based on aggregate univariate feature scores or information content estimated using probe ML models or full ML models.  Channel selection prevents garbage from flowing into and out of your machine learning pipelines.
+In addition, pipecaster introduces channel selectors that select input channels based on aggregate feature scores or information content estimated using probe ML models or full ML models.  Channel selection prevents garbage from flowing into and out of your machine learning pipelines.
 
 Relevant classes: **SelectKBestScorers**, **SelectKBestPerformers**, **SelectKBestModels**, **SelectKBestProbes**, **SelectivePredictorStack**
 
