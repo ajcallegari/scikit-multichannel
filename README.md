@@ -13,8 +13,6 @@ ML pipelines often combine input features from multiple data sources or from mul
 
 ![Use case 1](/images/performance_comparison.png)  
 figure 1. Performance results from example 1.1.1 in tutorial.ipynb.  
-![Use case 1](/images/performance_comparison.eps)  
-
 
 Pipecaster provides a *MultichannelPipeline* class to simplify the construction and visualization of multichannel ensemble architectures.  This class makes it easy to create wide pipelines (many inputs) by broadcasting construction operations across multiple input channels, and deep pipelines (many layers) with a layer-by-layer construction workflow and internal cross validation training (1).  
 (1) Wolpert, David H. "Stacked generalization." Neural networks 5.2 (1992): 241-259.
