@@ -344,6 +344,7 @@ class Cloneable:
                 setattr(self, key, value)
             else:
                 raise AttributeError('invalid parameter name')
+        return self
 
     def get_clone(self):
         clone = get_param_clone(self)
@@ -369,6 +370,7 @@ class Saveable:
     """
     def save(self, filepath):
         joblib.dump(self, filepath)
+        return self
 
     @staticmethod
     def load(filepath):

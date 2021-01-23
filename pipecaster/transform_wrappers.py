@@ -139,6 +139,7 @@ class SingleChannel(Cloneable, Saveable):
 
     def set_transform_method(self, method_name):
         self.transform_method_name = method_name
+        return self
 
     def fit(self, X, y=None, **fit_params):
         self.model = utils.get_clone(self.predictor)

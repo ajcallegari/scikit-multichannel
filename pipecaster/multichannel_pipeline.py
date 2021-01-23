@@ -679,6 +679,7 @@ class MultichannelPipeline(Cloneable, Saveable):
         else:
             for layer in self.layers:
                 layer.pipe_processes = pipe_processes
+        return self
 
     def fit(self, Xs, y=None, **fit_params):
         """

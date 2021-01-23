@@ -2639,7 +2639,7 @@
         <dc:format>image/svg+xml</dc:format>
         <dc:type
            rdf:resource="http://purl.org/dc/dcmitype/StillImage" />
-        <dc:title></dc:title>
+        <dc:title />
       </cc:Work>
     </rdf:RDF>
   </metadata>
@@ -3023,7 +3023,7 @@
            style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.29166999999999987px;line-height:1.25;font-family:arial;-inkscape-font-specification:'arial, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;white-space:pre;shape-inside:url(#rect27641-4);display:inline;fill:#000000;fill-opacity:1;stroke:none;"
            transform="translate(40.02557,-29.987886)"><tspan
              x="64.507812"
-             y="45.373917"><tspan>SelectivePredictorStack</tspan></tspan></text>
+             y="45.373917"><tspan>GridSearchStack</tspan></tspan></text>
       </g>
       <g
          id="g15885"

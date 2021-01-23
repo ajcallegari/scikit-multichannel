@@ -1,9 +1,11 @@
 import numpy as np
+import pandas as pd
 import ray
 import scipy.stats
 import functools
 
 from sklearn.metrics import explained_variance_score, balanced_accuracy_score
+from sklearn.model_selection import ParameterGrid
 
 import pipecaster.utils as utils
 from pipecaster.utils import Cloneable, Saveable
@@ -12,7 +14,7 @@ from pipecaster.score_selection import RankScoreSelector
 import pipecaster.parallel as parallel
 
 __all__ = ['SoftVotingClassifier', 'HardVotingClassifier',
-           'AggregatingRegressor', 'SelectivePredictorStack',
+           'AggregatingRegressor', 'SelectiveStack', 'GridSearchStack',
            'MultichannelPredictor']
 
 
@@ -163,20 +165,20 @@ class AggregatingRegressor(Cloneable, Saveable):
         return self.transform(X)
 
 
-class SelectivePredictorStack(Cloneable, Saveable):
+class SelectiveStack(Cloneable, Saveable):
     """
-    A scikit-learn corformant single channel ensemble predictor stack that
-    can select base predictors based on performance in an internal cross
-    validation test.
+    An ensemble predictor stack that screens a list of base predictors and
+    makes an ensemble with the best performers.  Supports the scikit-learn
+    estimator/predictor interface.
 
     Parameters
     ---------
-    base_predictors: list of predictors, default=None
+    base_predictors: list of predictor instances, default=None
         Ensemble of scikit-learn conformant base predictors (either all
         classifiers or all regressors).
-    meta_predictor: predictor, default=None
-        Sklearn conformant classifier or regresor that makes predictions from
-        the inference of the base predictors.
+    meta_predictor: predictor instance, default=None
+        Scikit-learn conformant classifier or regresor that makes predictions
+        from the inference of the base predictors.
     internal_cv: int, None, sklearn cross-validation generator, default=5
         Method for estimating performance of base classifiers and ensuring that
         they not generate predictions from their training samples during
@@ -214,7 +216,7 @@ class SelectivePredictorStack(Cloneable, Saveable):
                  score_selector=RankScoreSelector(k=3),
                  base_transform_method=None,
                  base_processes=1, cv_processes=1):
-        self._params_to_attributes(SelectivePredictorStack.__init__, locals())
+        self._params_to_attributes(SelectiveStack.__init__, locals())
         estimator_types = [p._estimator_type for p in base_predictors]
         if len(set(estimator_types)) != 1:
             raise TypeError('base_predictors must be of uniform type \
@@ -269,7 +271,7 @@ class SelectivePredictorStack(Cloneable, Saveable):
             try:
                 shared_mem_objects = [X, y, fit_params]
                 fit_results = parallel.starmap_jobs(
-                                SelectivePredictorStack._fit_job, args_list,
+                                SelectiveStack._fit_job, args_list,
                                 n_cpus=n_processes,
                                 shared_mem_objects=shared_mem_objects)
             except Exception as e:
@@ -278,7 +280,7 @@ class SelectivePredictorStack(Cloneable, Saveable):
                 print('defaulting to single processor')
                 n_processes = 1
         if type(n_processes) == int and n_processes <= 1:
-            fit_results = [SelectivePredictorStack._fit_job(*args)
+            fit_results = [SelectiveStack._fit_job(*args)
                            for args in args_list]
 
         self.base_models, predictions_list = zip(*fit_results)
@@ -361,6 +363,96 @@ class SelectivePredictorStack(Cloneable, Saveable):
             clone.meta_model = utils.get_clone(self.meta_model)
         return clone
 
+
+class GridSearchStack(SelectiveStack):
+    """
+    Ensemble predictor stack that screens base predictor parameters and
+    makes an ensemble of base models with the best parameters.  Supports the
+    scikit-learn estimator/predictor interface.
+
+    Parameters
+    ---------
+    param_dict: dict, default=None
+        A dict containing lists of parameters indexed by the parameter name.
+        The lists indicate parameter values to be screened in a grid search
+        (Cartesian product of the lists).  E.g.:
+        {'param1':[value1, value2, value3], 'param2':[value1, value2, value3]}
+    base_predictor_cls: class, default=None
+        Class to be used for base prediction.  Must implement the
+        scikit-learn estimator and predictor interfaces.
+    meta_predictor: class instance, default=None
+        Class instance to be used for meta-prediction using concatenated base
+        predictor outputs as meta-features.  Must implement the scikit-learn
+        estimator and predictor interfaces.
+    internal_cv: int, None, sklearn cross-validation generator, default=5
+        Method for estimating performance of base classifiers and ensuring that
+        they not generate predictions from their training samples during
+        training of the meta-predictor.
+        If int i: If classifier, StratifiedKfold(n_splits=i), if regressor
+            KFold(n_splits=i) for
+        If None: default value of 5
+        If not int or None: Will be treated as a scikit-learn
+            conformant split generator like KFold
+    scorer : callable or 'auto', default='auto'
+        Figure of merit score used for selecting models during internal cross
+        validation.
+        If a callable: the object should have the signature
+            'scorer(y_true, y_pred)' and return a scalar figure of merit.
+        If 'auto': balanced_accuracy_score for classifiers or
+            explained_variance_score for regressors
+    score_selector: callable, default=RankScoreSelector(k=3)
+        A callable with the pattern: selected_indices = callable(scores)
+    base_transform_method: string or None, default=None
+        Set the prediction method name used to generate meta-features from
+        base predictors.  If None, the precedence order specified in
+        transform_wrappers will be used to automatically pick a method.
+    base_processes: int or 'max', default=1
+        The number of parallel processes to run for base predictor fitting.
+    cv_processes: int or 'max', default=1
+        The number of parallel processes to run for internal cross validation.
+
+    notes:
+    Compatible with both sklearn and pipecaster
+    """
+    state_variables = ['classes_', 'scores_',
+                       'selected_indices_', 'params_list_']
+
+    def __init__(self, param_dict=None, base_predictor_cls=None,
+                 meta_predictor=None, internal_cv=5, scorer='auto',
+                 score_selector=RankScoreSelector(k=3),
+                 base_transform_method=None,
+                 base_processes=1, cv_processes=1):
+        self._params_to_attributes(GridSearchStack.__init__, locals())
+
+    def fit(self, X, y=None, **fit_params):
+        self.params_list_ = list(ParameterGrid(self.param_dict))
+        base_predictors = [self.base_predictor_cls(**ps)
+                           for ps in self.params_list_]
+        super().__init__(base_predictors, self.meta_predictor,
+                         self.internal_cv, self.scorer,
+                         self.score_selector, self.base_transform_method,
+                         self.base_processes, self.cv_processes)
+        super().fit(X, y, **fit_params)
+
+    def get_results(self):
+        """
+        Get the results of the grid search screen if available.
+        """
+        if hasattr(self, 'base_models') is True:
+            selections = ['+' if i in self.selected_indices_ else '-'
+                          for i, p in enumerate(self.params_list_)]
+            return selections, self.params_list_, self.scores_
+
+    def get_results_df(self):
+        """
+        Get a Pandas DataFrame with the results of the grid search screen if
+        available.
+        """
+        selections, params_list, scores = self.get_results()
+        df = pd.DataFrame({'selections':selections,
+                           'parameters':params_list, 'score':scores})
+        df.sort_values('score', ascending=False, inplace=True)
+        return df.set_index('score')
 
 class MultichannelPredictor(Cloneable, Saveable):
     """
