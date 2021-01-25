@@ -523,3 +523,6 @@ class MultichannelPredictor(Cloneable, Saveable):
         if hasattr(self, 'model'):
             clone.model = utils.get_clone(self.model)
         return clone
+
+    def get_descriptor(self, verbose=0, params=None):
+        return utils.get_descriptor(self.predictor, verbose, params) + '_MC'

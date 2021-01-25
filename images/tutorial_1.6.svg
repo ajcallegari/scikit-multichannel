@@ -7,13 +7,13 @@
    xmlns="http://www.w3.org/2000/svg"
    xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
    xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
-   width="95mm"
+   width="120mm"
    height="45mm"
-   viewBox="0 0 95 45"
+   viewBox="0 0 120 45"
    version="1.1"
    id="svg8"
    inkscape:version="1.0.2 (e86c8708, 2021-01-15)"
-   sodipodi:docname="tutorial_1.6.svg">
+   sodipodi:docname="tutorial_1.5.svg">
   <defs
      id="defs2">
     <marker
@@ -1956,6 +1956,36 @@
     </marker>
     <marker
        style="overflow:visible"
+       id="marker6657"
+       refX="0"
+       refY="0"
+       orient="auto"
+       inkscape:stockid="TriangleOutL"
+       inkscape:isstock="true"
+       inkscape:collect="always">
+      <path
+         transform="scale(0.8)"
+         style="fill:#808080;fill-opacity:1;fill-rule:evenodd;stroke:#808080;stroke-width:1pt;stroke-opacity:1"
+         d="M 5.77,0 -2.88,5 V -5 Z"
+         id="path6655" />
+    </marker>
+    <marker
+       style="overflow:visible"
+       id="marker6557"
+       refX="0"
+       refY="0"
+       orient="auto"
+       inkscape:stockid="Arrow1Lend"
+       inkscape:isstock="true"
+       inkscape:collect="always">
+      <path
+         transform="matrix(-0.8,0,0,-0.8,-10,0)"
+         style="fill:#808080;fill-opacity:1;fill-rule:evenodd;stroke:#808080;stroke-width:1pt;stroke-opacity:1"
+         d="M 0,0 5,-5 -12.5,0 5,5 Z"
+         id="path6555" />
+    </marker>
+    <marker
+       style="overflow:visible"
        id="marker4175"
        refX="0"
        refY="0"
@@ -2449,8 +2479,8 @@
     <rect
        x="64.507378"
        y="40.607925"
-       width="57.375408"
-       height="7.1013751"
+       width="42.062458"
+       height="6.3293118"
        id="rect27641-4" />
     <rect
        x="64.507378"
@@ -2651,7 +2681,7 @@
        xml:space="preserve"
        id="text2039"
        style="font-style:normal;font-weight:normal;font-size:10.58329999999999949px;line-height:1.25;font-family:sans-serif;white-space:pre;shape-inside:url(#rect2041);opacity:1;fill:#000000;fill-opacity:1;stroke:none;"
-       transform="matrix(0.54509619,0,0,0.54509619,-58.06458,0.95529726)"><tspan
+       transform="matrix(0.54509619,0,0,0.54509619,-28.348885,2.2242949)"><tspan
          style="visibility:hidden"
          x="71.699219"
          y="76.700387"><tspan
@@ -2660,7 +2690,7 @@
        xml:space="preserve"
        id="text2197"
        style="font-style:normal;font-weight:normal;font-size:10.58329999999999949px;line-height:1.25;font-family:sans-serif;white-space:pre;shape-inside:url(#rect2199);fill:#000000;fill-opacity:1;stroke:none;"
-       transform="matrix(0.54509619,0,0,0.54509619,-58.06458,0.95529726)"><tspan
+       transform="matrix(0.54509619,0,0,0.54509619,-28.348885,2.2242949)"><tspan
          style="visibility:hidden"
          x="56.681641"
          y="53.436715"><tspan
@@ -2669,7 +2699,7 @@
        xml:space="preserve"
        id="text2203"
        style="font-style:normal;font-weight:normal;font-size:10.58329999999999949px;line-height:1.25;font-family:sans-serif;white-space:pre;shape-inside:url(#rect2205);fill:#000000;fill-opacity:1;stroke:none;"
-       transform="matrix(0.54509619,0,0,0.54509619,-59.79435,-16.625838)"><tspan
+       transform="matrix(0.54509619,0,0,0.54509619,-30.078655,-15.35684)"><tspan
          style="visibility:hidden"
          x="57.740234"
          y="72.048043"><tspan
@@ -2677,7 +2707,7 @@
            style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.64444px;font-family:Arial;-inkscape-font-specification:'Arial, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal">StandardScaler</tspan></tspan></text>
     <g
        id="g5497"
-       transform="matrix(0.54509619,0,0,0.54509619,-74.785841,0.66685126)">
+       transform="matrix(0.54509619,0,0,0.54509619,-45.070146,1.9358489)">
       <g
          id="g5509"
          style="display:inline;fill:#99cc33" />
@@ -2691,7 +2721,7 @@
        style="display:inline"
        inkscape:tile-x0="45.732001"
        inkscape:tile-y0="21.336647"
-       transform="matrix(0.54509619,0,0,0.54509619,-68.843287,0.95529726)">
+       transform="matrix(0.54509619,0,0,0.54509619,-39.127592,2.2242949)">
       <text
          xml:space="preserve"
          id="text3847"
@@ -2700,13 +2730,13 @@
     </g>
     <g
        id="g9617"
-       transform="matrix(0.54509619,0,0,0.54509619,-44.495665,0.66685126)" />
+       transform="matrix(0.54509619,0,0,0.54509619,-14.77997,1.9358489)" />
     <g
        id="g38326"
-       transform="translate(-29.715695,-3.7218546)">
+       transform="translate(0,-2.452857)">
       <g
          id="g6159"
-         transform="matrix(0.54509619,0,0,0.54509619,9.212467,13.356827)">
+         transform="matrix(0.54509619,0,0,0.54509619,-9.2937486,12.933828)">
         <path
            style="fill:#808080;stroke:#808080;stroke-width:0.446503;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;marker-mid:url(#marker4075);marker-end:url(#marker4175)"
            d="m 52.354931,22.872442 h 5.734527"
@@ -2716,7 +2746,7 @@
       </g>
       <g
          id="g14783"
-         transform="translate(21.237829,16.81589)">
+         transform="translate(2.7316136,16.392891)">
         <g
            id="use2292"
            style="display:inline"
@@ -2790,13 +2820,54 @@
            inkscape:tile-y0="21.336647"
            transform="matrix(0.54509619,0,0,0.54509619,-18.509725,46.774059)" />
       </g>
+      <g
+         id="g5995"
+         transform="matrix(0.54509619,0,0,0.54509619,-40.190832,12.933828)">
+        <g
+           id="g5931"
+           style="display:inline;fill:#6699ff">
+          <rect
+             style="fill:#6699ff;stroke:none;stroke-width:0.566561;stroke-linejoin:round;stroke-miterlimit:4;stroke-dasharray:none;stroke-opacity:1"
+             id="rect5911"
+             width="21.788628"
+             height="9.1014481"
+             x="120.13835"
+             y="18.69537"
+             ry="1.8868856"
+             inkscape:tile-x0="15.450182"
+             inkscape:tile-y0="17.866877"
+             rx="1.8868856" />
+        </g>
+        <g
+           id="g5993"
+           style="display:inline"
+           transform="translate(0.91397291,4.7625002)">
+          <text
+             xml:space="preserve"
+             id="text5943"
+             style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.29166999999999987px;line-height:1.25;font-family:arial;-inkscape-font-specification:'arial, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;white-space:pre;shape-inside:url(#rect6015);fill:#000000;fill-opacity:1;stroke:none;"
+             transform="translate(57.949844,-25.122851)"><tspan
+               x="64.507812"
+               y="45.373917"><tspan>Scaler</tspan></tspan></text>
+        </g>
+      </g>
+      <g
+         id="g6553"
+         transform="matrix(0.54509619,0,0,0.54509619,9.4875331,12.933828)">
+        <path
+           style="fill:#808080;stroke:#808080;stroke-width:0.446503;stroke-linecap:butt;stroke-linejoin:miter;stroke-miterlimit:4;stroke-dasharray:none;stroke-dashoffset:0;stroke-opacity:1;marker-mid:url(#marker6557);marker-end:url(#marker6657)"
+           d="m 52.354931,22.872442 h 5.734527"
+           id="path6533"
+           inkscape:tile-x0="42.300757"
+           inkscape:tile-y0="20.144556" />
+      </g>
     </g>
     <g
        id="g9823"
-       transform="matrix(0.54509619,0,0,0.54509619,18.112618,0.66685126)" />
+       transform="matrix(0.54509619,0,0,0.54509619,47.828313,1.9358489)" />
     <g
        id="g32894"
-       transform="translate(-50.333562,11.917539)">
+       transform="translate(-20.617867,13.186537)">
       <g
          id="g7847"
          transform="matrix(0.54509619,0,0,0.54509619,36.223281,-2.4007284)">
@@ -2834,10 +2905,9 @@
     </g>
     <g
        id="g23620"
-       transform="matrix(0.54509619,0,0,0.54509619,-12.571875,0.66685126)" />
+       transform="matrix(0.54509619,0,0,0.54509619,17.14382,1.9358489)" />
     <g
-       id="g38839"
-       transform="translate(-29.715695,-1.2689976)">
+       id="g38839">
       <g
          id="g11199"
          transform="matrix(0.54509619,0,0,0.54509619,7.0504821,1.9358489)"
@@ -2987,35 +3057,36 @@
              x="-4.2840838e-07"
              y="0"><tspan
                x="64.507812"
-               y="45.373917"><tspan>Params 1</tspan></tspan></text>
+               y="45.373917"><tspan
+                 style="text-align:start;text-anchor:start">Predictor</tspan></tspan></text>
           <text
              xml:space="preserve"
              id="text27575"
              style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.29166999999999987px;line-height:1.25;font-family:arial;-inkscape-font-specification:'arial, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;white-space:pre;shape-inside:url(#rect27641);fill:#000000;fill-opacity:1;stroke:none;"
              transform="translate(57.949844,-15.111258)"><tspan
                x="64.507812"
-               y="45.373917"><tspan>Params 2</tspan></tspan></text>
+               y="45.373917"><tspan>Predictor</tspan></tspan></text>
           <text
              xml:space="preserve"
              id="text27581"
              style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.29166999999999987px;line-height:1.25;font-family:arial;-inkscape-font-specification:'arial, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;white-space:pre;shape-inside:url(#rect27641);opacity:0.5;fill:#000000;fill-opacity:1;stroke:none;"
              transform="translate(57.949844,-5.099666)"><tspan
                x="64.507812"
-               y="45.373917"><tspan>Params 3</tspan></tspan></text>
+               y="45.373917"><tspan>Predictor</tspan></tspan></text>
           <text
              xml:space="preserve"
              id="text27587"
              style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.29166999999999987px;line-height:1.25;font-family:arial;-inkscape-font-specification:'arial, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;white-space:pre;shape-inside:url(#rect27641);fill:#000000;fill-opacity:1;stroke:none;"
              transform="translate(57.949844,4.911927)"><tspan
                x="64.507812"
-               y="45.373917"><tspan>Params 4</tspan></tspan></text>
+               y="45.373917"><tspan>Predictor</tspan></tspan></text>
           <text
              xml:space="preserve"
              id="text27593"
              style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.29166999999999987px;line-height:1.25;font-family:arial;-inkscape-font-specification:'arial, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;white-space:pre;shape-inside:url(#rect27641);opacity:1;fill:#000000;fill-opacity:1;stroke:none;"
              transform="translate(57.949844,14.923519)"><tspan
                x="64.507812"
-               y="45.373917"><tspan>Params 5</tspan></tspan></text>
+               y="45.373917"><tspan>Predictor</tspan></tspan></text>
         </g>
         <text
            xml:space="preserve"
@@ -3023,7 +3094,7 @@
            style="font-style:normal;font-variant:normal;font-weight:normal;font-stretch:normal;font-size:5.29166999999999987px;line-height:1.25;font-family:arial;-inkscape-font-specification:'arial, Normal';font-variant-ligatures:normal;font-variant-caps:normal;font-variant-numeric:normal;font-variant-east-asian:normal;white-space:pre;shape-inside:url(#rect27641-4);display:inline;fill:#000000;fill-opacity:1;stroke:none;"
            transform="translate(40.02557,-29.987886)"><tspan
              x="64.507812"
-             y="45.373917"><tspan>GridSearchStack</tspan></tspan></text>
+             y="45.373917"><tspan>SelectiveStack</tspan></tspan></text>
       </g>
       <g
          id="g15885"

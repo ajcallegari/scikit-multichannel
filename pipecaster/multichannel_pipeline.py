@@ -988,8 +988,7 @@ class MultichannelPipeline(Cloneable, Saveable):
                 descriptor = utils.get_descriptor(pipe, verbose)
                 descriptors[slice_] = [down_arrow for i in indices]
                 descriptors[indices[0]] = descriptor
-            outputs = [right_arrow for i in range(self.n_channels)]
-            return descriptors, outputs
+            return descriptors
 
         def _get_post_fit_descriptors(layer, verbose=0):
             right_arrow = '\u2192'
@@ -1010,11 +1009,11 @@ class MultichannelPipeline(Cloneable, Saveable):
             if hasattr(layer, 'model_list') and show_fit:
                 descriptors, outputs = _get_post_fit_descriptors(layer,
                                                                  verbose=False)
+                dataframe['layer_{}'.format(i)] = descriptors
+                dataframe['out_{}'.format(i)] = outputs
             else:
-                descriptors, outputs = _get_pre_fit_descriptors(layer,
-                                                                verbose=False)
-            dataframe['layer_{}'.format(i)] = descriptors
-            dataframe['out_{}'.format(i)] = outputs
+                descriptors = _get_pre_fit_descriptors(layer, verbose=False)
+                dataframe['layer_{}'.format(i)] = descriptors
 
         return dataframe
 
