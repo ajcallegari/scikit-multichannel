@@ -8,12 +8,19 @@ from sklearn.feature_selection import f_classif
 import pipecaster.utils as utils
 from pipecaster.utils import Cloneable, Saveable
 from pipecaster.score_selection import RankScoreSelector
-from pipecaster.channel_scoring import AggregateFeatureScorer, CvPerformanceScorer
+from pipecaster.channel_scoring import AggregateFeatureScorer
+from pipecaster.channel_scoring import CvPerformanceScorer
 import pipecaster.parallel as parallel
 from pipecaster.cross_validation import cross_val_score
 import pipecaster.transform_wrappers as transform_wrappers
 from pipecaster.score_selection import RankScoreSelector, PctRankScoreSelector
-from pipecaster.score_selection import HighPassScoreSelector, VarianceHighPassScoreSelector
+from pipecaster.score_selection import HighPassScoreSelector
+from pipecaster.score_selection import VarianceHighPassScoreSelector
+
+"""
+Module with classes for in-pipeline selection of input channels in a
+MultichannelPipeline.
+"""
 
 __all__ = ['ChannelSelector', 'ModelSelector',
            'SelectKBestScores', 'SelectPercentBestScores',
@@ -23,11 +30,46 @@ __all__ = ['ChannelSelector', 'ModelSelector',
            'SelectKBestModels', 'SelectPercentBestModels',
            'SelectHighPassModels', 'SelectVarianceHighPassModels']
 
-class ChannelSelector(Cloneable, Saveable):
 
+class ChannelSelector(Cloneable, Saveable):
+    """
+    Multichannel pipe that scores and selects channels during calls to pipeline
+    fit().
+
+    Parameters
+    ----------
+    channel_scorer : callable, default=None
+        Callable object that provide a figure of merit score for a channel.
+        Signature:  score = channel_scorer(X, y)
+    score_selector: callable, default=None
+        Callable object that returns a list of the indices of the selected
+        channels. Signature: selected_indices = score_selector(scores)
+    channel_processes: int or 'max', default=1
+        Number of parallel processes to run for each channel during model
+        fitting.  If 'max', all available CPUs will be used.
+
+    Example
+    -------
+    import numpy as np
+    import pipecaster as pc
+    from sklearn.ensemble import GradientBoostingClassifier
+    from sklearn.feature_selection import f_classif
+
+    Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=10)
+    clf = pc.MultichannelPipeline(n_channels=10)
+    clf.add_layer(pc.ChannelSelector(
+                    channel_scorer=pc.AggregateFeatureScorer(f_classif, np.mean),
+                    score_selector=pc.RankScoreSelector(3)))
+    clf.add_layer(pc.MultichannelPredictor(GradientBoostingClassifier()))
+    pc.cross_val_score(clf, Xs, y)
+
+    output: [0.9705882352941176, 0.9117647058823529, 0.9411764705882353]
+
+    """
     state_variables = ['selected_indices_', 'channel_scores_']
 
-    def __init__(self, channel_scorer=None, score_selector=None, channel_processes=1):
+    def __init__(self, channel_scorer=None, score_selector=None,
+                 channel_processes=1):
         self._params_to_attributes(ChannelSelector.__init__, locals())
 
     def _get_channel_score(channel_scorer, X, y, fit_params):
@@ -41,14 +83,18 @@ class ChannelSelector(Cloneable, Saveable):
         if n_processes is not None and n_processes > 1:
             try:
                 shared_mem_objects = [y, fit_params]
-                self.channel_scores_ = parallel.starmap_jobs(ChannelSelector._get_channel_score, args_list,
-                                                             n_cpus=n_processes, shared_mem_objects=shared_mem_objects)
+                self.channel_scores_ = parallel.starmap_jobs(
+                                ChannelSelector._get_channel_score, args_list,
+                                 n_cpus=n_processes,
+                                 shared_mem_objects=shared_mem_objects)
             except Exception as e:
-                print('parallel processing request failed with message {}'.format(e))
+                print('parallel processing request failed with message {}'
+                      .format(e))
                 print('defaulting to single processor')
                 n_processes = 1
         if n_processes is None or n_processes <= 1:
-            self.channel_scores_ = [self.channel_scorer(X, y, **fit_params) if X is not None else None for X in Xs]
+            self.channel_scores_ = [self.channel_scorer(X, y, **fit_params)
+                                    if X is not None else None for X in Xs]
 
         self.selected_indices_ = self.score_selector(self.channel_scores_)
 
@@ -56,16 +102,19 @@ class ChannelSelector(Cloneable, Saveable):
         if hasattr(self, 'channel_scores_'):
             return self.channel_scores_
         else:
-            raise utils.FitError('Channel scores not found. They are only available after call to fit().')
+            raise utils.FitError('Channel scores not found. They are only \
+                                 available after call to fit().')
 
     def get_support(self):
         if hasattr(self, 'selected_indices_'):
             return self.selected_indices_
         else:
-            raise utils.FitError('Must call fit before getting selection information')
+            raise utils.FitError('Must call fit before getting selection \
+                                 information')
 
     def transform(self, Xs):
-        return [Xs[i] if (i in self.selected_indices_) else None for i in range(len(Xs))]
+        return [Xs[i] if (i in self.selected_indices_) else None
+                for i in range(len(Xs))]
 
     def fit_transform(self, Xs, y=None, **fit_params):
         self.fit(Xs, y, **fit_params)
@@ -74,11 +123,13 @@ class ChannelSelector(Cloneable, Saveable):
     def get_selection_indices(self):
         return self.selected_indices_
 
+
 class SelectKBestScores(ChannelSelector):
 
     def __init__(self, feature_scorer=f_classif, aggregator=np.sum, k=1, channel_processes=1):
         self._params_to_attributes(SelectKBestScores.__init__, locals())
         super().__init__(AggregateFeatureScorer(feature_scorer, aggregator), RankScoreSelector(k), channel_processes)
+
 
 class SelectPercentBestScores(ChannelSelector):
 
@@ -87,12 +138,14 @@ class SelectPercentBestScores(ChannelSelector):
         super().__init__(AggregateFeatureScorer(feature_scorer, aggregator),
                          PctRankScoreSelector(percent), channel_processes)
 
+
 class SelectHighPassScores(ChannelSelector):
 
     def __init__(self, feature_scorer=f_classif, aggregator=np.sum, cutoff=0, n_min=1, channel_processes=1):
         self._params_to_attributes(SelectHighPassScores.__init__, locals())
         super().__init__(AggregateFeatureScorer(feature_scorer, aggregator),
                          HighPassScoreSelector(cutoff, n_min), channel_processes)
+
 
 class SelectVarianceHighPassScores(ChannelSelector):
 
@@ -104,12 +157,14 @@ class SelectVarianceHighPassScores(ChannelSelector):
                          VarianceHighPassScoreSelector(variance_cutoff, get_variance, get_baseline, n_min),
                          channel_processes)
 
+
 class SelectKBestProbes(ChannelSelector):
 
     def __init__(self, predictor_probe=None, cv=3, scorer='auto', k=1, channel_processes=1, cv_processes=1):
         self._params_to_attributes(SelectKBestProbes.__init__, locals())
         super().__init__(CvPerformanceScorer(predictor_probe, cv, scorer, cv_processes),
                          RankScoreSelector(k), channel_processes)
+
 
 class SelectPercentBestProbes(ChannelSelector):
 
@@ -118,12 +173,14 @@ class SelectPercentBestProbes(ChannelSelector):
         super().__init__(CvPerformanceScorer(predictor_probe, cv, scorer, cv_processes),
                          PctRankScoreSelector(percent), channel_processes)
 
+
 class SelectHighPassProbes(ChannelSelector):
 
     def __init__(self, predictor_probe=None, cv=3, scorer='auto', cutoff=0.0, n_min=1, channel_processes=1, cv_processes=1):
         self._params_to_attributes(SelectHighPassProbes.__init__, locals())
         super().__init__(CvPerformanceScorer(predictor_probe, cv, scorer, cv_processes),
                          HighPassScoreSelector(cutoff, n_min), channel_processes)
+
 
 class SelectVarianceHighPassProbes(ChannelSelector):
 
@@ -134,6 +191,7 @@ class SelectVarianceHighPassProbes(ChannelSelector):
         super().__init__(CvPerformanceScorer(predictor_probe, cv, scorer, cv_processes),
                          VarianceHighPassScoreSelector(variance_cutoff, get_variance, get_baseline, n_min),
                          channel_processes)
+
 
 class ModelSelector(Cloneable, Saveable):
     """
@@ -162,10 +220,12 @@ class ModelSelector(Cloneable, Saveable):
     cv_transform: bool, default=True
         True: output cv predictions when fit_transform is called (use for making meta-features)
         False: output whole training set predictions when fit_transform is called
-    channel_processes: int
-        Number of parallel processes to run for each predictor during model fitting
-    cv_processes: int
-        Number of parallel processes to run for each cross validation split during model fitting
+    channel_processes: int or 'max', default=1
+        Number of parallel processes to run for each channel during model
+        fitting.  If 'max', all available CPUs will be used.
+    cv_processes: int or 'max', default=1
+        Number of parallel processes to run for each cross validation split
+        during model fitting.   If 'max', all available CPUs will be used.
 
     notes
     -----
@@ -302,11 +362,13 @@ class ModelSelector(Cloneable, Saveable):
             clone.models = [utils.get_clone(m) if m is not None else None for m in self.models]
         return clone
 
+
 class SelectKBestModels(ModelSelector):
 
     def __init__(self, predictors, cv=5, scorer='auto', k=1, channel_processes=1, cv_processes=1):
         self._params_to_attributes(SelectKBestModels.__init__, locals())
         super().__init__(predictors, cv, scorer, RankScoreSelector(k), channel_processes, cv_processes)
+
 
 class SelectPercentBestModels(ModelSelector):
 
@@ -314,12 +376,14 @@ class SelectPercentBestModels(ModelSelector):
         self._params_to_attributes(SelectPercentBestModels.__init__, locals())
         super().__init__(predictors, cv, scorer, PctRankScoreSelector(percent), channel_processes, cv_processes)
 
+
 class SelectHighPassModels(ModelSelector):
 
     def __init__(self, predictors, cv=5, scorer='auto', cutoff=0.0, n_min=1, channel_processes=1, cv_processes=1):
         self._params_to_attributes(SelectHighPassModels.__init__, locals())
         super().__init__(predictors, cv, scorer, HighPassScoreSelector(cutoff, n_min),
                          channel_processes, cv_processes)
+
 
 class SelectVarianceHighPassModels(ModelSelector):
 

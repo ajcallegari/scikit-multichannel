@@ -324,10 +324,10 @@ class TestChannelSelectors(unittest.TestCase):
                       'n_features':10,
                       'n_informative':5
                       }
-        channel_selector = SelectKBestProbes(predictor_probe=RandomForestRegressor(n_estimators=25, max_depth=1),
+        channel_selector = SelectKBestProbes(predictor_probe=RandomForestRegressor(n_estimators=25, max_depth=2),
                                                  cv=3, scorer=explained_variance_score, k=k, channel_processes=n_cpus, cv_processes=1)
         passed = TestChannelSelectors._test_weak_rgr_input_detection(channel_selector, n_weak=int(k/2),
-                                                n_strong=k - int(k/2), weak_noise_sd=0.5,
+                                                n_strong=k - int(k/2), weak_noise_sd=0.2,
                                                 verbose=verbose, seed=seed, **sklearn_params)
         self.assertTrue(passed, 'SelectKBestProbes failed to detect all week regression input matrices')
 

@@ -5,10 +5,10 @@ from sklearn.datasets import make_classification, make_regression
 from pipecaster.utils import Cloneable
 
 __all__ = ['make_multi_input_classification',
-           'make_multi_input_classification', 'DummyClassifier']
+           'make_multi_input_regression', 'DummyClassifier']
 
 
-def make_multi_input_classification(n_informative_Xs,
+def make_multi_input_classification(n_informative_Xs=5,
                                     n_weak_Xs=0,
                                     n_random_Xs=0,
                                     weak_noise_sd=0.2,
@@ -54,41 +54,6 @@ def make_multi_input_classification(n_informative_Xs,
         np.random.seed(seed)
         sklearn_params['random_state'] = seed
 
-    n_Xs = n_informative_Xs + n_weak_Xs + n_random_Xs
-    n_samples = sklearn_params['n_samples']
-    n_features = sklearn_params['n_features']
-
-    for p in sklearn_params:
-        if p in ['n_features', 'n_informative', 'n_redundant', 'n_repeated']:
-            sklearn_params[p] *= n_Xs
-
-    X, y = make_classification(**sklearn_params)
-
-    # split synthetic data into separate matrices
-    Xs = [X[:, i*n_features:(i+1)*n_features] for i in range(n_Xs)]
-
-    # add extra gaussian noise to create weak matrices
-    for i in range(n_weak_Xs):
-        Xs[i] += np.random.normal(loc=0, scale=weak_noise_sd,
-                                  size=(n_samples, n_features))
-
-    # shuffle matrices that are neither informative or weak
-    for i in range(n_weak_Xs, n_Xs - n_informative_Xs):
-        np.random.shuffle(Xs[i])
-
-    X_types = ['weak' for i in range(n_weak_Xs)]
-    X_types += ['random' for i in range(n_random_Xs)]
-    X_types += ['informative' for i in range(n_informative_Xs)]
-    tuples = list(zip(Xs, X_types))
-    random.shuffle(tuples)
-    Xs, X_types = zip(*tuples)
-
-    return list(Xs), y, list(X_types)
-    if seed is not None:
-        random.seed(seed)
-        np.random.seed(seed)
-        sklearn_params['random_state'] = seed
-
     def get_X(y):
         y = np.array(y)
         labels = np.unique(y)
@@ -113,8 +78,12 @@ def make_multi_input_classification(n_informative_Xs,
             for label in labels:
                 if np.sum(y_aggregate == label) < n_samples[label]:
                     some_incompletes = True
+
             if some_incompletes is False:
                 enough_labels = True
+
+            if seed is not None:
+                sklearn_params['random_state'] += 1
 
         X = np.empty((len(y), X_new.shape[1]))
         for label in labels:
@@ -139,7 +108,7 @@ def make_multi_input_classification(n_informative_Xs,
     return list(Xs), y, list(X_types)
 
 
-def make_multi_input_regression(n_informative_Xs,
+def make_multi_input_regression(n_informative_Xs=10,
                                 n_weak_Xs=0,
                                 n_random_Xs=0,
                                 weak_noise_sd=0.2,
@@ -180,92 +149,50 @@ def make_multi_input_regression(n_informative_Xs,
     X_types: list of strings,
         Description of the feature matrices: 'informative', 'weak', or 'random'
     """
+
     if seed is not None:
         random.seed(seed)
         np.random.seed(seed)
         sklearn_params['random_state'] = seed
 
-    n_Xs = n_informative_Xs + n_weak_Xs + n_random_Xs
-    n_samples = sklearn_params['n_samples']
-    n_features = sklearn_params['n_features']
-
-    for p in sklearn_params:
-        if p in ['n_features', 'n_informative', 'n_redundant', 'n_repeated']:
-            sklearn_params[p] *= n_Xs
-
-    X, y = make_regression(**sklearn_params)
-
-    # split synthetic data into separate matrices
-    Xs = [X[:, i*n_features:(i+1)*n_features] for i in range(n_Xs)]
-
-    # add extra gaussian noise to create weak matrices
-    for i in range(n_weak_Xs):
-        Xs[i] += np.random.normal(loc=0, scale=weak_noise_sd,
-                                  size=(n_samples, n_features))
-
-    # shuffle matrices that are neither informative or weak
-    for i in range(n_weak_Xs, n_Xs - n_informative_Xs):
-        np.random.shuffle(Xs[i])
-
-    X_types = ['weak' for i in range(n_weak_Xs)]
+    X_types = ['informative' for i in range(n_informative_Xs)]
+    X_types += ['weak' for i in range(n_weak_Xs)]
     X_types += ['random' for i in range(n_random_Xs)]
-    X_types += ['informative' for i in range(n_informative_Xs)]
+
+    n_Xs = n_informative_Xs + n_weak_Xs + n_random_Xs
+
+    n_inf = sklearn_params['n_informative']
+    n_rand = sklearn_params['n_features'] - sklearn_params['n_informative']
+
+    sklearn_params['n_features'] *= n_Xs
+    sklearn_params['n_informative'] *= n_Xs
+    sklearn_params['coef'] = True
+
+    if 'effective_rank' in sklearn_params:
+        if sklearn_params['effective_rank'] is not None:
+            print('Warning: When effective rank is set, information not \
+              guaranteed to be equally distributed between feature matrices')
+
+    X_pool, y, coef = make_regression(**sklearn_params)
+    informative_mask = coef != 0
+    X_pool_inf = X_pool[:, informative_mask]
+    X_pool_rand = X_pool[:, ~informative_mask]
+
+    Xs = []
+    for i, X_type in enumerate(X_types):
+        X_inf = X_pool_inf[:, i*n_inf:(i+1)*n_inf]
+        X_rand = X_pool_rand[:, i*n_rand:(i+1)*n_rand]
+        X = np.concatenate([X_inf, X_rand], axis=1)
+        X = X[:, np.random.permutation(X.shape[1])]
+        if X_type == 'weak':
+            X += np.random.normal(loc=0, scale=weak_noise_sd, size=X.shape)
+        elif X_type == 'random':
+            np.random.shuffle(X)
+        Xs.append(X)
+
     tuples = list(zip(Xs, X_types))
     random.shuffle(tuples)
     Xs, X_types = zip(*tuples)
-
-    return list(Xs), y, list(X_types)
-    if seed is not None:
-        random.seed(seed)
-        np.random.seed(seed)
-        sklearn_params['random_state'] = seed
-
-    def get_X(y):
-        y = np.array(y)
-        labels = np.unique(y)
-        n_samples = {label: np.sum(y == label) for label in labels}
-        chunk_size = 100
-
-        X_aggregate, y_aggregate = None, None
-        enough_labels = False
-        while enough_labels is False:
-            X_new, y_new = make_regression(**sklearn_params)
-            if X_aggregate is None:
-                X_aggregate = X_new
-            else:
-                X_aggregate = np.concatenate([X_aggregate, X_new], axis=0)
-
-            if y_aggregate is None:
-                y_aggregate = y_new
-            else:
-                y_aggregate = np.concatenate([y_aggregate, y_new])
-
-            some_incompletes = False
-            for label in labels:
-                if np.sum(y_aggregate == label) < n_samples[label]:
-                    some_incompletes = True
-            if some_incompletes is False:
-                enough_labels = True
-
-        X = np.empty((len(y), X_new.shape[1]))
-        for label in labels:
-            label_mask = y == label
-            label_X = X_aggregate[y_aggregate == label]
-            X[label_mask] = label_X[:np.sum(label_mask)]
-        return X
-
-    X, y = make_regression(**sklearn_params)
-    Xs = [get_X(y) for i in range(n_informative_Xs)]
-    X_types = ['informative' for i in range(n_informative_Xs)]
-    Xs += [get_X(y) + np.random.normal(loc=0, scale=weak_noise_sd,
-                                       size=X.shape)
-           for i in range(n_weak_Xs)]
-    X_types += ['weak' for i in range(n_weak_Xs)]
-    Xs += [np.random.permutation(get_X(y)) for i in range(n_random_Xs)]
-    X_types += ['random' for i in range(n_random_Xs)]
-    X_list = list(zip(Xs, X_types))
-    random.shuffle(X_list)
-    Xs, X_types = zip(*X_list)
 
     return list(Xs), y, list(X_types)
 

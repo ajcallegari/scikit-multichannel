@@ -1,7 +1,7 @@
 # pipecaster
 (in progress)
 
-Pipecaster is a Python library for building ensemble machine learning pipelines with multiple input channels and for semi-automated-ML.  Screening of data sources, feature extraction steps, feature engineering steps, hyperparameters, and ML algorithms can all be automated within pipecaster's **MultichannelPipeline** class.  The MultiChannelPipeline construction workflow is loosely based on Keras layers: pipelines are built layer by layer and there is visual feedback to help manage complex architectures.  The current version supports algorithms with the scikit-learn estimator/transformer/predictor interfaces.
+Pipecaster is a Python library for building ensemble machine learning pipelines with multiple input channels (multichannel pipelines) and in-pipeline workflow automations (semi-auto-ML).  The pipeline construction workflow is loosely based on Keras layers: pipelines are built layer by layer and there is visual feedback to help manage complex architectures.  The current version of pipecaster supports algorithms with the scikit-learn estimator/transformer/predictor interfaces.
 
 tutorial: https://github.com/ajcallegari/pipecaster/blob/master/tutorial.ipynb
 
