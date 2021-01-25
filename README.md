@@ -1,7 +1,7 @@
 # pipecaster
 (in progress)
 
-Pipecaster is a Python library for building ensemble machine learning pipelines with multiple input channels (multichannel pipelines) and in-pipeline workflow automations (semi-auto-ML).  The pipeline construction workflow is loosely based on Keras layers: pipelines are built layer by layer and there is visual feedback to help manage complex architectures.  The current version of pipecaster supports algorithms with the scikit-learn estimator/transformer/predictor interfaces.
+Pipecaster is a Python library for building ensemble machine learning pipelines with multiple input channels (multichannel pipelines) and in-pipeline workflow automations (semi-auto-ML).  The pipeline construction workflow is loosely based on Keras layers: pipelines are built layer by layer and there is visual feedback to help manage complex architectures.  The current version supports algorithms with the scikit-learn estimator/transformer/predictor interfaces.
 
 tutorial: https://github.com/ajcallegari/pipecaster/blob/master/tutorial.ipynb
 
@@ -34,9 +34,9 @@ pipecaster MultichannelPipeline with a single input matrix:
 ## semi-auto-ML
 A typical ML workflow involves screening input sources, feature extraction & engineering steps, ML algorithms, and model hyperparameters.  Pipecaster allows you to semi-automate each of these screening tasks by including them in the ML pipeline and executing the screens during calls to pipeline.fit().  This can be useful when you are developing a large number of different pipelines in parallel and don't have time to optimize each one separately, and it may accelerate ML workflows in general.  
 
-In addition, pipecaster introduces channel selectors that select input channels based on aggregate feature scores or information content estimated using probe ML models or full ML models.  Channel selection prevents garbage from flowing into and out of your machine learning pipelines.
+In addition, pipecaster introduces channel selectors that screen input channels based on aggregate feature scores or information content estimated using probe ML models or full ML models.  Channel selection prevents garbage from flowing into and out of your machine learning pipelines.
 
 Relevant classes: **SelectKBestScorers**, **SelectKBestPerformers**, **SelectKBestModels**, **SelectKBestProbes**, **SelectivePredictorStack**
 
 ## fast distributed computing
-Pipecaster uses the ray library to speed up multiprocessing by passing arguments through an in-memory object store without the usual serialization/deserialization overhead and without passing the same object multiple times when needed by multiple jobs.  Ray also enables pipecaster to rapidly distribute jobs among networked computers.
+Pipecaster uses the ray library to speed up multiprocessing by passing arguments through a distributed in-memory object store without the usual serialization/deserialization overhead and without passing the same object multiple times when needed by multiple jobs.  Ray also enables pipecaster to rapidly distribute jobs among networked computers.
