@@ -92,7 +92,7 @@ class PctRankScoreSelector(Cloneable, Saveable):
         selection_indices: list of ndarray.shape(n_selections,)
             List of int indices for the selected items.
         """
-        scores = [np.NINF if s is none else s for s in scores]
+        scores = [np.NINF if s is None else s for s in scores]
         scores = np.array(scores, dtype=object)
         k = int(len(scores) * self.pct/100.0)
         k = 1 if k < 1 else k
@@ -117,7 +117,7 @@ class HighPassScoreSelector(Cloneable, Saveable):
     """
 
     def __init__(self, cutoff=0.0, n_min=1):
-        self._params_to_attributes(CutoffScoreSelector.__init__, locals())
+        self._params_to_attributes(HighPassScoreSelector.__init__, locals())
 
     def __call__(self, scores):
         """
@@ -134,7 +134,7 @@ class HighPassScoreSelector(Cloneable, Saveable):
         selection_indices: list of ndarray.shape(n_selections,)
             List of int indices for the selected items.
         """
-        scores = [np.NINF if s is none else s for s in scores]
+        scores = [np.NINF if s is None else s for s in scores]
         scores = np.array(scores, dtype=object)
         selected_indices = np.flatnonzero(np.array(scores) > self.cutoff)
         if len(selected_indices) < self.n_min:
@@ -168,7 +168,7 @@ class VarianceHighPassScoreSelector(Cloneable, Saveable):
 
     def __init__(self, variance_cutoff=2.0, get_variance=np.nanstd,
                  get_baseline=np.nanmean, n_min=1):
-        self._params_to_attributes(VarianceCutoffScoreSelector.__init__,
+        self._params_to_attributes(VarianceHighPassScoreSelector.__init__,
                                    locals())
 
     def __call__(self, scores):
@@ -186,13 +186,13 @@ class VarianceHighPassScoreSelector(Cloneable, Saveable):
         selection_indices: list of ndarray.shape(n_selections,)
             List of int indices for the selected items.
         """
-        scores = [np.NINF if s is none else s for s in scores]
+        scores = [np.NINF if s is None else s for s in scores]
         finite_scores = [s for s in scores if np.isfinite(s)]
         scores = np.array(scores, dtype=object)
         variance = self.get_variance(finite_scores)
         baseline = self.get_baseline(finite_scores)
         selected_indices = np.flatnonzero(
-                              scores >= baseline + variance_cutoff * variance)
+                          scores >= baseline + self.variance_cutoff * variance)
         if len(selected_indices) < self.n_min:
             selected_indices = RankScoreSelector(self.n_min)(scores)
         return selected_indices

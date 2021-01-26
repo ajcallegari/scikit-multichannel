@@ -35,8 +35,12 @@ def make_multi_input_classification(n_informative_Xs=5,
         Standard deviation of the Gaussian noise term used to
         generate weak matrices.
     seed: int or None, default=None
-        Seed for pseudorandom number generators used in
-        make_multi_input_classification.
+        Seed for pseudorandom number generators.  Int values enable
+        reproduciblility.
+    sklearn_params: keyword arguments or dict
+        Parameters for scikit-learn's make_classification function which
+        generates the dataset.  Parameters are per-matrix, not for entire
+        multi-matrix dataset.
 
     returns
     -------
@@ -135,8 +139,12 @@ def make_multi_input_regression(n_informative_Xs=10,
         Standard deviation of the Gaussian noise term used to
         generate weak matrices.
     seed: int or None, default=None
-        Seed for pseudorandom number generators used in
-        make_multi_input_regression.
+        Seed for pseudorandom number generators.  Int values enable
+        reproduciblility.
+    sklearn_params: keyword arguments or dict
+        Parameters for scikit-learn's make_classification function which
+        generates the dataset.  Parameters are per-matrix, not for entire
+        multi-matrix dataset.
 
     returns
     -------
