@@ -1,7 +1,7 @@
 import random
 import numpy as np
 import inspect
-from sklearn.datasets import make_classification, make_regression
+from sklearn.datasets import make_classification
 
 from pipecaster.utils import Cloneable
 
@@ -112,12 +112,69 @@ def make_multi_input_classification(n_informative_Xs=5,
 
     return list(Xs), y, list(X_types)
 
+def make_regression(n_samples=500, n_features=100, n_informative=5,
+                    offset=0, noise_sd=0, return_slopes=False,
+                    random_state=None):
+    """
+    Generate a simple synthetic regression dataset where the target is
+    related linearly to the informative features and the features are
+    uncorrelated.
+
+    Parameters
+    ----------
+    n_samples: int, default=500
+        The number of sample to simulate.
+    n_features: int, default=100
+        The total number of features to simulate.
+    n_informative: int, default=5
+        The number of features that are linearly related to the target with
+        slopes drawn uniformly from the interval [-1, 1) and feature values
+        drawn randomly from the interval [0,1).  The remaining features are
+        uncorrelated with the target and drawn from the interval [0,1).
+    offset: float, default=0
+        Constant in the linear equation:
+            y = offset + slope_1 * feature_1 + slope_2 * feature_2 ...
+    noise_sd: float, default=0
+        The standard devation of a Gaussian noise term added to the features.
+    random_state: int or None, default=None
+        See for the pseudorandom number generator used to make features.
+
+    Returns
+    -------
+    X: ndarray.shape(n_samples, n_features)
+        Synthetic feature matrix (not normalized).
+    y: ndarray.shape(n_samples,)
+        Target values.
+    slopes: ndarray.shape(n_features,)
+        Slopes determining the relationship between the informative features
+        and the target.  Zero value for uninformative features.  Slopes is only
+        returned when the return_slopes paramter is True.
+    """
+
+    if random_state is not None:
+        np.random.seed(random_state)
+    n_random = n_features - n_informative
+
+    slopes = np.array([2 * np.random.rand() - 1 for i in range(n_informative)])
+    X_inf = np.stack([slopes * np.random.rand(n_informative)
+                      for i in range(n_samples)])
+    y = np.sum(slopes * X_inf, axis=1) + offset
+    X_rand = np.stack([np.random.rand(n_random) for i in range(n_samples)])
+    X = np.concatenate([X_inf, X_rand], axis=1)
+    slopes = np.concatenate([slopes, np.zeros(n_random)])
+    permutation_idx = np.random.permutation(n_features)
+    X = X[: , permutation_idx].copy()
+    X += np.random.normal(loc=0, scale=noise_sd, size=X.shape)
+    slopes = slopes[permutation_idx].copy()
+
+    return (X, y, slopes) if return_slopes else (X, y)
+
 
 def make_multi_input_regression(n_informative_Xs=10,
                                 n_weak_Xs=0,
                                 n_random_Xs=0,
                                 weak_noise_sd=0.2,
-                                seed=None, **sklearn_params):
+                                seed=None, **rgr_params):
     """
     Get a synthetic regression dataset with multiple input matrices of
     three possible types: informative, weak, and random.
@@ -142,8 +199,8 @@ def make_multi_input_regression(n_informative_Xs=10,
     seed: int or None, default=None
         Seed for pseudorandom number generators.  Int values enable
         reproduciblility.
-    sklearn_params: keyword arguments or dict
-        Parameters for scikit-learn's make_classification function which
+    rgr_params: keyword arguments or dict
+        Parameters for the make_regression function which
         generates the dataset.  Parameters are per-matrix, not for entire
         multi-matrix dataset.
 
@@ -162,7 +219,7 @@ def make_multi_input_regression(n_informative_Xs=10,
     if seed is not None:
         random.seed(seed)
         np.random.seed(seed)
-        sklearn_params['random_state'] = seed
+        rgr_params['random_state'] = seed
 
     X_types = ['informative' for i in range(n_informative_Xs)]
     X_types += ['weak' for i in range(n_weak_Xs)]
@@ -172,25 +229,20 @@ def make_multi_input_regression(n_informative_Xs=10,
 
     sig = inspect.signature(make_regression)
 
-    if 'n_informative' not in sklearn_params:
-        sklearn_params['n_informative'] = \
+    if 'n_informative' not in rgr_params:
+        rgr_params['n_informative'] = \
             sig.parameters.get('n_informative').default
 
-    if 'n_features' not in sklearn_params:
-        sklearn_params['n_features'] = sig.parameters.get('n_features').default
+    if 'n_features' not in rgr_params:
+        rgr_params['n_features'] = sig.parameters.get('n_features').default
 
-    n_inf = sklearn_params['n_informative']
-    n_rand = sklearn_params['n_features'] - n_inf
-    sklearn_params['n_features'] *= n_Xs
-    sklearn_params['n_informative'] *= n_Xs
-    sklearn_params['coef'] = True
+    n_inf = rgr_params['n_informative']
+    n_rand = rgr_params['n_features'] - n_inf
+    rgr_params['n_features'] *= n_Xs
+    rgr_params['n_informative'] *= n_Xs
+    rgr_params['return_slopes'] = True
 
-    if 'effective_rank' in sklearn_params:
-        if sklearn_params['effective_rank'] is not None:
-            print('Warning: When effective rank is set, information not \
-              guaranteed to be equally distributed between feature matrices')
-
-    X_pool, y, coef = make_regression(**sklearn_params)
+    X_pool, y, coef = make_regression(**rgr_params)
     informative_mask = coef != 0
     X_pool_inf = X_pool[:, informative_mask]
     X_pool_rand = X_pool[:, ~informative_mask]

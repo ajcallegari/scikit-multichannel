@@ -225,10 +225,9 @@ class TestMultiChannelRegression(unittest.TestCase):
         n_channels = 5
         mean_accuracies, median_accuracies = [], []
 
-        sklearn_params = {'n_targets':1,
-                  'n_samples':500,
-                  'n_features':10,
-                  'n_informative':5}
+        rgr_params = {'n_samples':500,
+                      'n_features':10,
+                      'n_informative':5}
 
         for i in range(0, n_channels + 1):
 
@@ -237,7 +236,7 @@ class TestMultiChannelRegression(unittest.TestCase):
                                     n_random_Xs=n_channels - i,
                                     weak_noise_sd=None,
                                     seed=seed,
-                                    **sklearn_params
+                                    **rgr_params
                                     )
 
             mrgr = MultichannelPipeline(n_channels)
@@ -301,10 +300,9 @@ class TestMultiChannelRegression(unittest.TestCase):
         n_channels = 5
         accuracies = []
 
-        sklearn_params = {'n_targets':1,
-                  'n_samples':1000,
-                  'n_features':10,
-                  'n_informative':10}
+        rgr_params = {'n_samples':1000,
+                      'n_features':10,
+                      'n_informative':10}
 
         for i in range(0, n_channels + 1):
 
@@ -313,7 +311,7 @@ class TestMultiChannelRegression(unittest.TestCase):
                                     n_random_Xs=n_channels - i,
                                     weak_noise_sd=None,
                                     seed = seed,
-                                    **sklearn_params
+                                    **rgr_params
                                     )
 
             mrgr = MultichannelPipeline(n_channels)
@@ -360,10 +358,9 @@ class TestMultiChannelRegression(unittest.TestCase):
         n_channels = 5
         accuracies = []
 
-        sklearn_params = {'n_targets':1,
-                  'n_samples':1000,
-                  'n_features':10,
-                  'n_informative':10}
+        rgr_params = {'n_samples':1000,
+                      'n_features':10,
+                      'n_informative':10}
 
         for i in range(0, n_channels + 1):
 
@@ -372,7 +369,7 @@ class TestMultiChannelRegression(unittest.TestCase):
                                     n_random_Xs=n_channels - i,
                                     weak_noise_sd=None,
                                     seed = seed,
-                                    **sklearn_params
+                                    **rgr_params
                                     )
 
             mrgr = MultichannelPipeline(n_channels)
@@ -420,10 +417,9 @@ class TestMultiChannelRegression(unittest.TestCase):
         n_channels = 5
         accuracies = []
 
-        sklearn_params = {'n_targets':1,
-                  'n_samples':1000,
-                  'n_features':10,
-                  'n_informative':10}
+        rgr_params = {'n_samples':1000,
+                      'n_features':10,
+                      'n_informative':10}
 
         for i in range(0, n_channels + 1):
 
@@ -432,7 +428,7 @@ class TestMultiChannelRegression(unittest.TestCase):
                                     n_random_Xs=n_channels - i,
                                     weak_noise_sd=None,
                                     seed = seed,
-                                    **sklearn_params
+                                    **rgr_params
                                     )
 
             mrgr = MultichannelPipeline(n_channels)
