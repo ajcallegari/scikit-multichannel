@@ -32,9 +32,7 @@ class SoftVotingClassifier(Cloneable, Saveable):
 
     Example
     -------
-    from sklearn.datasets import make_classification
     from sklearn.ensemble import GradientBoostingClassifier
-
     import pipecaster as pc
 
     Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
@@ -45,6 +43,13 @@ class SoftVotingClassifier(Cloneable, Saveable):
     clf.add_layer(pc.SoftVotingClassifier())
     pc.cross_val_score(clf, Xs, y, cv=3)
     >>>[0.8235294117647058, 0.7849264705882353, 0.7886029411764706]
+
+    # alternative use style:
+    clf = pc.MultichannelPipeline(n_channels=10)
+    clf.add_layer(GradientBoostingClassifier())
+    clf.add_layer(pc.MultichannelPredictor(pc.SoftVotingClassifier()))
+    pc.cross_val_score(clf, Xs, y, cv=3)
+    >>>[0.8823529411764706, 0.875, 0.8474264705882353]
     """
     state_variables = ['classes_']
 
@@ -101,9 +106,7 @@ class HardVotingClassifier(Cloneable, Saveable):
 
     Example
     -------
-    from sklearn.datasets import make_classification
     from sklearn.ensemble import GradientBoostingClassifier
-
     import pipecaster as pc
 
     Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
@@ -114,6 +117,13 @@ class HardVotingClassifier(Cloneable, Saveable):
     clf.add_layer(pc.HardVotingClassifier())
     pc.cross_val_score(clf, Xs, y, cv=3)
     >>>[0.7352941176470589, 0.8198529411764706, 0.6911764705882353]
+
+    # alternative use style:
+    clf = pc.MultichannelPipeline(n_channels=10)
+    clf.add_layer(GradientBoostingClassifier())
+    clf.add_layer(pc.MultichannelPredictor(pc.HardVotingClassifier()))
+    pc.cross_val_score(clf, Xs, y, cv=3)
+    >>>[0.7647058823529411, 0.7904411764705883, 0.8455882352941176]
     """
     state_variables = ['classes_']
 
@@ -180,7 +190,27 @@ class AggregatingRegressor(Cloneable, Saveable):
 
     Example
     -------
+    import numpy as np
+    from sklearn.ensemble import GradientBoostingRegressor
+    import pipecaster as pc
 
+    Xs, y, _ = pc.make_multi_input_regression(n_informative_Xs=5,
+                                              n_random_Xs=5)
+    clf = pc.MultichannelPipeline(n_channels=10)
+    clf.add_layer(GradientBoostingRegressor(n_estimators=5))
+    clf.add_layer(pc.ChannelConcatenator())
+    clf.add_layer(pc.AggregatingRegressor(np.mean))
+    pc.cross_val_score(clf, Xs, y, cv=3)
+    >>>[0.014826094226239817, 0.0048964785149892, 0.0023546593895911183]
+
+    # alternative use style:
+    Xs, y, _ = pc.make_multi_input_regression(n_informative_Xs=5,
+                                          n_random_Xs=5)
+    clf = pc.MultichannelPipeline(n_channels=10)
+    clf.add_layer(GradientBoostingRegressor(n_estimators=5))
+    clf.add_layer(pc.MultichannelPredictor(pc.AggregatingRegressor(np.mean)))
+    pc.cross_val_score(clf, Xs, y, cv=3)
+    >>>[0.019732744693820692, 0.011203683351741489, 0.011748087942798469]
     """
     state_variables = []
 
@@ -242,8 +272,36 @@ class SelectiveStack(Cloneable, Saveable):
     cv_processes: int or 'max', default=1
         The number of parallel processes to run for internal cross validation.
 
-    notes:
-    Compatible with both sklearn and pipecaster
+    Example
+    -------
+    from sklearn.datasets import make_classification
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.neural_network import MLPClassifier
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.neighbors import KNeighborsClassifier
+    from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
+    from sklearn.naive_bayes import GaussianNB
+    import pipecaster as pc
+
+    X, y = make_classification(n_classes=2, n_samples=500, n_features=100,
+                               n_informative=5, class_sep=0.6)
+
+    predictors = [MLPClassifier(), LogisticRegression(), KNeighborsClassifier(),
+                  GradientBoostingClassifier(), RandomForestClassifier(), GaussianNB()]
+
+    clf = pc.SelectiveStack(
+                     base_predictors=predictors,
+                     meta_predictor=pc.SoftVotingClassifier(),
+                     internal_cv=5, scorer='auto',
+                     score_selector=pc.RankScoreSelector(k=2),
+                     base_processes=pc.count_cpus())
+    pc.cross_val_score(clf, X, y)
+    >>>[0.7358720596672403, 0.7239672977624785, 0.7409638554216867]
+
+    clf.fit(X, y)
+    print('Models selected by the SelectiveStack:')
+    [p for i, p in enumerate(predictors) if i in clf.get_support()]
+    >>>[GradientBoostingClassifier(), RandomForestClassifier()]
     """
     state_variables = ['classes_', 'scores_', 'selected_indices_']
 
@@ -530,6 +588,20 @@ class MultichannelPredictor(Cloneable, Saveable):
     Class uses reflection to expose its prediction interface durining
     initializtion, so class methods will typically not be identical to
     class instance methods.
+
+    Example
+    -------
+    from sklearn.ensemble import GradientBoostingClassifier
+    from sklearn.svm import SVC
+    import pipecaster as pc
+
+    Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
+                                                  n_random_Xs=7)
+    clf = pc.MultichannelPipeline(n_channels=10)
+    clf.add_layer(GradientBoostingClassifier(), pipe_processes='max')
+    clf.add_layer(pc.MultichannelPredictor(SVC()))
+    pc.cross_val_score(clf, Xs, y, cv=3)
+    >>>[0.9411764705882353, 0.8768382352941176, 0.8823529411764706]
     """
     state_variables = ['classes_']
 
