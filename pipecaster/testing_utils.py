@@ -1,5 +1,6 @@
 import random
 import numpy as np
+import inspect
 from sklearn.datasets import make_classification, make_regression
 
 from pipecaster.utils import Cloneable
@@ -169,9 +170,17 @@ def make_multi_input_regression(n_informative_Xs=10,
 
     n_Xs = n_informative_Xs + n_weak_Xs + n_random_Xs
 
-    n_inf = sklearn_params['n_informative']
-    n_rand = sklearn_params['n_features'] - sklearn_params['n_informative']
+    sig = inspect.signature(make_regression)
 
+    if 'n_informative' not in sklearn_params:
+        sklearn_params['n_informative'] = \
+            sig.parameters.get('n_informative').default
+
+    if 'n_features' not in sklearn_params:
+        sklearn_params['n_features'] = sig.parameters.get('n_features').default
+
+    n_inf = sklearn_params['n_informative']
+    n_rand = sklearn_params['n_features'] - n_inf
     sklearn_params['n_features'] *= n_Xs
     sklearn_params['n_informative'] *= n_Xs
     sklearn_params['coef'] = True

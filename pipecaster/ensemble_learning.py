@@ -29,6 +29,22 @@ class SoftVotingClassifier(Cloneable, Saveable):
     concatenation of mutliple predictions, i.e. a meta-feature matrix.
     The predicted classes are inferred from the order of the meta-feature
     matrix columns.
+
+    Example
+    -------
+    from sklearn.datasets import make_classification
+    from sklearn.ensemble import GradientBoostingClassifier
+
+    import pipecaster as pc
+
+    Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
+                                                  n_random_Xs=7)
+    clf = pc.MultichannelPipeline(n_channels=10)
+    clf.add_layer(GradientBoostingClassifier())
+    clf.add_layer(pc.ChannelConcatenator())
+    clf.add_layer(pc.SoftVotingClassifier())
+    pc.cross_val_score(clf, Xs, y, cv=3)
+    >>>[0.8235294117647058, 0.7849264705882353, 0.7886029411764706]
     """
     state_variables = ['classes_']
 
@@ -50,7 +66,7 @@ class SoftVotingClassifier(Cloneable, Saveable):
                 This can happen if base classifiers were trained on different
                 subsamples with different number of classes.  Pipecaster uses
                 StratifiedKFold to prevent this, but GroupKFold can lead to
-                violations.  Someone need to make StratifiedGroupKFold''')
+                violations.  Someone needs to make StratifiedGroupKFold''')
         Xs = [meta_X[:, i:i+n_classes]
               for i in range(0, meta_X.shape[1], n_classes)]
         return Xs
@@ -82,6 +98,22 @@ class HardVotingClassifier(Cloneable, Saveable):
     be used in the event that hard outputs are needed for additional model
     stacking.  Predict_proba() outputs the fraction of the input classifiers
     that picked the class - shape (n_samples, n_classes).
+
+    Example
+    -------
+    from sklearn.datasets import make_classification
+    from sklearn.ensemble import GradientBoostingClassifier
+
+    import pipecaster as pc
+
+    Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
+                                                  n_random_Xs=7)
+    clf = pc.MultichannelPipeline(n_channels=10)
+    clf.add_layer(GradientBoostingClassifier())
+    clf.add_layer(pc.ChannelConcatenator())
+    clf.add_layer(pc.HardVotingClassifier())
+    pc.cross_val_score(clf, Xs, y, cv=3)
+    >>>[0.7352941176470589, 0.8198529411764706, 0.6911764705882353]
     """
     state_variables = ['classes_']
 
@@ -144,7 +176,11 @@ class AggregatingRegressor(Cloneable, Saveable):
 
     Notes
     -----
-    Currently supports only supports single output regressors.
+    Currently only supports single output regressors.
+
+    Example
+    -------
+
     """
     state_variables = []
 
@@ -411,8 +447,33 @@ class GridSearchStack(SelectiveStack):
     cv_processes: int or 'max', default=1
         The number of parallel processes to run for internal cross validation.
 
-    notes:
-    Compatible with both sklearn and pipecaster
+    Example
+    -------
+    from sklearn.datasets import make_classification
+    from sklearn.ensemble import GradientBoostingClassifier
+    from sklearn.model_selection import cross_val_score
+
+    import pipecaster as pc
+
+    screen = {
+         'learning_rate':[0.1, 10],
+         'n_estimators':[5, 25],
+    }
+
+    X, y_single = make_classification()
+    clf = pc.GridSearchStack(
+                     param_dict=screen,
+                     base_predictor_cls=GradientBoostingClassifier,
+                     meta_predictor=pc.SoftVotingClassifier(),
+                     internal_cv=5, scorer='auto',
+                     score_selector=pc.RankScoreSelector(k=2),
+                     base_processes=pc.count_cpus())
+    clf.fit(X, y_single)
+    clf.get_results_df()
+    >>> (outputs a dataframe with the screen results)
+
+    cross_val_score(clf, X, y_single, scoring='balanced_accuracy', cv=5)
+    >>>array([0.9 , 0.85, 0.85, 0.85, 0.65])
     """
     state_variables = ['classes_', 'scores_',
                        'selected_indices_', 'params_list_']
