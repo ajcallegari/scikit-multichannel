@@ -562,23 +562,43 @@ class MultichannelPipeline(Cloneable, Saveable):
         If int > 1: Run each split in a different process, using up to
             n_processes number of CPUs
 
-    Notes:
-    ------
+    Example
+    -------
+    import numpy as np
+    from sklearn.preprocessing import StandardScaler
+    from sklearn.linear_model import LogisticRegression
+    from sklearn.svm import SVC
+    import pipecaster as pc
+
+    n_inputs = 10
+    Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
+                                                  n_random_Xs=n_inputs - 3)
+
+    clf = pc.MultichannelPipeline(n_channels=n_inputs)
+    clf.add_layer(StandardScaler())
+    clf.add_layer(LogisticRegression(), pipe_processes='max')
+    clf.add_layer(pc.MultichannelPredictor(SVC()))
+    pc.cross_val_score(clf, Xs, y)
+    >>>[0.9411764705882353, 0.9099264705882353, 0.9393382352941176]
+
+    Notes
+    -----
     *There is no stateless scikit-learn-like clone implemented because
-        MultiChannelPipeline arguments are not sufficient to reproduce the
-        pipeline.  Use MultiChannelPipeline.get_clone() to get a stateful clone
-        or rebuild pipeline from scratch to get a stateless clone().
+        MultiChannelPipeline __init__() arguments are not sufficient to
+        reproduce the pipeline.  Use MultiChannelPipeline.get_clone() to get a
+        stateful clone or rebuild pipeline from scratch to get a stateless
+        clone().
     * This class uses reflection to expose the predictor methods found in the
-        last pipeline layer, so the method attributes in a MultichannelPipeline
-        instance are not usually identical to the method attributes of the
+        last pipeline layer, so the method attributes MultichannelPipeline
+        instances are not usually identical to the method attributes of the
         MultichannelPipeline class.
     * Fit failures are currently not handled / allowed.
     * Multi-output prediction not yet supported.
     * Groups for internal cv not yet supported.
-    * Sample weights for internal cv performance metrics not yet supported.
+    * Sample weights for internal cv performance metrics not yet supported
+        (but sample_weights for model training should work fine).
     * Caching of intermediate results not yet implemented.
     * fit_params targeted to specific pipes not yet implemented.
-    * GPUs not yet supported.
     """
 
     state_variables = ['classes_']
@@ -993,7 +1013,7 @@ class MultichannelPipeline(Cloneable, Saveable):
         def _get_post_fit_descriptors(layer, verbose=0):
             right_arrow = '\u2192'
             down_arrow = '\u25BD'
-            descriptors = [right_arrow for channel in range(self.n_channels)]
+            descriptors = [' ' for channel in range(self.n_channels)]
             for model, slice_, indices in layer.model_list:
                 descriptor = utils.get_descriptor(model, verbose)
                 descriptors[slice_] = [down_arrow for i in indices]
@@ -1055,6 +1075,20 @@ class ChannelConcatenator(Cloneable, Saveable):
     Concatenate a block of contiguous channels into a single matrix,
         outputting the concatemer in the first i/o channel and None into the
         remaining channels.
+
+    Example
+    -------
+    from sklearn.ensemble import GradientBoostingClassifier
+    import pipecaster as pc
+
+    Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
+                                                  n_random_Xs=7)
+    clf = pc.MultichannelPipeline(n_channels=10)
+    clf.add_layer(GradientBoostingClassifier())
+    clf.add_layer(pc.ChannelConcatenator())
+    clf.add_layer(pc.SoftVotingClassifier())
+    pc.cross_val_score(clf, Xs, y, cv=3)
+    >>>[0.8235294117647058, 0.7849264705882353, 0.7886029411764706]
     """
 
     def fit(self, Xs, y=None, **fit_params):
