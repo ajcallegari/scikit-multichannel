@@ -1,7 +1,7 @@
 # pipecaster
 (in progress)
 
-Pipecaster is a Python library for building ensemble machine learning pipelines with multiple input silos (multichannel pipelines) and in-pipeline workflow automation (semi-auto-ML).  The pipeline construction workflow is designed to help manage complex architectures and is loosely based on Keras layers: pipelines are built layer by layer and there is visual feedback.  The current version supports algorithms with the scikit-learn estimator/transformer/predictor interfaces.
+Pipecaster is a Python library for building machine learning pipelines with multiple input silos (multichannel pipelines) and in-pipeline workflow automation (semi-auto-ML).  The pipeline construction workflow is designed to help manage complex architectures and is loosely based on Keras layers: pipelines are built layer by layer and there is visual feedback.  The current version supports algorithms with the scikit-learn estimator/transformer/predictor interfaces.
 
 tutorial: https://github.com/ajcallegari/pipecaster/blob/master/tutorial.ipynb
 
@@ -9,7 +9,7 @@ tutorial: https://github.com/ajcallegari/pipecaster/blob/master/tutorial.ipynb
 
 ## multichannel machine learning
 
-ML pipelines often combine multiple input feature vectors derived from different data sources or feature extraction/engineering methods.  In these instances, the best performance is not always obtained by concatenating feature vectors into a single input vector.  Better accuracy can sometimes be obtained by **(1)** selecting the highest quality vectors or **(2)** training different ML models on each vector and making ensemble predictions (fig. 1).  In both examples, the different inputs are kept siloed for one or more data processing steps.  Pipeline architectures that maintain input silos for one ore more processing steps, which form the basis of pipecaster, and are referred to as **"multichannnel pipelines"**.
+ML pipelines often combine multiple input feature vectors derived from different data sources or feature extraction/engineering methods.  In these instances, the best performance is not always obtained by concatenating feature vectors into a single input vector.  Better accuracy can sometimes be obtained by **(1)** selecting the highest quality vectors or **(2)** training different ML models on each vector and making ensemble predictions (fig. 1).  In both cases, the different inputs are kept siloed for one or more data processing steps.  Pipeline architectures that maintain input silos for one ore more processing steps, which form the basis of pipecaster, and are referred to as **"multichannnel pipelines"**.
 
 ![figure 1.](/images/performance_comparison.png)  
 **figure 1**. Performance results from example 1.1 in [tutorial.ipynb](https://github.com/ajcallegari/pipecaster/blob/master/tutorial.ipynb).  
@@ -59,7 +59,7 @@ Pipecaster uses the ray library to speed up multiprocessing by passing arguments
 `cd pipecaster`  
 `pip install .`
 
-pipecaster was developed using Python 3.7.5 and the following Python libraries:  
+pipecaster was developed with Python 3.7.5 and requires the following libraries:
 ```
 joblib==0.16.0
 numpy==1.17.2
