@@ -1,7 +1,7 @@
 # pipecaster
 (in progress)
 
-Pipecaster is a Python library for building ensemble machine learning pipelines with multiple input channels (multichannel pipelines) and in-pipeline workflow automation (semi-auto-ML).  The pipeline construction workflow is designed to help manage complex architectures and is loosely based on Keras layers: pipelines are built layer by layer and there is visual feedback.  The current version supports algorithms with the scikit-learn estimator/transformer/predictor interfaces.
+Pipecaster is a Python library for building ensemble machine learning pipelines with multiple input silos (multichannel pipelines) and in-pipeline workflow automation (semi-auto-ML).  The pipeline construction workflow is designed to help manage complex architectures and is loosely based on Keras layers: pipelines are built layer by layer and there is visual feedback.  The current version supports algorithms with the scikit-learn estimator/transformer/predictor interfaces.
 
 tutorial: https://github.com/ajcallegari/pipecaster/blob/master/tutorial.ipynb
 
@@ -9,46 +9,57 @@ tutorial: https://github.com/ajcallegari/pipecaster/blob/master/tutorial.ipynb
 
 ## multichannel machine learning
 
-ML pipelines often combine multiple input feature vectors derived from different data sources or feature extraction/engineering methods.  In these instances, the best performance is not always obtained by concatenating feature vectors into a single input vector.  Better accuracy can sometimes be obtained by keeping the inputs in different silos through a first round of ML (fig. 1), with outputs of the base learners used to make ensemble predictions via voting or model stacking.  Silos may improve accuracy by increasing the diversity of important features or by other mechanisms.  Multichannel ML is defined here as ML with a pipeline architecture that takes multiple feature vectors as inputs and keeps their processing siloed through one or more pipeline steps.  Because the inputs are no longer technically still inputs after the first layer of the pipeline, the silos are referred to as "channels."
+ML pipelines often combine multiple input feature vectors derived from different data sources or feature extraction/engineering methods.  In these instances, the best performance is not always obtained by concatenating feature vectors into a single input vector.  Better accuracy can sometimes be obtained by **(1)** selecting the highest quality vectors or **(2)** training different ML models on each vector and making ensemble predictions (fig. 1).  In both examples, the different inputs are kept siloed for one or more data processing steps.  Pipeline architectures that maintain input silos for one ore more processing steps, which form the basis of pipecaster, and are referred to as **"multichannnel pipelines"**.
 
 ![figure 1.](/images/performance_comparison.png)  
 **figure 1**. Performance results from example 1.1 in [tutorial.ipynb](https://github.com/ajcallegari/pipecaster/blob/master/tutorial.ipynb).  
 
-The **MultichannelPipeline** class simplifies the construction of multichannel ensemble architectures, making it easy to create wide pipelines (many inputs) by broadcasting construction operations across multiple input channels, and deep pipelines (many layers) with a layer-by-layer construction workflow and internal cross validation training (1).  
+The **MultichannelPipeline** class simplifies the construction of multichannel architectures, making it easy to create wide pipelines (many inputs) by broadcasting construction operations across multiple input channels, and deep pipelines (many layers and model stacks) with a layer-by-layer construction workflow and support for automatic internal cross validation training (1).  
 (1) Wolpert, David H. "Stacked generalization." Neural networks 5.2 (1992): 241-259.
 
-MultichannelPipeline has the familiar scikit-learn estimator/transformer/predictor interfaces but its methods take a list of input matrices rather than a single matrix:  
+MultichannelPipeline has the familiar scikit-learn estimator/transformer/predictor interfaces but its methods take a list of input matrices rather than a single matrix.  The pipeline illustrated in the graphic above can be constructed, tested, and deployed with the following code:
+```
+import numpy as np
+from sklearn.preprocessing import StandardScaler
+from sklearn.feature_selection import SelectPercentile, f_classif
+from sklearn.ensemble import GradientBoostingClassifier
+from sklearn.svm import SVC
+import pipecaster as pc
 
-scikit-learn:  
-`pipeline.fit(X, y).predict(X)`  
-`pipeline.fit(X, y).transform(X)`  
+# build the multichannel pipeline from the graphic above
+clf = pc.MultichannelPipeline(n_channels=10)
+clf.add_layer(StandardScaler())
+clf.add_layer(SelectPercentile(percentile=25))
+clf.add_layer(pc.SelectKBestScores(feature_scorer=f_classif,
+                                     aggregator=np.mean, k=3))
+clf.add_layer(GradientBoostingClassifier())
+clf.add_layer(pc.MultichannelPredictor(SVC()))
 
-pipecaster MultichannelPipeline:  
-`pipeline.fit(Xs, y).predict(Xs)`  
-`pipeline.fit(Xs, y).transform(Xs).`  
+# cross validate:
+pc.cross_val_score(clf, Xs, y)
 
-pipecaster MultichannelPipeline with a single input matrix:  
-`pipeline.fit([X], y).predict([X])`  
-`pipeline.fit([X], y).transform([X]).`  
+# train:
+clf.fit(Xs_train, y_train)
+
+# predict:
+clf.predict(Xs)
+```
 
 ## semi-auto-ML
 A typical ML workflow involves screening input sources, feature extraction & engineering steps, ML algorithms, and model hyperparameters.  Pipecaster allows you to semi-automate each of these screening tasks by including them in the ML pipeline and executing the screens during calls to pipeline.fit().  This can be useful when you are developing a large number of different pipelines in parallel and don't have time to optimize each one separately, and it may accelerate ML workflows in general.  
 
-Relevant classes: **SelectiveStack**, **GridSearchStack**,  **SelectKBestScorers**, **SelectKBestPerformers**, **SelectKBestModels**, **SelectKBestProbes**
+Relevant classes: **SelectiveStack**, **GridSearchStack**,  **SelectKBestScores**, **SelectKBestPerformers**, **SelectKBestModels**, **SelectKBestProbes**
 
 ## fast distributed computing
 Pipecaster uses the ray library to speed up multiprocessing by passing arguments through a distributed in-memory object store without the usual serialization/deserialization overhead and without passing the same object multiple times when needed by multiple jobs.  Ray also enables pipecaster to rapidly distribute jobs among networked computers.
 
 ## install pipecaster
 
-`pip install pipecaster`  
-
-or  
 `git clone https://github.com/ajcallegari/pipecaster.git`  
 `cd pipecaster`  
 `pip install .`
 
-pipecaster was developed using Python 3.7 and the following Python packages:  
+pipecaster was developed using Python 3.7.5 and the following Python libraries:  
 ```
 joblib==0.16.0
 numpy==1.17.2
