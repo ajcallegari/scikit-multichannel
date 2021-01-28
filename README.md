@@ -42,8 +42,11 @@ Pipecaster uses the ray library to speed up multiprocessing by passing arguments
 ## install pipecaster
 
 `pip install pipecaster`  
+
 or  
-`git clone https://github.com/ajcallegari/pipecaster.git`
+`git clone https://github.com/ajcallegari/pipecaster.git`  
+`cd pipecaster`  
+`pip install .`
 
 pipecaster was developed using Python 3.7 and the following Python packages:  
 ```
