@@ -39,4 +39,21 @@ Relevant classes: **SelectiveStack**, **GridSearchStack**,  **SelectKBestScorers
 ## fast distributed computing
 Pipecaster uses the ray library to speed up multiprocessing by passing arguments through a distributed in-memory object store without the usual serialization/deserialization overhead and without passing the same object multiple times when needed by multiple jobs.  Ray also enables pipecaster to rapidly distribute jobs among networked computers.
 
-**Acknowledgments** Most of the ML concepts that motivated the development of pipecaster came up in fascinating conversations with [Ilya Goldberg](https://github.com/igg) and [Josiah Johnston](https://github.com/josiahjohnston) and are almost invariably their ideas.
+## install pipecaster
+
+`pip install pipecaster`  
+or  
+`git clone https://github.com/ajcallegari/pipecaster.git`
+
+pipecaster was developed using Python 3.7 and the following Python packages:  
+```
+joblib==0.16.0
+numpy==1.17.2
+pandas==0.24.2
+ray==1.1.0
+redis==3.5.3
+scikit-learn==0.23.2
+scipy==1.3.1
+```
+
+**Acknowledgments** Most of the ML concepts that motivated the development of pipecaster came up in fascinating conversations with [Ilya Goldberg](https://github.com/igg) and [Josiah Johnston](https://github.com/josiahjohnston).
