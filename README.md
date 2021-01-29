@@ -57,7 +57,7 @@ Pipecaster uses the ray library to speed up multiprocessing by passing arguments
 `cd pipecaster`  
 `pip install .`
 
-pipecaster was developed with Python 3.7.5 and requires the following libraries:
+pipecaster was developed with Python 3.7.5 and was tested with the following dependencies:
 ```
 numpy==1.17.2
 joblib==0.16.0
