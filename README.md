@@ -59,13 +59,12 @@ Pipecaster uses the ray library to speed up multiprocessing by passing arguments
 
 pipecaster was developed with Python 3.7.5 and requires the following libraries:
 ```
-joblib==0.16.0
 numpy==1.17.2
-pandas==0.24.2
+joblib==0.16.0
 ray==1.1.0
-redis==3.5.3
-scikit-learn==0.23.2
 scipy==1.3.1
+pandas==0.24.2
+scikit-learn==0.23.2
 ```
 
 **Acknowledgments** Most of the ML concepts that motivated the development of pipecaster came up in fascinating conversations with [Ilya Goldberg](https://github.com/igg) and [Josiah Johnston](https://github.com/josiahjohnston).
