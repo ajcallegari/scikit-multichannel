@@ -20,8 +20,8 @@ __all__ = ['AggregateFeatureScorer', 'CvPerformanceScorer']
 class AggregateFeatureScorer(Cloneable, Saveable):
     """
     Callable class that computes features scores using a feature_scorer object
-    then computes an aggregate matrix score from the set of features using
-    an aggregator object (e.g. np.mean, np.median, np.sum).
+    then computes an aggregate matrix score from the set of feature scores
+    using an aggregator object (e.g. np.mean, np.median, np.sum).
     """
     def __init__(self, feature_scorer=f_classif, aggregator=np.sum):
         self._params_to_attributes(AggregateFeatureScorer.__init__, locals())
