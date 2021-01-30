@@ -1072,9 +1072,9 @@ class MultichannelPipeline(Cloneable, Saveable):
 
 class ChannelConcatenator(Cloneable, Saveable):
     """
-    Concatenate a block of contiguous channels into a single matrix,
-        outputting the concatemer in the first i/o channel and None into the
-        remaining channels.
+    Concatenate a block of contiguous channel outputs into a single matrix and
+    output the concatemer in the first i/o channel and None into the
+    remaining channels.
 
     Example
     -------

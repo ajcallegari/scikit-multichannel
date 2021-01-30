@@ -1,14 +1,6 @@
 pipecaster package
 ==================
 
-Subpackages
------------
-
-.. toctree::
-   :maxdepth: 4
-
-   pipecaster.tests
-
 Submodules
 ----------
 

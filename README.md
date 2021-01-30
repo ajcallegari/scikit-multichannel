@@ -1,11 +1,11 @@
 # pipecaster
-Pipecaster is a Python library for building machine learning pipelines with multiple input silos (multichannel pipelines) and in-pipeline workflow automation (semi-auto-ML).  The pipeline construction workflow is designed to help manage complex architectures and is loosely based on Keras layers: pipelines are built layer by layer and there is visual feedback.  The current version supports algorithms with the scikit-learn estimator/transformer/predictor interfaces.
+Pipecaster is a Python library for building machine learning pipelines with multiple input silos (multichannel pipelines) and in-pipeline workflow automation (semi-auto-ML).  The pipeline construction workflow is designed to help manage complex architectures and is loosely based on Keras layers: pipelines are built layer by layer with visual feedback.  The current version supports algorithms with the scikit-learn estimator/transformer/predictor interfaces.
 
 tutorial: https://github.com/ajcallegari/pipecaster/blob/master/tutorial.ipynb
 
 ![Use case 1](/images/tutorial_1.2.svg)
 
-## multichannel machine learning
+## what is multichannel machine learning?
 
 ML pipelines often combine multiple input feature vectors derived from different data sources or feature extraction/engineering methods.  In these instances, the best performance is not always obtained by concatenating feature vectors into a single input vector.  Better accuracy can sometimes be obtained by **(1)** selecting the highest quality vectors or **(2)** training different ML models on each vector and making ensemble predictions (fig. 1).  In both cases, the different inputs are kept siloed for one or more data processing steps.  Pipeline architectures that maintain input silos for one or more processing steps, which form the basis of pipecaster, are referred to as **"multichannnel pipelines"**.
 
@@ -43,7 +43,7 @@ clf.fit(Xs_train, y_train)
 clf.predict(Xs)
 ```
 
-## semi-auto-ML
+## what is semi-auto-ML?
 A typical ML workflow involves screening input sources, feature extraction & engineering steps, ML algorithms, and model hyperparameters.  Pipecaster allows you to semi-automate each of these screening tasks by including them in the ML pipeline and executing the screens during calls to pipeline.fit().  This can be useful when you are developing a large number of different pipelines in parallel and don't have time to optimize each one separately, and it may accelerate ML workflows in general.  
 
 Relevant classes: **SelectiveStack**, **GridSearchStack**,  **SelectKBestScores**, **SelectKBestPerformers**, **SelectKBestModels**, **SelectKBestProbes**
