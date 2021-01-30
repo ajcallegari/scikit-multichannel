@@ -5,7 +5,7 @@ tutorial: https://github.com/ajcallegari/pipecaster/blob/master/tutorial.ipynb
 
 ![Use case 1](/images/tutorial_1.2.svg)
 
-## what is multichannel machine learning?
+## What is multichannel machine learning?
 
 ML pipelines often combine multiple input feature vectors derived from different data sources or feature extraction/engineering methods.  In these instances, the best performance is not always obtained by concatenating feature vectors into a single input vector.  Better accuracy can sometimes be obtained by **(1)** selecting the highest quality vectors or **(2)** training different ML models on each vector and making ensemble predictions (fig. 1).  In both cases, the different inputs are kept siloed for one or more data processing steps.  Pipeline architectures that maintain input silos for one or more processing steps, which form the basis of pipecaster, are referred to as **"multichannnel pipelines"**.
 
@@ -43,12 +43,12 @@ clf.fit(Xs_train, y_train)
 clf.predict(Xs)
 ```
 
-## what is semi-auto-ML?
+## What is semi-auto-ML?
 A typical ML workflow involves screening input sources, feature extraction & engineering steps, ML algorithms, and model hyperparameters.  Pipecaster allows you to semi-automate each of these screening tasks by including them in the ML pipeline and executing the screens during calls to pipeline.fit().  This can be useful when you are developing a large number of different pipelines in parallel and don't have time to optimize each one separately, and it may accelerate ML workflows in general.  
 
 Relevant classes: **SelectiveStack**, **GridSearchStack**,  **SelectKBestScores**, **SelectKBestPerformers**, **SelectKBestModels**, **SelectKBestProbes**
 
-## fast distributed computing
+## fast distributed computing with ray
 Pipecaster uses the ray library to speed up multiprocessing by passing arguments through a distributed in-memory object store without the usual serialization/deserialization overhead and without passing the same object multiple times when needed by multiple jobs.  Ray also enables pipecaster to rapidly distribute jobs among networked computers.
 
 ## install pipecaster
