@@ -238,7 +238,7 @@ class SelectiveStack(Cloneable, Saveable):
     estimator/predictor interface.
 
     Parameters
-    ---------
+    ----------
     base_predictors: list of predictor instances, default=None
         Ensemble of scikit-learn conformant base predictors (either all
         classifiers or all regressors).

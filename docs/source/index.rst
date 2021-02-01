@@ -8,9 +8,8 @@ Welcome to pipecaster's documentation!
 
 .. toctree::
    :maxdepth: 2
-   :caption: Contents:
-
-
+   
+   Tutorial <https://github.com/ajcallegari/pipecaster/blob/master/tutorial.ipynb>
 
 Indices and tables
 ==================
