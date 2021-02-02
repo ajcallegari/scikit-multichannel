@@ -10,6 +10,7 @@ Welcome to pipecaster's documentation!
    :maxdepth: 2
    
    Tutorial <https://github.com/ajcallegari/pipecaster/blob/master/tutorial.ipynb>
+   api_reference
 
 Indices and tables
 ==================

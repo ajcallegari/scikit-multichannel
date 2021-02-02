@@ -58,7 +58,11 @@ def has_live_channels(Xs, channel_indices=None):
 
 class Layer(Cloneable, Saveable):
     """
-    A list of pipe instances with io channel mappings.
+    A list of pipe instances with I/O channel mappings.
+
+    Creation and use of Layers objects is generally handled internally by the
+    MultichannelPipeline class.  The user may want to create a Layer manually
+    to acces the slicing interface, as described in the example below.
 
     Parameters
     ----------
@@ -70,35 +74,53 @@ class Layer(Cloneable, Saveable):
         If >1: Running fitting computationsin parallel with up to
             pipe_processes number of CPUs
 
+    Notes
+    -----
+    This class uses reflection to expose the prediction methods found in the
+    layer's pipes, so method attributes in a Layer instance typically will not
+    be identical to the method attributes of the Layer class.
+
     Examples
     --------
-    # create a layer with 10 inputs and outputs, add a single scaler for each
-    # (broadcasting):
+    # different ways of creating a layer with 3 channels
+    ::
+        from sklearn.svm import SVC
+        from sklearn.ensemble import RandomForestClassifier
+        from sklearn.linear_model import LogisticRegression
+        import pipecaster as pc
 
-    layer = Layer(n_channels=10)[StandardScaler()]
-    out_Xs = layer.fit_transform(in_Xs)
+        # broadcast a single pipe across a slice of channels
+        clf = pc.MultichannelPipeline(n_channels=3)
+        layer = pc.Layer(n_channels=3)
+        layer[:] = LogisticRegression()
+        clf.add_layer(layer)
 
-    # Create a layer with 10 inputs that are mapped to a multichannel
-    # classifier that will concatenate the inputs and classify them using a
-    # support vector machine. Output predicions to a single matrix.
+        # specify a pipe for each channel using a list
+        clf = pc.MultichannelPipeline(n_channels=3)
+        layer = pc.Layer(n_channels=3)
+        layer[:] = [LogisticRegression(), SVC(), RandomForestClassifier()]
+        clf.add_layer(layer)
 
-    layer = Layer(n_channels=10)[MultichannelPredictor(SVC())]
-    layer.fit(Xs_train, y_train)
-    predictions = layer.predict(Xs_test)
+        # specify pipes using mix of slices and indices
+        clf = pc.MultichannelPipeline(n_channels=3)
+        layer = pc.Layer(n_channels=3)
+        layer[:2] = [LogisticRegression(), SVC()]
+        layer[2] = [RandomForestClassifier()]
+        clf.add_layer(layer)
 
-    # Slicing example.  Create a layer that selects the 100 best features in
-    # first 5 channels and 200 best features in the last 5 channels.
+        # use slicing to map 3 channels to a multichannel pipe
+        clf = pc.MultichannelPipeline(n_channels=3)
+        layer = pc.Layer(n_channels=3)
+        layer[:] = pc.MultichannelPredictor(SVC())
+        clf.add_layer(layer)
 
-    layer = Layer(n_channels=10)
-    layer[0:5] = SelectKBest(k=100)
-    layer[5:10] = SelectKBest(k=200)
-    out_Xs = layer.fit_transform(in_Xs)
-
-    Note
-    ----
-    This class may use reflection to expose the prediction methods found in the
-    layer, so method attributes in a Layer instance may not be identical to the
-    method attributes of the Layer class.
+        # use slicing to map 2 channel to a multichannel pipe and 3rd to a
+        # single channel pipe
+        clf = pc.MultichannelPipeline(n_channels=3)
+        layer = pc.Layer(n_channels=3)
+        layer[:2] = pc.MultichannelPredictor(SVC())
+        layer[2] = LogisticRegression()
+        clf.add_layer(layer)
     """
     state_variables = ['_all_channels', '_mapped_channels', '_estimator_type']
 
@@ -118,6 +140,7 @@ class Layer(Cloneable, Saveable):
 
         is_listlike = isinstance(val, (list, tuple, np.ndarray))
 
+        # verify and expose pipe interface
         if is_listlike:
             for pipe in val:
                 utils.check_pipe_interface(pipe)
@@ -126,6 +149,7 @@ class Layer(Cloneable, Saveable):
             utils.check_pipe_interface(val)
             self.expose_predictor_type(val)
 
+        # get channel indices
         if type(slice_) == slice:
             if slice_.step not in [None, 1]:
                 raise ValueError('Invalid slice step; must be exactly 1 \
@@ -138,6 +162,7 @@ class Layer(Cloneable, Saveable):
         else:
             raise TypeError('unrecognized slice format')
 
+        # validate channel index values
         for i in channel_indices:
             if i not in self._all_channels:
                 raise IndexError('Slice index out of bounds')
@@ -159,7 +184,7 @@ class Layer(Cloneable, Saveable):
                                  dimension during assignment')
             else:
                 for pipe, i in zip(val, channel_indices):
-                    self.pipe_list.append((val, slice(i, i+1, 1), [i]))
+                    self.pipe_list.append((pipe, slice(i, i+1, 1), [i]))
 
         self._mapped_channels = self._mapped_channels.union(channel_indices)
 
@@ -521,7 +546,7 @@ class MultichannelPipeline(Cloneable, Saveable):
     Parameters
     ----------
     n_channels: int, default=1
-        The number of separate i/o channels throughout the pipeline (except
+        The number of separate I/O channels throughout the pipeline (except
         last output, which is a single matrix when the pipeline outputs
         predictions to a single channel).  The number of live channels is
         reduced by concatenation and selection operations, but the channel
@@ -642,9 +667,8 @@ class MultichannelPipeline(Cloneable, Saveable):
         clf.add_layer(3, LogisticRegression(), 3, KNeightborsClassifier())
         clf.add_layer(pc.MultichannelPredictor(SVC()))
         """
-
-        if len(pipe_mapping) == 1 and type(pipe_mapping) == Layer:
-            if pipe_mapping.n_channels <= self.n_channels:
+        if len(pipe_mapping) == 1 and type(pipe_mapping[0]) == Layer:
+            if pipe_mapping[0].n_channels <= self.n_channels:
                 self.layers.append(pipe_mapping[0])
                 return self
             else:

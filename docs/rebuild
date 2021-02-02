@@ -1,0 +1,7 @@
+make clean
+rm -fr build
+rm source/modules.rst
+rm source/pipecaster.rst
+bash make_rst
+make html
+open build/html/index.html
