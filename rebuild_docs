@@ -1,0 +1,14 @@
+rm -fr docs
+mkdir docs
+cp Makefile docs
+cp make.bat docs
+mkdir docs/source
+mkdir docs/source/_static
+cp conf.py docs/source
+cp index.rst docs/source
+# cp modules.rst docs/source 
+cd docs
+sphinx-apidoc -f -o --separate source ../pipecaster ../pipecaster/tests/*
+make html
+open build/html/index.html
+

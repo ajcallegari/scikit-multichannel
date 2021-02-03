@@ -7,7 +7,7 @@ tutorial: https://github.com/ajcallegari/pipecaster/blob/master/tutorial.ipynb
 
 ## What is multichannel machine learning?
 
-ML pipelines often combine multiple input feature vectors derived from different data sources or feature extraction/engineering methods.  In these instances, the best performance is not always obtained by concatenating feature vectors into a single input vector.  Better accuracy can sometimes be obtained by **(1)** selecting the highest quality vectors or **(2)** training different ML models on each vector and making ensemble predictions (fig. 1).  In both cases, the different inputs are kept siloed for one or more data processing steps.  Pipeline architectures that maintain input silos for one or more processing steps, which form the basis of pipecaster, are referred to as **"multichannnel pipelines"**.
+ML pipelines often combine multiple input feature vectors derived from different data sources or feature extraction/engineering methods.  In these instances, the best performance is not always obtained by concatenating feature vectors into a single input vector.  Better accuracy can sometimes be obtained by **(1)** selecting the highest quality vectors or **(2)** training different ML models on each vector and making ensemble predictions (fig. 1).  In both cases, the different inputs are kept siloed for one or more data processing step.  Pipeline architectures that maintain input silos for one or more processing step, which form the basis of pipecaster, are referred to as **"multichannnel pipelines"**.
 
 ![figure 1.](/images/performance_comparison.png)  
 **figure 1**. Performance results from example 1.1 in [tutorial.ipynb](https://github.com/ajcallegari/pipecaster/blob/master/tutorial.ipynb).  

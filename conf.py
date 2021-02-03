@@ -10,10 +10,10 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-
 import os
 import sys
-sys.path.insert(0, os.path.abspath('../..'))  # Source code dir relative to this file
+sys.path.insert(0, os.path.abspath('.'))
+
 
 # -- Project information -----------------------------------------------------
 
@@ -27,12 +27,20 @@ release = '0.1.a1'
 
 # -- General configuration ---------------------------------------------------
 
-extensions = [
-    'numpydoc',
-    'sphinx.ext.autodoc',  # Core library for html generation from docstrings
-    'sphinx.ext.autosummary',  # Create neat summary tables
-]
-autosummary_generate = True  # Turn on sphinx.ext.autosummary
+# Add any Sphinx extension module names here, as strings. They can be
+# extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
+# ones.
+extensions = ['sphinx.ext.autodoc',
+              'sphinx.ext.napoleon',
+              'autoapi.extension',
+              'sphinx.ext.intersphinx',
+              'sphinx.ext.autosummary',
+              'sphinx.ext.linkcode',
+              ]
+
+# setting for the autoapi extension
+autoapi_type = 'python'
+autoapi_dirs = ['/Users/john/trading/src/pipecaster/pipecaster']
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
@@ -54,3 +62,29 @@ html_theme = 'sphinx_rtd_theme'
 # relative to this directory. They are copied after the builtin static files,
 # so a file named "default.css" will overwrite the builtin "default.css".
 html_static_path = ['_static']
+
+# instruct autosummary extension to generate autosummary even if no references
+autosummary_generate = True
+
+# function that allows the linkcode extension to find github pages
+
+def linkcode_resolve(domain, info):
+    if domain != 'py':
+        return None
+    if not info['module']:
+        return None
+    filename = info['module'].replace('.', '/')
+    base = "https://github.com/ajcallegari/pipecaster/blob/master"
+    return base + "/%s.py" % filename
+
+# instruct intersphinx extension how to link to eternal docs
+intersphinx_mapping = {
+    'python': ('https://docs.python.org/{.major}'.format(
+        sys.version_info), None),
+    'numpy': ('https://numpy.org/doc/stable', None),
+    'scipy': ('https://docs.scipy.org/doc/scipy/reference', None),
+    'matplotlib': ('https://matplotlib.org/', None),
+    'pandas': ('https://pandas.pydata.org/pandas-docs/stable/', None),
+    'joblib': ('https://joblib.readthedocs.io/en/latest/', None),
+    'ray': ('https://docs.ray.io/en/latest/', None),
+}
