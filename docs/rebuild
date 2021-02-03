@@ -1,0 +1,4 @@
+rm -fr build
+rm source/_autosummary/*
+make html
+open build/html/index.html

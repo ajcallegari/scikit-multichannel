@@ -10,10 +10,11 @@
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
 #
-
 import os
 import sys
-sys.path.insert(0, os.path.abspath('../..'))  # Source code dir relative to this file
+# Source code dir relative to this file
+sys.path.insert(0, os.path.abspath('../..'))
+
 
 # -- Project information -----------------------------------------------------
 
@@ -27,15 +28,16 @@ release = '0.1.a1'
 
 # -- General configuration ---------------------------------------------------
 
-extensions = [
-    'numpydoc',
-    'sphinx.ext.autodoc',  # Core library for html generation from docstrings
-    'sphinx.ext.autosummary',  # Create neat summary tables
-]
-autosummary_generate = True  # Turn on sphinx.ext.autosummary
+# Add any Sphinx extension module names here, as strings. They can be
+# extensions coming with Sphinx (named 'sphinx.ext.*') or your custom
+# ones.
+extensions = ['numpydoc', 'sphinx.ext.autodoc',
+              'sphinx.ext.autosummary']
 
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
+
+autosummary_generate = True  # Turn on sphinx.ext.autosummary
 
 # List of patterns, relative to source directory, that match files and
 # directories to ignore when looking for source files.

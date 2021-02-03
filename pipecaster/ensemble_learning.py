@@ -465,7 +465,7 @@ class GridSearchStack(SelectiveStack):
     scikit-learn estimator/predictor interface.
 
     Parameters
-    ---------
+    ----------
     param_dict: dict, default=None
         A dict containing lists of parameters indexed by the parameter name.
         The lists indicate parameter values to be screened in a grid search

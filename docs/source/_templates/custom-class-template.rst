@@ -2,7 +2,10 @@
 
 .. currentmodule:: {{ module }}
 
-.. autoclass:: {{ objname }}    
+.. autoclass:: {{ objname }}
+   :members:
+   :show-inheritance:
+   :inherited-members:                
 
    {% block methods %}
    .. automethod:: __init__

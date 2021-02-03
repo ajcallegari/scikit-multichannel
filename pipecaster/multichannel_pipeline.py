@@ -82,43 +82,45 @@ class Layer(Cloneable, Saveable):
 
     Examples
     --------
-    from sklearn.svm import SVC
-    from sklearn.ensemble import RandomForestClassifier
-    from sklearn.linear_model import LogisticRegression
-    import pipecaster as pc
+    ::
 
-    # broadcast a single pipe across a slice of channels
-    >>> clf = pc.MultichannelPipeline(n_channels=3)
-    >>> layer = pc.Layer(n_channels=3)
-    >>> layer[:] = LogisticRegression()
-    >>> clf.add_layer(layer)
+        from sklearn.svm import SVC
+        from sklearn.ensemble import RandomForestClassifier
+        from sklearn.linear_model import LogisticRegression
+        import pipecaster as pc
 
-    # specify a pipe for each channel using a list
-    >>> clf = pc.MultichannelPipeline(n_channels=3)
-    >>> layer = pc.Layer(n_channels=3)
-    >>> layer[:] = [LogisticRegression(), SVC(), RandomForestClassifier()]
-    >>> clf.add_layer(layer)
+        # broadcast a single pipe across a slice of channels
+        clf = pc.MultichannelPipeline(n_channels=3)
+        layer = pc.Layer(n_channels=3)
+        layer[:] = LogisticRegression()
+        clf.add_layer(layer)
 
-    # specify pipes using mix of slices and indices
-    >>> clf = pc.MultichannelPipeline(n_channels=3)
-    >>> layer = pc.Layer(n_channels=3)
-    >>> layer[:2] = [LogisticRegression(), SVC()]
-    >>> layer[2] = [RandomForestClassifier()]
-    >>> clf.add_layer(layer)
+        # specify a pipe for each channel using a list
+        clf = pc.MultichannelPipeline(n_channels=3)
+        layer = pc.Layer(n_channels=3)
+        layer[:] = [LogisticRegression(), SVC(), RandomForestClassifier()]
+        clf.add_layer(layer)
 
-    # use slicing to map 3 channels to a multichannel pipe
-    >>> clf = pc.MultichannelPipeline(n_channels=3)
-    >>> layer = pc.Layer(n_channels=3)
-    >>> layer[:] = pc.MultichannelPredictor(SVC())
-    >>> >>> clf.add_layer(layer)
+        # specify pipes using mix of slices and indices
+        clf = pc.MultichannelPipeline(n_channels=3)
+        layer = pc.Layer(n_channels=3)
+        layer[:2] = [LogisticRegression(), SVC()]
+        layer[2] = [RandomForestClassifier()]
+        clf.add_layer(layer)
 
-    # use slicing to map 2 channel to a multichannel pipe and 3rd to a
-    # single channel pipe
-    >>> clf = pc.MultichannelPipeline(n_channels=3)
-    >>> layer = pc.Layer(n_channels=3)
-    >>> layer[:2] = pc.MultichannelPredictor(SVC())
-    >>> layer[2] = LogisticRegression()
-    >>> clf.add_layer(layer)
+        # use slicing to map 3 channels to a multichannel pipe
+        clf = pc.MultichannelPipeline(n_channels=3)
+        layer = pc.Layer(n_channels=3)
+        layer[:] = pc.MultichannelPredictor(SVC())
+        clf.add_layer(layer)
+
+        # use slicing to map 2 channel to a multichannel pipe and 3rd to a
+        # single channel pipe
+        clf = pc.MultichannelPipeline(n_channels=3)
+        layer = pc.Layer(n_channels=3)
+        layer[:2] = pc.MultichannelPredictor(SVC())
+        layer[2] = LogisticRegression()
+        clf.add_layer(layer)
     """
     state_variables = ['_all_channels', '_mapped_channels', '_estimator_type']
 
