@@ -1,17 +1,12 @@
-import functools
-import numpy as np
-
-import pipecaster.utils as utils
-from pipecaster.utils import Cloneable, Saveable
-from pipecaster.cross_validation import cross_val_predict
-
 """
-Wrapper classes that provide single channel and multichannel predictors with
+Add transform methods and internal cross validation training to predictors.
+
+These wrapper classes provide single channel and multichannel predictors with
 transform and fit_transform methods, internal cv_training, and internal_cv
 performance scoring.  Used for meta-prediction and model selection.  Users
 don't generally need to use these wrappers because they are applied
-automatically within MultichannelPipeline objects in the event that a pipe
-lacks a required transform or fit_transform method.
+automatically within MultichannelPipeline objects when a pipe lacks a required
+transform or fit_transform method.
 
 Conversion of prediction methods to tranform methods is done using the
 transform_method_name argument, but this argument can usually be left at its
@@ -30,26 +25,36 @@ accuracy if the number of training samples is limiting.
 
 Examples
 --------
-# give a single channel predictor transform and fit_transform methods
-import pipecaster as pc:
-pipe = pc.transformer_wrappers.SingleChannel(pipe)
+::
 
-# give a single channel predictor transform & fit_transform methods,
-    and internal_cv training:
-import pipecaster as pc
-pipe = pc.transformer_wrappers.SingleChannelCV(pipe, internal_cv=3,
-                                               cv_processes=1)
+    # give a single channel predictor transform and fit_transform methods
+    import pipecaster as pc:
+    pipe = pc.transformer_wrappers.SingleChannel(pipe)
 
-# give a multichannel predictor transform and fit_transform methods:
-import pipecaster as pc
-pipe = pc.transformer_wrappers.Multichannel(pipe)
+    # give a single channel predictor transform & fit_transform methods,
+        and internal_cv training:
+    import pipecaster as pc
+    pipe = pc.transformer_wrappers.SingleChannelCV(pipe, internal_cv=3,
+                                                   cv_processes=1)
 
-# give a multichannel predictor transform & fit_transform methods, and
-    internal_cv training:
-import pipecaster as pc
-pipe = pc.transformer_wrappers.MultichannelCV(pipe, internal_cv=3,
-                                              cv_processes=1)
-"""
+    # give a multichannel predictor transform and fit_transform methods:
+    import pipecaster as pc
+    pipe = pc.transformer_wrappers.Multichannel(pipe)
+
+    # give a multichannel predictor transform & fit_transform methods, and
+        internal_cv training:
+    import pipecaster as pc
+    pipe = pc.transformer_wrappers.MultichannelCV(pipe, internal_cv=3,
+                                                  cv_processes=1)
+    """
+
+import functools
+import numpy as np
+
+import pipecaster.utils as utils
+from pipecaster.utils import Cloneable, Saveable
+from pipecaster.cross_validation import cross_val_predict
+
 # choose methods in this order when generating transform outputs from predictor
 transform_method_precedence = ['predict_proba', 'decision_function',
                                'predict_log_proba', 'predict']

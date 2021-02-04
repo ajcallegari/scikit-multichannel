@@ -1,30 +1,17 @@
+"""
+Select items from a list based on scalar figure of merit scores.
+
+Use for feature selection and channel selection.
+
+Signature:
+    selection_indices = score_selector(scores)
+"""
+
 import numpy as np
 
 from pipecaster.utils import Cloneable, Saveable
 
-"""
-Callable classes for selecting items from a list (e.g. for feature
-selection or channel selection) based on a figure of merit score.
 
-Pattern for score selectors:
-selection_indices = score_selector(scores)
-"""
-
-# Boilerplate for __call__()
-
-"""
-Select items and return their indices.
-
-Parameters:
-----------
-scores: list or nd.array.shape(n_samples,)
-    Ordered list of scalar figure of merit scores for each item of selection.
-
-Returns:
---------
-selection_indices: list of ndarray.shape(n_selections,)
-    List of int indices for the selected items.
-"""
 
 __all__ = ['RankScoreSelector', 'PctRankScoreSelector',
            'HighPassScoreSelector', 'VarianceHighPassScoreSelector']

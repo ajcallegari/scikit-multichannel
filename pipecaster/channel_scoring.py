@@ -1,3 +1,10 @@
+"""
+Compute a scalar figure of merit score for a feature matrix.
+
+Signature:
+    score = channel_scorer(X, y)
+"""
+
 import numpy as np
 
 from sklearn.metrics import explained_variance_score, balanced_accuracy_score
@@ -8,11 +15,6 @@ from sklearn.ensemble import GradientBoostingRegressor
 from pipecaster.cross_validation import cross_val_score
 from pipecaster.utils import Cloneable, Saveable
 import pipecaster.utils as utils
-
-"""
-Module containing classes for estimating the predictive value of
-feature matrices.
-"""
 
 __all__ = ['AggregateFeatureScorer', 'CvPerformanceScorer']
 

@@ -1,3 +1,7 @@
+"""
+ML pipeline that takes multiple input matrices.
+"""
+
 import numpy as np
 import pandas as pd
 import functools

@@ -1,3 +1,9 @@
+
+"""
+Select a subset of the channels in a MultichannelPipeline based on scalar
+figure of merit scores.
+"""
+
 import numpy as np
 import ray
 import functools
@@ -16,11 +22,6 @@ import pipecaster.transform_wrappers as transform_wrappers
 from pipecaster.score_selection import RankScoreSelector, PctRankScoreSelector
 from pipecaster.score_selection import HighPassScoreSelector
 from pipecaster.score_selection import VarianceHighPassScoreSelector
-
-"""
-Module with classes for in-pipeline selection of input channels in a
-MultichannelPipeline based on various criteria.
-"""
 
 __all__ = ['ChannelSelector', 'ModelSelector',
            'SelectKBestScores', 'SelectPercentBestScores',

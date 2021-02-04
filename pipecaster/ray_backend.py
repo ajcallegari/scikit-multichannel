@@ -1,11 +1,9 @@
+"""
+Ray multiprocessing back end for pipecaster.parallel.
+"""
+
 import os
 import ray
-
-"""
-Module provides a distributor class to back the pipecaster parallel.py
-interface with multiprocessing, a shared in-memory object store, and cluster
-computing.
-"""
 
 os.system('ulimit -n 8192')
 default_redis_password = 'gn8GWVrMJ5cSX4'

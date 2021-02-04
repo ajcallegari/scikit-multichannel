@@ -1,3 +1,7 @@
+"""
+Synthetic data generators and dummy objects for testing.
+"""
+
 import random
 import numpy as np
 import inspect

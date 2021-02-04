@@ -7,7 +7,7 @@
    .. rubric:: Module Attributes
 
    .. autosummary::
-      :toctree:                            
+      :toctree:
    {% for item in attributes %}
       {{ item }}
    {%- endfor %}
@@ -32,7 +32,7 @@
 
    .. autosummary::
       :toctree:
-      :template: pc_class.rst
+      :template: custom-class-template.rst
    {% for item in classes %}
       {{ item }}
    {%- endfor %}

@@ -1,19 +1,10 @@
-import os
-import ray
-import multiprocessing
-import time
-
-import pipecaster.utils as utils
-from pipecaster.ray_backend import RayDistributor
-
-__all__ = ['set_distributor', 'starmap_jobs', 'map_jobs', 'count_local_cpus',
-           'count_cpus', 'count_gpus']
-
 """
-Parallel computing interface for pipecaster.  Users can typically ignore this
-module unless they want to get information about resources or set a custom
-back end using set_distributor(my_backend_instance).  For info on building a
-cluster, see the ray_backend module.
+Distributed computing interface.
+
+Users can typically ignore this module unless they want to get information
+about resources or set a custom back end using
+set_distributor(my_backend_instance).  For info on building a cluster, see the
+ray_backend module.
 
 Notes
 -----
@@ -28,55 +19,67 @@ with these methods:
 6) shutdown(): free up the computing resources of the Distributor
 
 Examples
--------
-(1) basic multiprocessing with map interface
+--------
+::
 
-import pipecaster.parallel as parallel
+    # basic multiprocessing with map interface
 
-def f(a, b):
-    return a + b
+    import pipecaster.parallel as parallel
 
-As = [1, 2, 3]
-Bs = [4, 5, 6]
+    def f(a, b):
+        return a + b
 
-results = parallel.map_jobs(f, As, Bs, n_cpus='max')
-print(results)
+    As = [1, 2, 3]
+    Bs = [4, 5, 6]
 
-output:
-[5, 7, 9]
+    results = parallel.map_jobs(f, As, Bs, n_cpus='max')
+    print(results)
 
-(2) basic multiprocessing with starmap interface
+    output:
+    [5, 7, 9]
 
-# same as example 2 but add zip() and change the map call as follows:
-args_list = zip(As, Bs)
-results = parallel.starmap_jobs(f, args_list, n_cpus='max')
-print(results)
+    # basic multiprocessing with starmap interface
 
-output:
-[5, 7, 9]
+    # same as example 2 but add zip() and change the map call as follows:
+    args_list = zip(As, Bs)
+    results = parallel.starmap_jobs(f, args_list, n_cpus='max')
+    print(results)
 
-(3) fast distribution of large objects for multiprocessing using a shared
-memory stores
+    output:
+    [5, 7, 9]
 
-import pipecaster.parallel as parallel
-import numpy as np
+    # fast distribution of large objects for multiprocessing using a shared
+    # memory stores
 
-def f(a, big_arg):
-    return a + np.mean(big_arg)
+    import pipecaster.parallel as parallel
+    import numpy as np
 
-big_arg = np.ones(1000)
+    def f(a, big_arg):
+        return a + np.mean(big_arg)
 
-As = [1, 2, 3]
-Bs = [big_arg, big_arg, big_arg]
+    big_arg = np.ones(1000)
 
-args_list = zip(As, Bs)
-results = parallel.starmap_jobs(f, args_list, n_cpus='max',
-                                shared_mem_objects=[big_arg])
-print(results)
+    As = [1, 2, 3]
+    Bs = [big_arg, big_arg, big_arg]
 
-output:
-[2.0, 3.0, 4.0]
+    args_list = zip(As, Bs)
+    results = parallel.starmap_jobs(f, args_list, n_cpus='max',
+                                    shared_mem_objects=[big_arg])
+    print(results)
+
+    # output: [2.0, 3.0, 4.0]
 """
+
+import os
+import ray
+import multiprocessing
+import time
+
+import pipecaster.utils as utils
+from pipecaster.ray_backend import RayDistributor
+
+__all__ = ['set_distributor', 'starmap_jobs', 'map_jobs', 'count_local_cpus',
+           'count_cpus', 'count_gpus']
 
 default_distributor_type = RayDistributor
 distributor_type = default_distributor_type

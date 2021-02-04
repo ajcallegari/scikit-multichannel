@@ -1,11 +1,10 @@
-Welcome to pipecaster
-=====================
+Welcome to pipecaster's documentation
+=====================================
 
-Some words.
 
-.. autosummary::
-   :toctree: _autosummary
-   :template: custom-module-template.rst
-   :recursive:
+.. toctree::
+    :maxdepth: 2
 
-   pipecaster
+    Introduction <intro.rst>
+    Tutorial <https://github.com/ajcallegari/pipecaster/blob/master/tutorial.ipynb>
+    API Reference <_autosummary/pipecaster.rst>

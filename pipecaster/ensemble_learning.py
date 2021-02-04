@@ -1,3 +1,7 @@
+"""
+Pipeline components for voting and model stacking.
+"""
+
 import numpy as np
 import pandas as pd
 import ray

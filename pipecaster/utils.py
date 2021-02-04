@@ -1,15 +1,15 @@
+"""
+Utilities for characterizing and defining pipeline components.
+
+The term "pipes" is used to describe objects with the scikit-learn
+estimator/transformer/predictor interfaces or multichannel analogs.
+"""
+
 import numpy as np
 from inspect import signature, getfullargspec
 import sklearn.base
 import joblib
 import ray
-
-"""
-Module with functions for characterizing and defining pipes, the building
-blocks of pipelines.  Pipes are objects with the scikit-learn
-predictor or transformer interfaces, or multichannel analogs of
-these interfaces.
-"""
 
 __all__ = ['is_classifier', 'is_regressor', 'is_predictor', 'is_transformer',
            'detect_predictor_type', 'is_multichannel',
