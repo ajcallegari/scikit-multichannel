@@ -16,7 +16,7 @@ __all__ = ['Layer', 'MultichannelPipeline', 'ChannelConcatenator']
 
 def get_live_channels(Xs, channel_indices=None):
     """
-    Determine the indices of the matrix list Xs have values other than None.
+    Determine which channels are not None.
 
     Parameters
     ----------
@@ -43,8 +43,7 @@ def get_live_channels(Xs, channel_indices=None):
 
 def has_live_channels(Xs, channel_indices=None):
     """
-    Determine if a list of matrices contains one or more live (not None value)
-    matrices.
+    Determine if channels contain a value other than None.
 
     Parameters
     ----------
@@ -544,8 +543,29 @@ class Layer(Cloneable, Saveable):
 
 class MultichannelPipeline(Cloneable, Saveable):
     """
-    Machine learning or data processing pipeline that takes multiple inputs
-    and outputs transormed data or predictions.
+    ML pipeline with multilple I/O channels.
+
+    *Internal cross valdiation training*
+
+    MultichannelPipeline provides context-sensitive internal cross validation
+    training to enable model stacking.  
+    The parameters transform_method_name, internal_cv, and cv_processes are
+    global internal cross validation parameters. These parameters only take
+    effect when a predictor that lacks transform methods is present in a
+    pipeline layer other than the last layer.  This type of architecture, which
+    typically occurs with model stacking, triggers automatic wrapping of the
+    predictor with a class that provides transform methods and internal cross
+    validation training.  Internal cv training prevents predictors from make
+    predictions on their own training samples when the outputs are being use to
+    train a meta-predictor.
+
+    These global parameters can be overriden locally
+    by wrapping pipes with classes found in the transform_wrappers module
+    before adding them to the pipeline, or by making custom predictors with
+    their own transform and fit_transform methods.  When overriding global
+    internal cv parameters, the user must ensure identical splits throughout
+    the pipeline to prevent base predictors from make predictions on their
+    training data.
 
     Parameters
     ----------
@@ -556,19 +576,6 @@ class MultichannelPipeline(Cloneable, Saveable):
         reduced by concatenation and selection operations, but the channel
         depth remains constant internally with dead channels indicated by None
         values.
-
-    The parameters below are global internal cross validation parameters
-    applied only when an internal predictor lacks a transformer interface
-    (which occurs during model stacking).  Internal cross validation prevents
-    predictors from make predictions on their training data during
-    meta-predictor training.  These global parameters can be overriden locally
-    by wrapping pipes with classes found in the transform_wrappers module
-    before adding them to the pipeline, or by making custom predictors with
-    their own transform and fit_transform methods.  When overriding global
-    internal cv parameters, the user must ensure identical splits throughout
-    the pipeline to prevent base predictors from make predictions on their
-    training data.
-
     transform_method_name: str, default=None
         Prediction method name to use when transform is called on a predictor
         that lacks a transform method.  This occurs whenever a predictor is not
@@ -584,43 +591,24 @@ class MultichannelPipeline(Cloneable, Saveable):
             KFold(n_splits=internal_cv) for regressors.
         If None: The default value of 5 is used.
         If callable: Assumes scikit-learn interface like KFold.
-    cv_processes: int or 'max', default=1
-        If 1: Run all split computations in a single process.
-        If 'max': Run each split in a different process, using all available
+    cv_processes: None, int or 'max', default=1
+        If 1: Run all cv split computations in a single process.
+        If 'max': Run each cv split in a different process, using all available
             CPUs
-        If int > 1: Run each split in a different process, using up to
-            n_processes number of CPUs
-
-    Example
-    -------
-    import numpy as np
-    from sklearn.preprocessing import StandardScaler
-    from sklearn.linear_model import LogisticRegression
-    from sklearn.svm import SVC
-    import pipecaster as pc
-
-    n_inputs = 10
-    Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
-                                                  n_random_Xs=n_inputs - 3)
-
-    clf = pc.MultichannelPipeline(n_channels=n_inputs)
-    clf.add_layer(StandardScaler())
-    clf.add_layer(LogisticRegression(), pipe_processes='max')
-    clf.add_layer(pc.MultichannelPredictor(SVC()))
-    pc.cross_val_score(clf, Xs, y)
-    >>>[0.9411764705882353, 0.9099264705882353, 0.9393382352941176]
+        If int > 1: Run each cv split in a different process, using up to
+            cv_processes number of CPUs
 
     Notes
     -----
-    *There is no stateless scikit-learn-like clone implemented because
-        MultiChannelPipeline __init__() arguments are not sufficient to
-        reproduce the pipeline.  Use MultiChannelPipeline.get_clone() to get a
-        stateful clone or rebuild pipeline from scratch to get a stateless
-        clone().
+    * There is no stateless scikit-learn-like clone implemented because
+    MultiChannelPipeline __init__() arguments are not sufficient to
+    reproduce the pipeline.  Use MultiChannelPipeline.get_clone() to get a
+    stateful clone or rebuild pipeline from scratch to get a stateless
+    clone().
     * This class uses reflection to expose the predictor methods found in the
-        last pipeline layer, so the method attributes MultichannelPipeline
-        instances are not usually identical to the method attributes of the
-        MultichannelPipeline class.
+    last pipeline layer, so the method attributes of MultichannelPipeline
+    instances are typicall not identical to the method attributes of the
+    MultichannelPipeline class.
     * Fit failures are currently not handled / allowed.
     * Multi-output prediction not yet supported.
     * Groups for internal cv not yet supported.
@@ -628,12 +616,33 @@ class MultichannelPipeline(Cloneable, Saveable):
         (but sample_weights for model training should work fine).
     * Caching of intermediate results not yet implemented.
     * fit_params targeted to specific pipes not yet implemented.
+
+    Example
+    -------
+    ::
+
+        import numpy as np
+        from sklearn.preprocessing import StandardScaler
+        from sklearn.linear_model import LogisticRegression
+        from sklearn.svm import SVC
+        import pipecaster as pc
+
+        n_inputs = 10
+        Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
+                                                      n_random_Xs=n_inputs - 3)
+
+        clf = pc.MultichannelPipeline(n_channels=n_inputs)
+        clf.add_layer(StandardScaler())
+        clf.add_layer(LogisticRegression(), pipe_processes='max')
+        clf.add_layer(pc.MultichannelPredictor(SVC()))
+        pc.cross_val_score(clf, Xs, y)
+        # output: [0.9411764705882353, 0.9099264705882353, 0.9393382352941176]
     """
 
     state_variables = ['classes_']
 
-    def __init__(self, n_channels=1, transform_method_name=None, internal_cv=5,
-                 cv_processes=1):
+    def __init__(self, n_channels=1, transform_method_name=None,
+                 internal_cv=None, cv_processes=None):
         self._params_to_attributes(MultichannelPipeline.__init__, locals())
         self.layers = []
 
@@ -1100,6 +1109,8 @@ class MultichannelPipeline(Cloneable, Saveable):
 
 class ChannelConcatenator(Cloneable, Saveable):
     """
+    Concatenate channel outputs into a single matrix.
+
     Concatenate a block of contiguous channel outputs into a single matrix and
     output the concatemer in the first i/o channel and None into the
     remaining channels.
@@ -1142,6 +1153,11 @@ class ChannelConcatenator(Cloneable, Saveable):
         ----------
         Xs: list of [ndarray.shape(n_samples, n_features) or None]
             List of feature matrix inputs.
+
+        Returns
+        -------
+        List of Xs with the concatenated matrix at index 0 and all other
+        channel values set to None.
         """
         live_Xs = [X for X in Xs if X is not None]
         Xs_t = [None for X in Xs]
@@ -1160,6 +1176,11 @@ class ChannelConcatenator(Cloneable, Saveable):
             Targets for supervised ML.
         fit_params: dict, defualt=None
             Auxiliary parameters to pass to the fit method of the predictor.
+
+        Returns
+        -------
+        List of Xs with the concatenated matrix at index 0 and all other
+        channel values set to None.
         """
         self.fit(Xs, y, **fit_params)
         return self.transform(Xs)

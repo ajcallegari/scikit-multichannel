@@ -6,6 +6,8 @@ __pycache__/
 *.so
 
 # Distribution / packaging
+docs/build/
+docs/source/_autosummary/
 bin/
 build/
 develop-eggs/
