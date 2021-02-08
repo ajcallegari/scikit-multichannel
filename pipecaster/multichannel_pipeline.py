@@ -9,7 +9,6 @@ import functools
 import pipecaster.utils as utils
 import pipecaster.parallel as parallel
 from pipecaster.utils import Cloneable, Saveable, FitError
-import pipecaster.transform_wrappers as transform_wrappers
 
 __all__ = ['Layer', 'MultichannelPipeline', 'ChannelConcatenator']
 
@@ -125,7 +124,8 @@ class Layer(Cloneable, Saveable):
         layer[2] = LogisticRegression()
         clf.add_layer(layer)
     """
-    state_variables = ['_all_channels', '_mapped_channels', '_estimator_type']
+    state_variables = ['_all_channels', '_mapped_channels', '_estimator_type',
+                       'output_mask_']
 
     def __init__(self, n_channels, pipe_processes=1):
         self._params_to_attributes(Layer.__init__, locals())
@@ -203,37 +203,30 @@ class Layer(Cloneable, Saveable):
                     raise ValueError('All predictors in a layer must have the \
                                      same type (e.g. classifier or regressor)')
 
-    def get_pipe(self, index, unwrap=True):
-        pipe = self.pipe_list[index][0]
-        return transform_wrappers.unwrap_predictor(pipe) if unwrap else pipe
+    def get_pipe(self, index):
+        return self.pipe_list[index][0]
 
-    def get_model(self, index, unwrap=True):
-        model = self.model_list[index][0]
-        return transform_wrappers.unwrap_model(model) if unwrap else model
+    def get_model(self, index):
+        return self.model_list[index][0]
 
-    def get_pipe_from_channel(self, channel_index, unwrap=True):
+    def get_pipe_from_channel(self, channel_index):
         for pipe, slice_, indices in self.pipe_list:
             if type(slice_) == int and slice_ == channel_index:
-                return (transform_wrappers.unwrap_predictor(pipe) if unwrap
-                        else pipe)
+                return pipe
             elif channel_index in indices:
-                return (transform_wrappers.unwrap_predictor(pipe) if unwrap
-                        else pipe)
+                return pipe
         return None
 
-    def get_model_from_channel(self, channel_index, unwrap=True):
+    def get_model_from_channel(self, channel_index):
         for model, slice_, indices in self.model_list:
             if type(slice_) == int and slice_ == channel_index:
-                return (transform_wrappers.unwrap_model(model) if unwrap
-                        else model)
+                return model
             elif channel_index in indices:
-                return (transform_wrappers.unwrap_model(model) if unwrap
-                        else model)
+                return model
         return None
 
     @staticmethod
-    def _fit_transform_job(pipe, Xs, y, fit_params, slice_, channel_indices,
-                           transform_method_name, internal_cv, cv_processes):
+    def _fit_transform_job(pipe, Xs, y, fit_params, slice_, channel_indices):
 
         input_ = Xs[slice_] if utils.is_multichannel(pipe) else Xs[slice_][0]
         model = utils.get_clone(pipe)
@@ -249,7 +242,6 @@ class Layer(Cloneable, Saveable):
                     Xs_t = [model.fit_transform(input_, **fit_params)]
                 else:
                     Xs_t = [model.fit_transform(input_, y, **fit_params)]
-
         elif hasattr(model, 'fit') and hasattr(pipe, 'transform'):
             if y is not None:
                 model.fit(input_, **fit_params)
@@ -259,40 +251,13 @@ class Layer(Cloneable, Saveable):
                 Xs_t = model.transform(input_)
             else:
                 Xs_t = [model.transform(input_)]
-
-        elif utils.is_predictor(model):
-
-            if utils.is_multichannel(model):
-                if type(internal_cv) == int and internal_cv < 2:
-                    model = transform_wrappers.Multichannel(
-                                                        model,
-                                                        transform_method_name)
-                else:
-                    model = transform_wrappers.MultichannelCV(
-                                                model, transform_method_name,
-                                                internal_cv, cv_processes)
-                if y is None:
-                    Xs_t = model.fit_transform(input_, **fit_params)
-                else:
-                    Xs_t = model.fit_transform(input_, y, **fit_params)
-            else:
-                if type(internal_cv) == int and internal_cv < 2:
-                    model = transform_wrappers.SingleChannel(
-                                                        model,
-                                                        transform_method_name)
-                else:
-                    model = transform_wrappers.SingleChannelCV(
-                                                model, transform_method_name,
-                                                internal_cv, cv_processes)
-                if y is None:
-                    Xs_t = [model.fit_transform(input_, **fit_params)]
-                else:
-                    Xs_t = [model.fit_transform(input_, y, **fit_params)]
+        else:
+            raise utils.FitError('pipe lacks required methods for \
+                                 fit_transform')
 
         return Xs_t, model, slice_, channel_indices
 
-    def fit_transform(self, Xs, y=None, transform_method_name=None,
-                      internal_cv=5, cv_processes=1, **fit_params):
+    def fit_transform(self, Xs, y=None, **fit_params):
         """
         Clone each pipe in this layer, call fit_transform() if available,
         or fall back on fit() then transform().  Pipes that have a prediction
@@ -308,29 +273,6 @@ class Layer(Cloneable, Saveable):
             List of feature matrix inputs.
         y: list/array of length n_samples, default=None
             Targets for supervised ML.
-
-        transform_method_name, internal_cv, and cv_processes override the
-        default parameters for adding transform functionality to the
-        predictors in this layer:
-
-        transform_method_name: str or None, default=None
-            Set the name of the prediction method used when transform or
-            fit_transform are called. If None, the method will be selected
-            automatically by the precedence defined in the transform_wrapper
-            module.
-        internal_cv: None, int, or callable, default=5
-            Set the internal cv training method for predictors.
-            If None or 5: Use 5 splits with the default split generator
-            if 1: Inactivate internal cv traning.
-            if int > 1: Use StratifiedKfold(n_splits=internal_cv) for
-                classifiers or Kfold(n_splits=internal_cv) for regressors.
-            If callable: Assumes scikit-learn interface like Kfold
-        cv_processes: 'max' or int, default=1
-            If 1: run all internal cv splits on a single CPU
-            If 'max': Run internal splits in parallel, using up
-                to all available CPUs.
-            If int > 1: Run internal cv splits in parallel, using up to
-                cv_processes number of CPUs.
         fit_params: dict, default={}
             Auxiliary parameters to be sent to the fit_transform or fit methods
             of the pipes. Pipe-specific parameters not supported yet, but
@@ -348,8 +290,7 @@ class Layer(Cloneable, Saveable):
         for i, (pipe, slice_, channel_indices) in enumerate(self.pipe_list):
             if has_live_channels(Xs, channel_indices):
                 args_list.append((pipe, Xs, y, fit_params, slice_,
-                                  channel_indices, transform_method_name,
-                                  internal_cv, cv_processes))
+                                  channel_indices))
                 live_pipes.append(i)
 
         n_jobs = len(args_list)
@@ -359,8 +300,7 @@ class Layer(Cloneable, Saveable):
                        else n_processes)
         if n_processes == 'max' or n_processes > 1:
             try:
-                shared_mem_objects = [Xs, y, fit_params, internal_cv,
-                                      cv_processes]
+                shared_mem_objects = [Xs, y, fit_params]
                 fit_results = parallel.starmap_jobs(
                                         Layer._fit_transform_job,
                                         args_list,
@@ -382,11 +322,12 @@ class Layer(Cloneable, Saveable):
         for pipe_Xs_t, _, slice_, _ in fit_results:
             Xs_t[slice_] = pipe_Xs_t
 
-        self.output_mask = [True if X_t is not None else False for X_t in Xs_t]
+        self.output_mask_ = [True if X_t is not None else False
+                             for X_t in Xs_t]
 
         return Xs_t
 
-    def fit_last(self, Xs, y=None, transform_method_name=None, **fit_params):
+    def fit_last(self, Xs, y=None, **fit_params):
         """
         Method for fitting the last layer of a MultiChannelPipeline. Clones
         each pipe, fits them to the training data, and wraps all predictors
@@ -399,11 +340,6 @@ class Layer(Cloneable, Saveable):
             List of feature matrix inputs.
         y: list/array of length n_samples, default=None
             Targets for supervised ML.
-        transform_method_name: str or None, default=None
-            Set the name of the prediction method used when transform or
-            fit_transform are called. If None, the method will be selected
-            automatically by the precedence defined in the transform_wrapper
-            module.
         fit_params: dict, default={}
             Auxiliary parameters to be sent to the fit_transform or fit methods
             of the pipes. Pipe-specific parameters not supported yet, but
@@ -412,19 +348,12 @@ class Layer(Cloneable, Saveable):
         self.model_list = []
         prediction_method_names = []
         estimator_types = []
+        output_mask = [False for X in Xs]
         for pipe, slice_, channel_indices in self.pipe_list:
             if has_live_channels(Xs, channel_indices):
                 model = utils.get_clone(pipe)
                 input_ = (Xs[slice_] if utils.is_multichannel(model)
                           else Xs[slice_][0])
-                if hasattr(model, 'transform') is False:
-                    if utils.is_multichannel(model):
-                        model = transform_wrappers.Multichannel(
-                                                model, transform_method_name)
-                    else:
-                        model = transform_wrappers.SingleChannel(
-                                                model, transform_method_name)
-
                 if y is None:
                     model.fit(input_, **fit_params)
                 else:
@@ -433,10 +362,23 @@ class Layer(Cloneable, Saveable):
                 prediction_method_names.extend(
                                     utils.get_prediction_method_names(model))
                 estimator_type = utils.detect_predictor_type(model)
+
                 if estimator_type is not None:
                     estimator_types.append(estimator_type)
 
                 self.model_list.append((model, slice_, channel_indices))
+
+                if utils.is_predictor(model):
+                    output_mask[channel_indices[0]] = True
+                if utils.is_transformer(model):
+                    if utils.is_multichannel(model):
+                        outputs = [True if X_t is not None else False
+                                            for X_t in model.transform(input_)]
+                        output_mask[slice_] = outputs
+                    else:
+                        output = (True if model.transform(input_) is not None
+                                  else False)
+                        output_mask[slice_] = output
 
         prediction_method_names = set(prediction_method_names)
         # expose predictor interface
@@ -451,8 +393,8 @@ class Layer(Cloneable, Saveable):
         elif len(estimator_types) == 1:
             self._estimator_type = list(estimator_types)[0]
 
-        self.output_mask = [True if X_t is not None else False
-                            for X_t in self.transform(Xs)]
+        self.output_mask_ = output_mask
+        return self
 
     def transform(self, Xs):
         """
@@ -548,7 +490,7 @@ class MultichannelPipeline(Cloneable, Saveable):
     *Internal cross valdiation training*
 
     MultichannelPipeline provides context-sensitive internal cross validation
-    training to enable model stacking.  
+    training to enable model stacking.
     The parameters transform_method_name, internal_cv, and cv_processes are
     global internal cross validation parameters. These parameters only take
     effect when a predictor that lacks transform methods is present in a
@@ -576,27 +518,6 @@ class MultichannelPipeline(Cloneable, Saveable):
         reduced by concatenation and selection operations, but the channel
         depth remains constant internally with dead channels indicated by None
         values.
-    transform_method_name: str, default=None
-        Prediction method name to use when transform is called on a predictor
-        that lacks a transform method.  This occurs whenever a predictor is not
-        located in the last layer of the pipeline.  If None, pipecaster will
-        automatically assign a method using the precedence defined in the
-        transform_wrapper module.
-    internal_cv: int, scikit-learn cv splitter instance, or None, default=5
-        Set a global internal cross validation training method to be used for
-        internal predictors that lack a transformer interface (typicaally
-        all predictors except those located in the last layer of pipeline).
-        If 1: Internal cv training is inactivated.
-        If int > 1: StratifiedKFold(n_splits=internal_cv) for classifiers and
-            KFold(n_splits=internal_cv) for regressors.
-        If None: The default value of 5 is used.
-        If callable: Assumes scikit-learn interface like KFold.
-    cv_processes: None, int or 'max', default=1
-        If 1: Run all cv split computations in a single process.
-        If 'max': Run each cv split in a different process, using all available
-            CPUs
-        If int > 1: Run each cv split in a different process, using up to
-            cv_processes number of CPUs
 
     Notes
     -----
@@ -641,8 +562,7 @@ class MultichannelPipeline(Cloneable, Saveable):
 
     state_variables = ['classes_']
 
-    def __init__(self, n_channels=1, transform_method_name=None,
-                 internal_cv=None, cv_processes=None):
+    def __init__(self, n_channels=1):
         self._params_to_attributes(MultichannelPipeline.__init__, locals())
         self.layers = []
 
@@ -783,12 +703,9 @@ class MultichannelPipeline(Cloneable, Saveable):
                     self.classes_, y = np.unique(y, return_inverse=True)
 
         for layer in self.layers[:-1]:
-            Xs = layer.fit_transform(Xs, y, self.transform_method_name,
-                                     self.internal_cv, self.cv_processes,
-                                     **fit_params)
+            Xs = layer.fit_transform(Xs, y, **fit_params)
         # fit the last layer without transforming:
-        self.layers[-1].fit_last(Xs, y, self.transform_method_name,
-                                 **fit_params)
+        self.layers[-1].fit_last(Xs, y, **fit_params)
 
         # expose the prediction methods found in the last layer
         for method_name in utils.get_prediction_method_names(self.layers[-1]):
@@ -825,44 +742,9 @@ class MultichannelPipeline(Cloneable, Saveable):
             Auxiliary parameters to pass to the fit method of the predictor.
         """
         for layer in self.layers[:-1]:
-            Xs = layer.fit_transform(Xs, y, self.transform_method_name,
-                                     self.internal_cv, self.cv_processes,
-                                     **fit_params)
-        self.layers[-1].fit_last(Xs, y, self.transform_method_name,
-                                 **fit_params)
+            Xs = layer.fit_transform(Xs, y,  **fit_params)
+        self.layers[-1].fit_last(Xs, y, **fit_params)
         return self.layers[-1].transform(Xs)
-
-    def cv_fit_transform(self, Xs, y, internal_cv=5, **fit_params):
-        """
-        Generate pipeline outputs from the training data without allowing
-        individual predictors to generate outputs from their training data.
-        Use if pipeline outputs are to be used in meta-prediction external to
-        the pipeline.
-
-        Parameters
-        ----------
-        Xs: list of [ndarray.shape(n_samples, n_features) or None]
-            List of feature matrix inputs.
-        y: list/array of length n_samples, default=None
-            Targets for supervised ML.
-        internal_cv: None, int, or callable, default=5
-            Set the internal cv training method for predictors.
-            If 1: Internal cv training is inactivated.
-            If int > 1: StratifiedKFold(n_splits=internal_cv) for classifiers
-                and KFold(n_splits=internal_cv) for regressors.
-            If None: The default value of 5 is used.
-            If callable: Assumes scikit-learn interface like KFold.
-        fit_params: dict, defualt=None
-            Auxiliary parameters to pass to the fit method of the predictor.
-        """
-        fit_params['internal_cv'] = internal_cv
-        for layer in self.layers[:-1]:
-            Xs = layer.fit_transform(Xs, y, self.transform_method_name,
-                                     self.internal_cv,
-                                     self.cv_processes, **fit_params)
-        return self.layers[-1].fit_transform(Xs, y, self.transform_method_name,
-                                             self.internal_cv,
-                                             self.cv_processes, **fit_params)
 
     def predict_with_method(self, Xs, method_name):
         """
@@ -904,7 +786,7 @@ class MultichannelPipeline(Cloneable, Saveable):
         return (predictions if len(live_predictions) > 1
                 else live_predictions[0])
 
-    def get_pipe(self, layer_index, pipe_index, unwrap=True):
+    def get_pipe(self, layer_index, pipe_index):
         """
         Get a pipe (not fitted) from the pipeline using integer indexing. To
         view the index numbers, visualize the pipeline using get_dataframe(),
@@ -917,18 +799,14 @@ class MultichannelPipeline(Cloneable, Saveable):
             Index of the layer where the pipe is located.
         pipe_index: int
             Index of the pipe within the layer's list of pipes.
-        unwrap: bool
-            If True: Remove wrapper classes found in the transform_wrappers
-                module
-            If False: Do not remove wrapper classes
 
         Returns
         -------
         The pipe (unfitted) specified by the index arguments.
         """
-        return self.layers[layer_index].get_pipe(pipe_index, unwrap)
+        return self.layers[layer_index].get_pipe(pipe_index)
 
-    def get_model(self, layer_index, model_index, unwrap=True):
+    def get_model(self, layer_index, model_index):
         """
         Get a fitted model from the pipeline using integer indexing. To
         view the index numbers, visualize the pipeline using get_dataframe(),
@@ -941,18 +819,14 @@ class MultichannelPipeline(Cloneable, Saveable):
             Index of the layer where the pipe is located.
         model_index: int
             Index of the model within the layer's list of pipes.
-        unwrap: bool
-            If True: Remove wrapper classes found in the transform_wrappers
-                module
-            If False: Do not remove wrapper classes
 
         Returns
         -------
         The model (fitted pipe) specified by the index arguments.
         """
-        return self.layers[layer_index].get_model(model_index, unwrap)
+        return self.layers[layer_index].get_model(model_index)
 
-    def get_pipe_from_channel(self, layer_index, channel_index, unwrap=True):
+    def get_pipe_from_channel(self, layer_index, channel_index):
         """
         Get a pipe (not fitted) from the pipeline using integer indexing. To
         view the index numbers, visualize the pipeline using get_dataframe(),
@@ -965,19 +839,14 @@ class MultichannelPipeline(Cloneable, Saveable):
             Index of the layer where the pipe is located.
         channel_index: int
             Index of the pipe within the pipeline's list of channels.
-        unwrap: bool
-            If True: Remove wrapper classes found in the transform_wrappers
-                module
-            If False: Do not remove wrapper classes
 
         Returns
         -------
         The pipe (unfitted) specified by the index arguments.
         """
-        return self.layers[layer_index].get_pipe_from_channel(channel_index,
-                                                              unwrap)
+        return self.layers[layer_index].get_pipe_from_channel(channel_index)
 
-    def get_model_from_channel(self, layer_index, channel_index, unwrap=True):
+    def get_model_from_channel(self, layer_index, channel_index):
         """
         Get a fitted model from the pipeline using integer indexing. To
         view the index numbers, visualize the pipeline using get_dataframe(),
@@ -990,17 +859,12 @@ class MultichannelPipeline(Cloneable, Saveable):
             Index of the layer where the pipe is located.
         channel_index: int
             Index of the model within the pipeline's list of channels.
-        unwrap: bool
-            If True: Remove wrapper classes found in the transform_wrappers
-                module
-            If False: Do not remove wrapper classes
 
         Returns
         -------
         The model (fitted pipe) specified by the index arguments.
         """
-        return self.layers[layer_index].get_model_from_channel(channel_index,
-                                                               unwrap)
+        return self.layers[layer_index].get_model_from_channel(channel_index)
 
     def get_clone(self):
         """
@@ -1056,7 +920,7 @@ class MultichannelPipeline(Cloneable, Saveable):
                 descriptors[slice_] = [down_arrow for i in indices]
                 descriptors[indices[0]] = descriptor
             outputs = [right_arrow if flag is True else ' ' for flag in
-                       layer.output_mask]
+                       layer.output_mask_]
             return descriptors, outputs
 
         dataframe = pd.DataFrame({'channel': range(self.n_channels)})

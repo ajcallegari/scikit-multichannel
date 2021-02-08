@@ -18,8 +18,8 @@ from pipecaster.score_selection import RankScoreSelector
 import pipecaster.parallel as parallel
 
 __all__ = ['SoftVotingClassifier', 'HardVotingClassifier',
-           'AggregatingRegressor', 'SelectiveStack', 'GridSearchStack',
-           'MultichannelPredictor']
+           'AggregatingRegressor', 'EnsemblePredictor', 'GridSearchEnsemble',
+           'MultichannelPredictor', 'ChannelEnsemblePredictor']
 
 
 class SoftVotingClassifier(Cloneable, Saveable):
@@ -62,8 +62,8 @@ class SoftVotingClassifier(Cloneable, Saveable):
 
     def fit(self, X, y, **fit_params):
         if isinstance(y, np.ndarray) and len(y.shape) > 1 and y.shape[1] > 1:
-            raise NotImplementedError('Multilabel and multi-output \
-                                      meta-classification not supported')
+            raise NotImplementedError('Multilabel and multi-output '
+                                      'meta-classification not supported')
         self.classes_, y = np.unique(y, return_inverse=True)
         return self
 
@@ -136,8 +136,8 @@ class HardVotingClassifier(Cloneable, Saveable):
 
     def fit(self, X, y, **fit_params):
         if isinstance(y, np.ndarray) and len(y.shape) > 1 and y.shape[1] > 1:
-            raise NotImplementedError('Multilabel and multi-output \
-                                      meta-classification not supported')
+            raise NotImplementedError('Multilabel and multi-output '
+                                      'meta-classification not supported')
         self.classes_, y = np.unique(y, return_inverse=True)
         return self
 
@@ -235,11 +235,309 @@ class AggregatingRegressor(Cloneable, Saveable):
         return self.transform(X)
 
 
-class SelectiveStack(Cloneable, Saveable):
+class EnsemblePredictor(Cloneable, Saveable):
     """
-    An ensemble predictor stack that screens a list of base predictors and
-    makes an ensemble with the best performers.  Supports the scikit-learn
-    estimator/predictor interface.
+    Ensemble predictor with multiple models for a single input channel.
+
+    EnsemblePredictor makes inferences using a set of base predictors
+    and a meta-predictor that uses their inferences as input features.  The
+    meta-predictor may be a voting or aggregating method (e.g.
+    SoftVotingClassifier, AggregatingRegressor) or a scikit-learn conformant
+    predictor.  In the latter case, it is standard practice to use internal
+    cross validation training of the base classifiers to prevent them from
+    making inferences on training samples.  To enable internal cross validation
+    training, set the internal_cv constructor argument of EnsemblePredictor.
+
+    EnsemblePredictor also takes advantage of internal cross validation
+    to enable in-pipeling screening of base predictors during model
+    fitting. To enable model selection, provide a score_selector (e.g.
+    those found in the score_selection module) to the contructor.
+
+    Parameters
+    ----------
+    base_predictors : predictor instance or list of predictor instances,
+    default=None
+        Ensemble of scikit-learn conformant base predictors (either all
+        classifiers or all regressors).  One predictor is trained per input
+        channel.  If a single predictor, it will be broadcast across all
+        channels.  If a list of predictors, the list length must be the same
+        as the number of input channels.
+    meta_predictor : predictor instance, default=None
+        Scikit-learn conformant classifier or regresor that makes predictions
+        from the inference of the base predictors.
+    internal_cv : int, None, sklearn cross-validation generator, default=None
+        Method for estimating performance of base classifiers and ensuring that
+        they not generate predictions from their training samples during
+        training of a meta-predictor.
+        If int i: If classifier, StratifiedKfold(n_splits=i), if regressor
+            KFold(n_splits=i) for
+        If None: default value of 5
+        If not int or None: Will be treated as a scikit-learn conformant split
+            generator like KFold
+    scorer : callable or 'auto', default='auto'
+        Figure of merit score used for model selection.
+        If callable: should return a scalar figure of merit with signature:
+            score = scorer(y_true, y_pred) and .
+        If 'auto': balanced_accuracy_score for classifiers,
+            explained_variance_score for regressors
+    score_selector : callable, default=None
+        A callable with the pattern: selected_indices = callable(scores)
+        If None, all models will be retained in the ensemble.
+    disable_cv_train : bool, default=False
+        If True, internal cv splits will not be used to generate features for
+        the meta-predictor.  Instead, the whole training set will be used.
+    base_predict_methods : str or list, default='auto'
+        Set the base predictor methods to use. If 'auto', the precedence order
+        specified in the transform_wrappers module will be used.  If a single
+        string, the value will be broadcast over all channels.
+    base_processes : int or 'max', default=1
+        The number of parallel processes to run for base predictor fitting.
+        If 'max', all available CPUs will be used.
+    cv_processes : int or 'max', default=1
+        The number of parallel processes to run for internal cross validation.
+        If 'max', all available CPUs will be used.
+
+    Example
+    -------
+    ::
+
+        from sklearn.datasets import make_classification
+        from sklearn.preprocessing import StandardScaler
+        from sklearn.neural_network import MLPClassifier
+        from sklearn.linear_model import LogisticRegression
+        from sklearn.neighbors import KNeighborsClassifier
+        from sklearn.ensemble import GradientBoostingClassifier
+        from sklearn.ensemble import RandomForestClassifier
+        from sklearn.naive_bayes import GaussianNB
+        import pipecaster as pc
+
+        X, y = make_classification(n_classes=2, n_samples=500, n_features=100,
+                                   n_informative=5, class_sep=0.6)
+
+        predictors = [MLPClassifier(), LogisticRegression(),
+                      KNeighborsClassifier(),  GradientBoostingClassifier(),
+                      RandomForestClassifier(), GaussianNB()]
+
+        clf = pc.EnsemblePredictor(
+                         base_predictors=predictors,
+                         meta_predictor=pc.SoftVotingClassifier(),
+                         internal_cv=5, scorer='auto',
+                         score_selector=pc.RankScoreSelector(k=2),
+                         base_processes=pc.count_cpus())
+        pc.cross_val_score(clf, X, y)
+        # output: [0.7066838783706253, 0.7064687320711417, 0.6987951807228916]
+
+        clf.fit(X, y)
+        # Models selected by the EnsemblePredictor:
+        [p for i, p in enumerate(predictors) if i in clf.get_support()]
+        # output: [GradientBoostingClassifier(), RandomForestClassifier()]
+        """
+    state_variables = ['classes_', 'scores_', 'selected_indices_']
+
+    def __init__(self, base_predictors=None, meta_predictor=None,
+                 internal_cv=None, scorer='auto',
+                 score_selector=None,
+                 disable_cv_train=False,
+                 base_predict_methods='auto',
+                 base_processes=1, cv_processes=1):
+        self._params_to_attributes(EnsemblePredictor.__init__, locals())
+
+        if isinstance(base_predictors, (tuple, list, np.ndarray)):
+            estimator_types = [p._estimator_type for p in base_predictors]
+            if len(set(estimator_types)) != 1:
+                raise TypeError('base_predictors must be of uniform type '
+                                '(e.g. all classifiers or all regressors)')
+            self._estimator_type = estimator_types[0]
+        else:
+            self._estimator_type = base_predictors._estimator_type
+
+        if scorer == 'auto':
+            if utils.is_classifier(self):
+                self.scorer = balanced_accuracy_score
+            elif utils.is_regressor(self):
+                self.scorer = explained_variance_score
+            else:
+                raise AttributeError('predictor type required for automatic '
+                                     'assignment of scoring metric')
+        self._expose_predictor_interface(meta_predictor)
+        if internal_cv is None and score_selector is not None:
+            raise ValueError('Must choose an internal cv method when channel '
+                             'selection is activated')
+
+    def _expose_predictor_interface(self, meta_predictor):
+        for method_name in utils.recognized_pred_methods:
+            if hasattr(meta_predictor, method_name):
+                prediction_method = functools.partial(self.predict_with_method,
+                                                      method_name=method_name)
+                setattr(self, method_name, prediction_method)
+
+    @staticmethod
+    def _fit_job(predictor, X, y, internal_cv, base_predict_method,
+                 cv_processes, scorer, fit_params):
+        model = transform_wrappers.SingleChannel(predictor,
+                                                 base_predict_method)
+        model = utils.get_clone(model)
+        predictions = model.fit_transform(X, y, **fit_params)
+
+        cv_predictions, score = None, None
+        if internal_cv is not None:
+            model_cv = utils.get_clone(predictor)
+            model_cv = transform_wrappers.SingleChannelCV(
+                                                model_cv, base_predict_method,
+                                                internal_cv, cv_processes,
+                                                scorer)
+            cv_predictions = model_cv.fit_transform(X, y, **fit_params)
+            score = model_cv.score_
+
+        return model, predictions, cv_predictions, score
+
+    def fit(self, X, y=None, **fit_params):
+
+        if self._estimator_type == 'classifier' and y is not None:
+            self.classes_, y = np.unique(y, return_inverse=True)
+
+        if isinstance(self.base_predict_methods, (tuple, list, np.ndarray)):
+            if len(self.base_predict_methods) != len(self.base_predictors):
+                raise utils.FitError('Number of base predict methods did not '
+                                     'match number of base predictors.')
+            methods = self.base_predict_methods
+        else:
+            methods = [self.base_predict_methods for p in self.base_predictors]
+
+        args_list = [(p, X, y, self.internal_cv, m, self.cv_processes,
+                      self.scorer, fit_params)
+                     for p, m in zip(self.base_predictors, methods)]
+
+        n_jobs = len(args_list)
+        n_processes = 1 if self.base_processes is None else self.base_processes
+        n_processes = (n_jobs
+                       if (type(n_processes) == int and n_jobs < n_processes)
+                       else n_processes)
+        if n_processes == 'max' or n_processes > 1:
+            try:
+                shared_mem_objects = [X, y, self.cv_processes, self.scorer,
+                                      fit_params]
+                fit_results = parallel.starmap_jobs(
+                                EnsemblePredictor._fit_job, args_list,
+                                n_cpus=n_processes,
+                                shared_mem_objects=shared_mem_objects)
+            except Exception as e:
+                print('parallel processing request failed with message {}'
+                      .format(e))
+                print('defaulting to single processor')
+                n_processes = 1
+
+        if type(n_processes) == int and n_processes <= 1:
+            fit_results = [EnsemblePredictor._fit_job(*args)
+                           for args in args_list]
+
+        models, predictions, cv_predictions, scores = zip(*fit_results)
+
+        if scores is not None:
+            self.scores_ = scores
+
+        if self.score_selector is not None:
+            self.selected_indices_ = self.score_selector(scores)
+        else:
+            self.selected_indices_ = list(range(len(Xs)))
+
+        if self.internal_cv is not None and self.disable_cv_train is False:
+            predictions = cv_predictions
+
+        self.base_models = [m for i, m in enumerate(models)
+                            if i in self.selected_indices_]
+        predictions = [p for i, p in enumerate(predictions)
+                       if i in self.selected_indices_]
+
+        meta_X = np.concatenate(predictions, axis=1)
+        self.meta_model = utils.get_clone(self.meta_predictor)
+        self.meta_model.fit(meta_X, y, **fit_params)
+        if hasattr(self.meta_model, 'classes_'):
+            self.classes_ = self.meta_model.classes_
+
+        return self
+
+    def get_model_scores(self):
+        if hasattr(self, 'scores_'):
+            return self.scores_
+        else:
+            raise utils.FitError('Base model scores not found. They are only '
+                                 'available after call to fit().')
+
+    def get_support(self):
+        if hasattr(self, 'selected_indices_'):
+            return self.selected_indices_
+        else:
+            raise utils.FitError('Must call fit before getting selection '
+                                 'information')
+
+    def get_base_models(self):
+        if hasattr(self, 'base_models') is False:
+            raise FitError('No base models found. Call fit() or '
+                           'fit_transform() to create base models')
+        else:
+            return self.base_models
+
+    def predict_with_method(self, X, method_name):
+        """
+        Make channel ensemble predictions.
+
+        Parameters
+        ----------
+        X: ndarray.shape(n_samples, n_features)
+            Feature matrix.
+        method_name: str
+            Name of the meta-predictor prediction method to invoke.
+
+        Returns
+        -------
+        Ensemble predictions.
+        if method_name is 'predict': ndarray(n_samples,)
+        if method_name is 'predict_proba', 'decision_function', or
+            'predict_log_proba':
+            ndarray(n_sample, n_classes)
+        """
+        if (hasattr(self, 'base_models') is False or
+                hasattr(self, 'meta_model') is False):
+            raise utils.FitError('prediction attempted before model fitting')
+        predictions_list = [m.transform(X) for m in self.base_models]
+        meta_X = np.concatenate(predictions_list, axis=1)
+        prediction_method = getattr(self.meta_model, method_name)
+        predictions = prediction_method(meta_X)
+        if self._estimator_type == 'classifier' and method_name == 'predict':
+            predictions = self.classes_[predictions]
+        return predictions
+
+    def _more_tags(self):
+        return {'multichannel': False}
+
+    def get_clone(self):
+        clone = super().get_clone()
+        if hasattr(self, 'base_models'):
+            clone.base_models = [utils.get_clone(m) if m is not None else None
+                                 for m in self.base_models]
+        if hasattr(self, 'meta_model'):
+            clone.meta_model = utils.get_clone(self.meta_model)
+        return clone
+
+
+class EnsemblePredictorOld(Cloneable, Saveable):
+    """
+    Ensemble predictor and model selector.
+
+    EnsemblePredictor makes inferences using a set of base predictors and a
+    meta-predictor that uses the base predictor inferences as input features.
+    The meta-predictor may be a voting or aggregating method (e.g.
+    SoftVotingClassifier, AggregatingRegressor) or a scikit-learn conformant
+    predictor.  In the latter case, it is standard practice to use internal
+    cross validation training of the base classifiers to prevent them from
+    making inferences on their input samples.  To enable internal cross
+    validation training, set the internal_cv argument of the constructor.
+
+    EnsemblePredictor also takes advantage of internal cross validation to
+    enable in-pipeling screening of the base predictors during model fitting.
+    To enable model selection, provide a score_selector (e.g.
+    SelectKBestScores) to the contructor.
 
     Parameters
     ----------
@@ -283,17 +581,19 @@ class SelectiveStack(Cloneable, Saveable):
     from sklearn.neural_network import MLPClassifier
     from sklearn.linear_model import LogisticRegression
     from sklearn.neighbors import KNeighborsClassifier
-    from sklearn.ensemble import GradientBoostingClassifier, RandomForestClassifier
+    from sklearn.ensemble import GradientBoostingClassifier
+    from sklearn.ensemble import RandomForestClassifier
     from sklearn.naive_bayes import GaussianNB
     import pipecaster as pc
 
     X, y = make_classification(n_classes=2, n_samples=500, n_features=100,
                                n_informative=5, class_sep=0.6)
 
-    predictors = [MLPClassifier(), LogisticRegression(), KNeighborsClassifier(),
-                  GradientBoostingClassifier(), RandomForestClassifier(), GaussianNB()]
+    predictors = [MLPClassifier(), LogisticRegression(),
+                  KNeighborsClassifier(), GradientBoostingClassifier(),
+                  RandomForestClassifier(), GaussianNB()]
 
-    clf = pc.SelectiveStack(
+    clf = pc.EnsemblePredictor(
                      base_predictors=predictors,
                      meta_predictor=pc.SoftVotingClassifier(),
                      internal_cv=5, scorer='auto',
@@ -303,7 +603,7 @@ class SelectiveStack(Cloneable, Saveable):
     >>>[0.7358720596672403, 0.7239672977624785, 0.7409638554216867]
 
     clf.fit(X, y)
-    print('Models selected by the SelectiveStack:')
+    print('Models selected by the EnsemblePredictor:')
     [p for i, p in enumerate(predictors) if i in clf.get_support()]
     >>>[GradientBoostingClassifier(), RandomForestClassifier()]
     """
@@ -314,11 +614,11 @@ class SelectiveStack(Cloneable, Saveable):
                  score_selector=RankScoreSelector(k=3),
                  base_transform_method=None,
                  base_processes=1, cv_processes=1):
-        self._params_to_attributes(SelectiveStack.__init__, locals())
+        self._params_to_attributes(EnsemblePredictor.__init__, locals())
         estimator_types = [p._estimator_type for p in base_predictors]
         if len(set(estimator_types)) != 1:
-            raise TypeError('base_predictors must be of uniform type \
-                            (e.g. all classifiers or all regressors)')
+            raise TypeError('base_predictors must be of uniform type '
+                            '(e.g. all classifiers or all regressors)')
         self._estimator_type = estimator_types[0]
         if scorer == 'auto':
             if utils.is_classifier(self):
@@ -326,8 +626,8 @@ class SelectiveStack(Cloneable, Saveable):
             elif utils.is_regressor(self):
                 self.scorer = explained_variance_score
             else:
-                raise AttributeError('predictor type required for automatic \
-                                     assignment of scoring metric')
+                raise AttributeError('predictor type required for automatic '
+                                     'assignment of scoring metric')
         self._expose_predictor_interface(meta_predictor)
 
     def _expose_predictor_interface(self, meta_predictor):
@@ -369,7 +669,7 @@ class SelectiveStack(Cloneable, Saveable):
             try:
                 shared_mem_objects = [X, y, fit_params]
                 fit_results = parallel.starmap_jobs(
-                                SelectiveStack._fit_job, args_list,
+                                EnsemblePredictor._fit_job, args_list,
                                 n_cpus=n_processes,
                                 shared_mem_objects=shared_mem_objects)
             except Exception as e:
@@ -378,7 +678,7 @@ class SelectiveStack(Cloneable, Saveable):
                 print('defaulting to single processor')
                 n_processes = 1
         if type(n_processes) == int and n_processes <= 1:
-            fit_results = [SelectiveStack._fit_job(*args)
+            fit_results = [EnsemblePredictor._fit_job(*args)
                            for args in args_list]
 
         self.base_models, predictions_list = zip(*fit_results)
@@ -403,20 +703,20 @@ class SelectiveStack(Cloneable, Saveable):
         if hasattr(self, 'scores_'):
             return self.scores_
         else:
-            raise utils.FitError('Base model scores not found. They are only \
-                                 available after call to fit().')
+            raise utils.FitError('Base model scores not found. They are only '
+                                 'available after call to fit().')
 
     def get_support(self):
         if hasattr(self, 'selected_indices_'):
             return self.selected_indices_
         else:
-            raise utils.FitError('Must call fit before getting selection \
-                                 information')
+            raise utils.FitError('Must call fit before getting selection '
+                                 'information')
 
     def get_base_models(self, unwrap=True):
         if hasattr(self, 'base_models') is False:
-            raise FitError('No base models found. Call fit() or \
-                           fit_transform() to create base models')
+            raise FitError('No base models found. Call fit() or '
+                           'fit_transform() to create base models')
         else:
             return [transform_wrappers.unwrap_model(m)
                     for m in self.base_models]
@@ -462,7 +762,7 @@ class SelectiveStack(Cloneable, Saveable):
         return clone
 
 
-class GridSearchStack(SelectiveStack):
+class GridSearchEnsemble(EnsemblePredictor):
     """
     Ensemble predictor stack that screens base predictor parameters and
     makes an ensemble of base models with the best parameters.  Supports the
@@ -523,7 +823,7 @@ class GridSearchStack(SelectiveStack):
     }
 
     X, y_single = make_classification()
-    clf = pc.GridSearchStack(
+    clf = pc.GridSearchEnsemble(
                      param_dict=screen,
                      base_predictor_cls=GradientBoostingClassifier,
                      meta_predictor=pc.SoftVotingClassifier(),
@@ -545,7 +845,7 @@ class GridSearchStack(SelectiveStack):
                  score_selector=RankScoreSelector(k=3),
                  base_transform_method=None,
                  base_processes=1, cv_processes=1):
-        self._params_to_attributes(GridSearchStack.__init__, locals())
+        self._params_to_attributes(GridSearchEnsemble.__init__, locals())
 
     def fit(self, X, y=None, **fit_params):
         self.params_list_ = list(ParameterGrid(self.param_dict))
@@ -576,6 +876,7 @@ class GridSearchStack(SelectiveStack):
                            'parameters':params_list, 'score':scores})
         df.sort_values('score', ascending=False, inplace=True)
         return df.set_index('score')
+
 
 class MultichannelPredictor(Cloneable, Saveable):
     """
@@ -663,3 +964,295 @@ class MultichannelPredictor(Cloneable, Saveable):
 
     def get_descriptor(self, verbose=0, params=None):
         return utils.get_descriptor(self.predictor, verbose, params) + '_MC'
+
+
+class ChannelEnsemblePredictor(Cloneable, Saveable):
+    """
+    Ensemble predictor with one model per input channel.
+
+    ChannelEnsemblePredictor makes inferences using a set of base predictors
+    and a meta-predictor that uses their inferences as input features.  The
+    meta-predictor may be a voting or aggregating method (e.g.
+    SoftVotingClassifier, AggregatingRegressor) or a scikit-learn conformant
+    predictor.  In the latter case, it is standard practice to use internal
+    cross validation training of the base classifiers to prevent them from
+    making inferences on training samples.  To enable internal cross validation
+    training, set the internal_cv constructor argument of
+    ChannelEnsemblePredictor.
+
+    ChannelEnsemblePredictor also takes advantage of internal cross validation
+    to enable in-pipeling screening of base predictors during model
+    fitting. To enable model selection, provide a score_selector (e.g.
+    those found in the score_selection module) to the contructor.
+
+    Parameters
+    ----------
+    base_predictors : predictor instance or list of predictor instances,
+    default=None
+        Ensemble of scikit-learn conformant base predictors (either all
+        classifiers or all regressors).  One predictor is trained per input
+        channel.  If a single predictor, it will be broadcast across all
+        channels.  If a list of predictors, the list length must be the same
+        as the number of input channels.
+    meta_predictor : predictor instance, default=None
+        Scikit-learn conformant classifier or regresor that makes predictions
+        from the inference of the base predictors.
+    internal_cv : int, None, sklearn cross-validation generator, default=None
+        Method for estimating performance of base classifiers and ensuring that
+        they not generate predictions from their training samples during
+        training of a meta-predictor.
+        If int i: If classifier, StratifiedKfold(n_splits=i), if regressor
+            KFold(n_splits=i) for
+        If None: default value of 5
+        If not int or None: Will be treated as a scikit-learn conformant split
+            generator like KFold
+    scorer : callable or 'auto', default='auto'
+        Figure of merit score used for model selection.
+        If callable: should return a scalar figure of merit with signature:
+            score = scorer(y_true, y_pred) and .
+        If 'auto': balanced_accuracy_score for classifiers,
+            explained_variance_score for regressors
+    score_selector : callable, default=None
+        A callable with the pattern: selected_indices = callable(scores)
+        If None, all models will be retained in the ensemble.
+    disable_cv_train : bool, default=False
+        If True, internal cv splits will not be used to generate features for
+        the meta-predictor.  Instead, the whole training set will be used.
+    base_predict_methods : str or list, default='auto'
+        Set the base predictor methods to use. If 'auto', the precedence order
+        specified in the transform_wrappers module will be used.  If a single
+        string, the value will be broadcast over all channels.
+    base_processes : int or 'max', default=1
+        The number of parallel processes to run for base predictor fitting.
+        If 'max', all available CPUs will be used.
+    cv_processes : int or 'max', default=1
+        The number of parallel processes to run for internal cross validation.
+        If 'max', all available CPUs will be used.
+
+    Example
+    -------
+    ::
+
+        from sklearn.datasets import make_classification
+        from sklearn.preprocessing import StandardScaler
+        from sklearn.neighbors import KNeighborsClassifier
+        from sklearn.svm import SVC
+        import pipecaster as pc
+
+        Xs, y, X_types = pc.make_multi_input_classification(n_informative_Xs=3,
+                                                            n_random_Xs=7)
+
+        clf = pc.MultichannelPipeline(n_channels=10)
+        clf.add_layer(StandardScaler())
+        clf.add_layer(pc.ChannelEnsemblePredictor(
+                        KNeighborsClassifier(), SVC(),
+                        internal_cv=5,
+                        score_selector=pc.RankScoreSelector(3)),
+                      pipe_processes='max')
+
+        pc.cross_val_score(clf, Xs, y)
+        # output=> [0.794116, 0.8805, 0.8768]
+
+        import pandas as pd
+        clf.fit(Xs, y)
+        selected_indices = clf.get_model(1,0).get_support()
+        selection_mask = [True if i in selected_indices else False
+                          for i, X in enumerate(Xs)]
+        pd.DataFrame({'selections':selection_mask, 'input type':X_types})
+    """
+    state_variables = ['classes_', 'scores_', 'selected_indices_']
+
+    def __init__(self, base_predictors=None, meta_predictor=None,
+                 internal_cv=None, scorer='auto',
+                 score_selector=None,
+                 disable_cv_train=False,
+                 base_predict_methods='auto',
+                 base_processes=1, cv_processes=1):
+        self._params_to_attributes(ChannelEnsemblePredictor.__init__, locals())
+
+        if isinstance(base_predictors, (tuple, list, np.ndarray)):
+            estimator_types = [p._estimator_type for p in base_predictors]
+            if len(set(estimator_types)) != 1:
+                raise TypeError('base_predictors must be of uniform type '
+                                '(e.g. all classifiers or all regressors)')
+            self._estimator_type = estimator_types[0]
+        else:
+            self._estimator_type = base_predictors._estimator_type
+
+        if scorer == 'auto':
+            if utils.is_classifier(self):
+                self.scorer = balanced_accuracy_score
+            elif utils.is_regressor(self):
+                self.scorer = explained_variance_score
+            else:
+                raise AttributeError('predictor type required for automatic '
+                                     'assignment of scoring metric')
+        self._expose_predictor_interface(meta_predictor)
+        if internal_cv is None and score_selector is not None:
+            raise ValueError('Must choose an internal cv method when channel '
+                             'selection is activated')
+
+    def _expose_predictor_interface(self, meta_predictor):
+        for method_name in utils.recognized_pred_methods:
+            if hasattr(meta_predictor, method_name):
+                prediction_method = functools.partial(self.predict_with_method,
+                                                      method_name=method_name)
+                setattr(self, method_name, prediction_method)
+
+    @staticmethod
+    def _fit_job(predictor, X, y, internal_cv, base_predict_method,
+                 cv_processes, scorer, fit_params):
+        model = transform_wrappers.SingleChannel(predictor,
+                                                 base_predict_method)
+        model = utils.get_clone(model)
+        predictions = model.fit_transform(X, y, **fit_params)
+
+        cv_predictions, score = None, None
+        if internal_cv is not None:
+            model_cv = utils.get_clone(predictor)
+            model_cv = transform_wrappers.SingleChannelCV(
+                                                model_cv, base_predict_method,
+                                                internal_cv, cv_processes,
+                                                scorer)
+            cv_predictions = model_cv.fit_transform(X, y, **fit_params)
+            score = model_cv.score_
+
+        return model, predictions, cv_predictions, score
+
+    def fit(self, Xs, y=None, **fit_params):
+
+        if self._estimator_type == 'classifier' and y is not None:
+            self.classes_, y = np.unique(y, return_inverse=True)
+
+        if isinstance(self.base_predictors, (tuple, list, np.ndarray)):
+            if len(self.base_predictors) != len(Xs):
+                raise utils.FitError('Number of base predictor did not match '
+                                     'number of input channels')
+            predictors = self.base_predictors
+        else:
+            predictors = [self.base_predictors for X in Xs]
+
+        if isinstance(self.base_predict_methods, (tuple, list, np.ndarray)):
+            if len(self.base_predict_methods) != len(Xs):
+                raise utils.FitError('Number of base predict methods did not '
+                                     'match number of input channels')
+            methods = self.base_predict_methods
+        else:
+            methods = [self.base_predict_methods for X in Xs]
+
+        args_list = [(p, X, y, self.internal_cv, m, self.cv_processes,
+                      self.scorer, fit_params)
+                     for p, X, m in zip(predictors, Xs, methods)]
+
+        n_jobs = len(args_list)
+        n_processes = 1 if self.base_processes is None else self.base_processes
+        n_processes = (n_jobs
+                       if (type(n_processes) == int and n_jobs < n_processes)
+                       else n_processes)
+        if n_processes == 'max' or n_processes > 1:
+            try:
+                shared_mem_objects = [y, self.internal_cv, self.cv_processes,
+                                      self.scorer, fit_params]
+                fit_results = parallel.starmap_jobs(
+                                ChannelEnsemblePredictor._fit_job, args_list,
+                                n_cpus=n_processes,
+                                shared_mem_objects=shared_mem_objects)
+            except Exception as e:
+                print('parallel processing request failed with message {}'
+                      .format(e))
+                print('defaulting to single processor')
+                n_processes = 1
+
+        if type(n_processes) == int and n_processes <= 1:
+            fit_results = [ChannelEnsemblePredictor._fit_job(*args)
+                           for args in args_list]
+
+        models, predictions, cv_predictions, scores = zip(*fit_results)
+        self.base_models = models
+        if scores is not None:
+            self.scores_ = scores
+
+        if self.score_selector is not None:
+            self.selected_indices_ = self.score_selector(scores)
+        else:
+            self.selected_indices_ = list(range(len(Xs)))
+
+        if self.internal_cv is not None and self.disable_cv_train is False:
+            predictions = cv_predictions
+
+        self.base_models = [m if i in self.selected_indices_ else None
+                            for i, m in enumerate(self.base_models)]
+        predictions = [p for i, p in enumerate(predictions)
+                       if i in self.selected_indices_]
+
+        meta_X = np.concatenate(predictions, axis=1)
+        self.meta_model = utils.get_clone(self.meta_predictor)
+        self.meta_model.fit(meta_X, y, **fit_params)
+        if hasattr(self.meta_model, 'classes_'):
+            self.classes_ = self.meta_model.classes_
+
+        return self
+
+    def get_model_scores(self):
+        if hasattr(self, 'scores_'):
+            return self.scores_
+        else:
+            raise utils.FitError('Base model scores not found. They are only '
+                                 'available after call to fit().')
+
+    def get_support(self):
+        if hasattr(self, 'selected_indices_'):
+            return self.selected_indices_
+        else:
+            raise utils.FitError('Must call fit before getting selection '
+                                 'information')
+
+    def get_base_models(self):
+        if hasattr(self, 'base_models') is False:
+            raise FitError('No base models found. Call fit() or '
+                           'fit_transform() to create base models')
+        else:
+            return self.base_models
+
+    def predict_with_method(self, Xs, method_name):
+        """
+        Make channel ensemble predictions.
+
+        Parameters
+        ----------
+        Xs: list of (ndarray.shape(n_samples, n_features) or None)
+        method_name: str
+            Name of the meta-predictor prediction method to invoke.
+
+        Returns
+        -------
+        Ensemble predictions.
+        if method_name is 'predict': ndarray(n_samples,)
+        if method_name is 'predict_proba', 'decision_function', or
+            'predict_log_proba':
+            ndarray(n_sample, n_classes)
+        """
+        if (hasattr(self, 'base_models') is False or
+                hasattr(self, 'meta_model') is False):
+            raise utils.FitError('prediction attempted before model fitting')
+        predictions_list = [m.transform(X) for i, (m, X) in
+                            enumerate(zip(self.base_models, Xs))
+                            if i in self.selected_indices_]
+        meta_X = np.concatenate(predictions_list, axis=1)
+        prediction_method = getattr(self.meta_model, method_name)
+        predictions = prediction_method(meta_X)
+        if self._estimator_type == 'classifier' and method_name == 'predict':
+            predictions = self.classes_[predictions]
+        return predictions
+
+    def _more_tags(self):
+        return {'multichannel': False}
+
+    def get_clone(self):
+        clone = super().get_clone()
+        if hasattr(self, 'base_models'):
+            clone.base_models = [utils.get_clone(m) if m is not None else None
+                                 for m in self.base_models]
+        if hasattr(self, 'meta_model'):
+            clone.meta_model = utils.get_clone(self.meta_model)
+        return clone

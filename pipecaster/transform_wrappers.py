@@ -106,11 +106,10 @@ class SingleChannel(Cloneable, Saveable):
     ----------
     predictor: predictor instance, default=None
         The sklearn conformant predictor to wrap.
-    transform_method_name: string, default=none
-        Name of the prediction method to usef for generating outputs on call to
-        transform or fit_transform.
-        If None, the method is automatically chosen using the order specifiied
-        in transform_method_precedence.
+    transform_method_name : string, default='auto'
+        Name of the prediction method to used for generating outputs on call to
+        transform or fit_transform. If 'auto', the method is automatically
+        chosen using the order specified in transform_method_precedence.
 
     Notes
     -----
@@ -121,10 +120,10 @@ class SingleChannel(Cloneable, Saveable):
     """
     state_variables = ['classes_']
 
-    def __init__(self, predictor=None, transform_method_name=None):
+    def __init__(self, predictor=None, transform_method_name='auto'):
         self._params_to_attributes(SingleChannel.__init__, locals())
         utils.enforce_fit(predictor)
-        if transform_method_name is None:
+        if transform_method_name == 'auto':
             self.transform_method_name = get_transform_method_name(predictor)
             if self.transform_method_name is None:
                 raise NameError('predictor lacks a recognized method for \
@@ -218,10 +217,10 @@ class SingleChannelCV(SingleChannel):
     ---------
     predictor: scikit-learn conformant predictor instance
         The predictor to wrap.
-    transform_method: string, default=None
-        The name of the method to use to generate output when transform is
-        called on the predictor, which occurs when the predictor is not the
-        last layer in the pipeline.
+    transform_method_name: string, default='auto'
+        Name of the prediction method to used for generating outputs on call to
+        transform or fit_transform. If 'auto', the method is automatically
+        chosen using the order specified in transform_method_precedence.
     internal_cv: int, sklearn cross validation splitter, or None, default=5
         If 1: Internal cv training is inactivated.
         If >1: KFold is used for regressors and StratifiedKFold used for
@@ -253,7 +252,7 @@ class SingleChannelCV(SingleChannel):
     """
     state_variables = ['score_']
 
-    def __init__(self, predictor, transform_method_name=None, internal_cv=5,
+    def __init__(self, predictor, transform_method_name='auto', internal_cv=5,
                  cv_processes=1, scorer=None):
         self._inherit_state_variables(super())
         self._params_to_attributes(SingleChannelCV.__init__, locals())
@@ -307,11 +306,10 @@ class Multichannel(Cloneable, Saveable):
     ----------
     predictor: predictor instance, default=None
         The sklearn conformant predictor to wrap.
-    transform_method_name: string, default=none
-        Name of the prediction method to usef for generating outputs on call to
-        transform or fit_transform.
-        If None, the method is automatically chosen using the order specifiied
-        in transform_method_precedence.
+    transform_method_name : string, default='auto'
+        Name of the prediction method to used for generating outputs on call to
+        transform or fit_transform. If 'auto', the method is automatically
+        chosen using the order specified in transform_method_precedence.
 
     Notes
     -----
@@ -323,7 +321,7 @@ class Multichannel(Cloneable, Saveable):
     state_variables = ['classes_']
 
     def __init__(self, multichannel_predictor=None,
-                 transform_method_name=None):
+                 transform_method_name='auto'):
         self._params_to_attributes(Multichannel.__init__, locals())
         utils.enforce_fit(multichannel_predictor)
         utils.enforce_predict(multichannel_predictor)
@@ -331,7 +329,7 @@ class Multichannel(Cloneable, Saveable):
                                      multichannel_predictor)
         if self._estimator_type is None:
             raise AttributeError('could not detect predictor type')
-        if transform_method_name is None:
+        if transform_method_name == 'auto':
             self.transform_method_name = get_transform_method_name(
                                             multichannel_predictor)
             if self.transform_method_name is None:
@@ -393,10 +391,10 @@ class MultichannelCV(Multichannel):
     ---------
     predictor: scikit-learn conformant predictor instance
         The predictor to wrap.
-    transform_method: string, default=None
-        The name of the method to use to generate output when transform is
-        called on the predictor, which occurs when the predictor is not the
-        last layer in the pipeline.
+    transform_method_name : string, default='auto'
+        Name of the prediction method to used for generating outputs on call to
+        transform or fit_transform. If 'auto', the method is automatically
+        chosen using the order specified in transform_method_precedence.
     internal_cv: int, sklearn cross validation splitter, or None, default=5
         If 1: Internal cv training is inactivated.
         If >1: KFold is used for regressors and StratifiedKFold used for
@@ -428,7 +426,8 @@ class MultichannelCV(Multichannel):
     """
     state_variables = ['score_']
 
-    def __init__(self, multichannel_predictor=None, transform_method_name=None,
+    def __init__(self, multichannel_predictor=None,
+                 transform_method_name='auto',
                  internal_cv=5, cv_processes=1, scorer=None):
         internal_cv = 5 if internal_cv is None else internal_cv
         self._params_to_attributes(MultichannelCV.__init__, locals())

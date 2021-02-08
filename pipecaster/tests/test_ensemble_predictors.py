@@ -4,7 +4,7 @@ import random
 import warnings
 from scipy.stats import pearsonr
 
-from pipecaster.ensemble_learning import SelectiveStack
+from pipecaster.ensemble_learning import EnsemblePredictor
 
 from sklearn.datasets import make_classification, make_regression
 from sklearn.model_selection import KFold, StratifiedKFold
@@ -21,7 +21,7 @@ from pipecaster.score_selection import RankScoreSelector
 from pipecaster.multichannel_pipeline import MultichannelPipeline
 from pipecaster.cross_validation import cross_val_score
 
-class TestSelectiveStack(unittest.TestCase):
+class TestEnsemblePredictor(unittest.TestCase):
 
     def setUp(self):
         warnings.filterwarnings('ignore')
@@ -31,7 +31,7 @@ class TestSelectiveStack(unittest.TestCase):
 
     def test_discrimination_cls(self, verbose=0, seed=42):
         """
-        Determine if SelectiveStack can discriminate between dummy classifiers and LogisticRegression classifiers
+        Determine if EnsemblePredictor can discriminate between dummy classifiers and LogisticRegression classifiers
         """
         X, y = make_classification(n_samples=500, n_features=20, n_informative=15, class_sep=1, random_state=seed)
 
@@ -40,9 +40,9 @@ class TestSelectiveStack(unittest.TestCase):
         random.shuffle(base_classifiers)
         informative_mask = [True if type(c) == LogisticRegression else False for c in base_classifiers]
 
-        mclf = MultichannelPipeline(n_channels=1, internal_cv=None)
+        mclf = MultichannelPipeline(n_channels=1)
         mclf.add_layer(StandardScaler())
-        mclf.add_layer(SelectiveStack(base_classifiers, SVC(), score_selector=RankScoreSelector(k=5)))
+        mclf.add_layer(EnsemblePredictor(base_classifiers, SVC(), internal_cv=5, score_selector=RankScoreSelector(k=5)))
         mclf.fit([X], y)
         selected_indices = mclf.get_model(layer_index=1, model_index=0).get_support()
         selection_mask = [True if i in selected_indices else False for i in range(len(base_classifiers))]
@@ -51,11 +51,11 @@ class TestSelectiveStack(unittest.TestCase):
             print('\n\ncorrectly selected {}/5 LogigistRegression classifiers'.format(n_correct))
             print('incorrectly selected {}/5 DummyClassifiers\n\n'.format(5- n_correct))
         self.assertTrue(np.array_equal(selection_mask, informative_mask),
-                        'SelectiveStack failed to discriminate between dummy classifiers and LogisticRegression')
+                        'EnsemblePredictor failed to discriminate between dummy classifiers and LogisticRegression')
 
     def test_compare_to_StackingClassifier(self, verbose=0, seed=42):
         """
-        Determine if SelectiveStack with dummies correctly selects the real predictors and gives similar
+        Determine if EnsemblePredictor with dummies correctly selects the real predictors and gives similar
         performance to scikit-learn StackingClassifier trained without dummies.
         """
 
@@ -68,21 +68,21 @@ class TestSelectiveStack(unittest.TestCase):
         all_classifiers = classifiers + dummy_classifiers
         random.shuffle(all_classifiers)
 
-        mclf = MultichannelPipeline(n_channels=1, internal_cv=3)
+        mclf = MultichannelPipeline(n_channels=1)
         mclf.add_layer(StandardScaler())
-        mclf.add_layer(SelectiveStack(all_classifiers, SVC(random_state=seed), score_selector=RankScoreSelector(k=3)))
+        mclf.add_layer(EnsemblePredictor(all_classifiers, SVC(random_state=seed), internal_cv=5, score_selector=RankScoreSelector(k=3)))
         pc_score_all = np.mean(cross_val_score(mclf, [X], y, cv=5, n_processes=5))
 
         mclf.fit([X], y)
         selected_classifiers = mclf.get_model(1,0).get_base_models()
         self.assertTrue(len(selected_classifiers) == 3,
-                        'SelectiveStack picked the {} classifiers instead of 3.'.format(len(selected_classifiers)))
+                        'EnsemblePredictor picked the {} classifiers instead of 3.'.format(len(selected_classifiers)))
         self.assertFalse(DummyClassifier in [c.__class__ for c in selected_classifiers],
-                         'SelectiveStack chose a dummy classifier over a real one')
+                         'EnsemblePredictor chose a dummy classifier over a real one')
 
-        mclf = MultichannelPipeline(n_channels=1, internal_cv=3)
+        mclf = MultichannelPipeline(n_channels=1)
         mclf.add_layer(StandardScaler())
-        mclf.add_layer(SelectiveStack(classifiers, SVC(random_state=seed), score_selector=RankScoreSelector(k=3)))
+        mclf.add_layer(EnsemblePredictor(classifiers, SVC(random_state=seed), internal_cv=5, score_selector=RankScoreSelector(k=3)))
         pc_score_informative = np.mean(cross_val_score(mclf, [X], y, cv=5, n_processes=5))
 
         base_classifier_arg = [(str(i), c) for i, c in enumerate(classifiers)]
@@ -94,20 +94,20 @@ class TestSelectiveStack(unittest.TestCase):
             clf = StackingClassifier(base_classifier_arg, SVC(random_state=seed), cv=StratifiedKFold(n_splits=3))
             sk_score_all = np.mean(cross_val_score(clf, X, y, cv=5, n_processes=5))
             print('\nBalanced accuracy scores')
-            print('SelectiveStack informative predictors: {}'.format(pc_score_informative))
-            print('SelectiveStack all predictors: {}'.format(pc_score_all))
+            print('EnsemblePredictor informative predictors: {}'.format(pc_score_informative))
+            print('EnsemblePredictor all predictors: {}'.format(pc_score_all))
             print('StackingClassifier informative predictors: {}'.format(sk_score_informative))
             print('StackingClassifier all predictors: {}'.format(sk_score_all))
 
         self.assertTrue(np.round(pc_score_all, 2) == np.round(pc_score_informative, 2),
-                        'SelectiveStack accuracy is not same for all classifiers and informative classifiers.')
+                        'EnsemblePredictor accuracy is not same for all classifiers and informative classifiers.')
         tolerance_pct = 5
         self.assertTrue(pc_score_all >= sk_score_informative * (1 - tolerance_pct / 100.0),
-                        '''SelectiveStack with random inputs did not perform within accepted tolerance of StackingClassifier with no dummy classifiers.''')
+                        '''EnsemblePredictor with random inputs did not perform within accepted tolerance of StackingClassifier with no dummy classifiers.''')
 
     def test_discrimination_rgr(self, verbose=0, seed=42):
         """
-        Determine if SelectiveStack can discriminate between dummy regressors and LinearRegression classifiers
+        Determine if EnsemblePredictor can discriminate between dummy regressors and LinearRegression classifiers
         """
         X, y = make_regression(n_samples=500, n_features=20, n_informative=10, random_state=seed)
 
@@ -116,9 +116,9 @@ class TestSelectiveStack(unittest.TestCase):
         random.shuffle(base_regressors)
         informative_mask = [True if type(c) == LinearRegression else False for c in base_regressors]
 
-        mclf = MultichannelPipeline(n_channels=1, internal_cv=None)
+        mclf = MultichannelPipeline(n_channels=1)
         mclf.add_layer(StandardScaler())
-        mclf.add_layer(SelectiveStack(base_regressors, SVR(), score_selector=RankScoreSelector(k=5)))
+        mclf.add_layer(EnsemblePredictor(base_regressors, SVR(), internal_cv=5, score_selector=RankScoreSelector(k=5)))
         mclf.fit([X], y)
         selected_indices = mclf.get_model(layer_index=1, model_index=0).get_support()
         selection_mask = [True if i in selected_indices else False for i in range(len(base_regressors))]
@@ -127,11 +127,11 @@ class TestSelectiveStack(unittest.TestCase):
             print('\n\ncorrectly selected {}/5 LinearRegression regressors'.format(n_correct))
             print('incorrectly selected {}/5 DummyRegressors\n\n'.format(5- n_correct))
         self.assertTrue(np.array_equal(selection_mask, informative_mask),
-                        'SelectiveStack failed to discriminate between dummy regressors and LinearRegression')
+                        'EnsemblePredictor failed to discriminate between dummy regressors and LinearRegression')
 
     def test_compare_to_StackingRegressor(self, verbose=0, seed=42):
         """
-        Determine if SelectiveStack with dummies correctly selects the real predictors and gives similar
+        Determine if EnsemblePredictor with dummies correctly selects the real predictors and gives similar
         performance to scikit-learn StackingRegressor trained without dummies.
         """
         X, y = make_regression(n_samples=500, n_features=20, n_informative=10, random_state=seed)
@@ -143,21 +143,21 @@ class TestSelectiveStack(unittest.TestCase):
         all_regressors = regressors + dummy_regressors
         random.shuffle(all_regressors)
 
-        mclf = MultichannelPipeline(n_channels=1, internal_cv=3)
+        mclf = MultichannelPipeline(n_channels=1)
         mclf.add_layer(StandardScaler())
-        mclf.add_layer(SelectiveStack(all_regressors, SVR(), score_selector=RankScoreSelector(k=3)))
+        mclf.add_layer(EnsemblePredictor(all_regressors, SVR(), internal_cv=5, score_selector=RankScoreSelector(k=3)))
         pc_score_all = np.mean(cross_val_score(mclf, [X], y, cv=5, n_processes=5))
 
         mclf.fit([X], y)
         selected_regressors = mclf.get_model(1,0).get_base_models()
         self.assertTrue(len(selected_regressors) == 3,
-                        'SelectiveStack picked the {} regressors instead of 3.'.format(len(selected_regressors)))
+                        'EnsemblePredictor picked the {} regressors instead of 3.'.format(len(selected_regressors)))
         self.assertFalse(DummyRegressor in [c.__class__ for c in selected_regressors],
-                         'SelectiveStack chose a dummy regressors over a real one')
+                         'EnsemblePredictor chose a dummy regressors over a real one')
 
-        mclf = MultichannelPipeline(n_channels=1, internal_cv=3)
+        mclf = MultichannelPipeline(n_channels=1)
         mclf.add_layer(StandardScaler())
-        mclf.add_layer(SelectiveStack(regressors, SVR(), score_selector=RankScoreSelector(k=3)))
+        mclf.add_layer(EnsemblePredictor(regressors, SVR(), internal_cv=5, score_selector=RankScoreSelector(k=3)))
         pc_score_informative = np.mean(cross_val_score(mclf, [X], y, cv=5, n_processes=5))
 
         base_arg = [(str(i), c) for i, c in enumerate(regressors)]
@@ -169,16 +169,16 @@ class TestSelectiveStack(unittest.TestCase):
             clf = StackingRegressor(base_arg, SVR(), cv=KFold(n_splits=3))
             sk_score_all = np.mean(cross_val_score(clf, X, y, cv=5, n_processes=5))
             print('\nExplained variance scores')
-            print('SelectiveStack informative predictors: {}'.format(pc_score_informative))
-            print('SelectiveStack all predictors: {}'.format(pc_score_all))
+            print('EnsemblePredictor informative predictors: {}'.format(pc_score_informative))
+            print('EnsemblePredictor all predictors: {}'.format(pc_score_all))
             print('StackingRegressor informative predictors: {}'.format(sk_score_informative))
             print('StackingRegressor all predictors: {}'.format(sk_score_all))
 
         self.assertTrue(np.round(pc_score_all, 2) == np.round(pc_score_informative, 2),
-                        'SelectiveStack accuracy is not same for all regressors and informative regressors.')
+                        'EnsemblePredictor accuracy is not same for all regressors and informative regressors.')
         tolerance_pct = 5
         self.assertTrue(pc_score_all >= sk_score_informative * (1 - tolerance_pct / 100.0),
-                        '''SelectiveStack with dummy regressors did not perform within accepted tolerance of StackingClassifier with no dummy regressors.''')
+                        '''EnsemblePredictor with dummy regressors did not perform within accepted tolerance of StackingClassifier with no dummy regressors.''')
 
 if __name__ == '__main__':
     unittest.main()
