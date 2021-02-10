@@ -21,9 +21,22 @@ __all__ = ['AggregateFeatureScorer', 'CvPerformanceScorer']
 
 class AggregateFeatureScorer(Cloneable, Saveable):
     """
+    Channel scorer that aggregates feature scores.
+
     Callable class that computes features scores using a feature_scorer object
     then computes an aggregate matrix score from the set of feature scores
     using an aggregator object (e.g. np.mean, np.median, np.sum).
+
+    Parameters
+    ----------
+    feature_scorer : callable
+        Scorer that returns figure of merit scores for individual features with
+        the signature: scores = scorer(y_true, y_pred)
+    aggregator : callable
+        Callable that generates a scalar aggregate figure of merit score
+        from individual features scores (e.g. np.mean) with the signature:
+        score = aggregator(scores)
+
     """
     def __init__(self, feature_scorer=f_classif, aggregator=np.sum):
         self._params_to_attributes(AggregateFeatureScorer.__init__, locals())
@@ -52,36 +65,37 @@ class AggregateFeatureScorer(Cloneable, Saveable):
 
 class CvPerformanceScorer(Cloneable, Saveable):
     """
+    Channel scorer that uses a probe predictor and cross validation.
+
     Callable class that estimates the predictive value of a feature matrix
     using a machine learning probe and cross validaction.
 
     Parameters
     ----------
-    predictor_probe: Scikit-learn compliant classifier or regressor instance
-        Machine learning model, usually low complexity and high speed, used
-        to estimate the predictive value of a feature matrix in a
-        cross_val_score() function call.
-    cv: None, int, or callable, default=5
-        Set the cross validation method.
-        If 1: Internal cv training is inactivated
-        If int > 1: StratifiedKFold(n_splits=internal_cv) for classifiers and
-            KFold(n_splits=internal_cv) for regressors.
-        If None: The default value of 5 is used.
-        If callable: Assumes scikit-learn interface like KFold.
+    predictor_probe : predictor
+        Scikit-learn estimator/predictor, usually with low complexity and
+        high speed, used to estimate the predictive value of a feature matrix.
+    cv : None, int, or callable, default=5
+        - Set the cross validation method:
+        - If 1: Internal cv training is inactivated
+        - If int > 1: StratifiedKFold(n_splits=internal_cv) for classifiers and
+          KFold(n_splits=internal_cv) for regressors.
+        - If None: The default value of 5 is used.
+        - If callable: Assumes interface like scikit-learn KFold.
     scorer : callable or 'auto', default='auto'
-        Figure of merit score used for estimating the predictive value of a
-        feature matrix.
-        If a callable: The object should have the signature
-            'scorer(y_true, y_pred)' and return scalar figure of merit.
-        If 'auto': balanced_accuracy_score is selected for classifiers and
+        - Figure of merit score used for estimating the predictive value of a
+          feature matrix.
+        - If callable: Object that returns a scalar figure of merit with
+          the signature: score = scorer(y_true, y_pred).
+        - If 'auto': balanced_accuracy_score is used for classifiers and
             explained_variance_score for regressors.
-    cv_processes: int or 'max', default=1
-        Set the number of processes used during cross validation.
-        If 1: Run all split computations in a single process.
-        If 'max': Run each split in a different process, using all available
-            CPUs
-        If int > 1: Run each split in a different process, using up to
-            n_processes number of CPUs
+    cv_processes : int or 'max', default=1
+        - Set the number of processes used during cross validation:
+        - If 1: Run all split computations in a single process.
+        - If 'max': Run each split in a different process, using all available
+          CPUs.
+        - If int > 1: Run each split in a different process, using up to
+          cv_processes number of CPUs.
     """
     def __init__(self, predictor_probe, cv=5, scorer='auto', cv_processes=1):
         self._params_to_attributes(CvPerformanceScorer.__init__, locals())
@@ -97,8 +111,7 @@ class CvPerformanceScorer(Cloneable, Saveable):
 
     def __call__(self, X, y, **fit_params):
         """
-        Get figure of merit score using cross validation and a probe ML
-        algorithm.
+        Get figure of merit score.
 
         Parameters
         ----------
