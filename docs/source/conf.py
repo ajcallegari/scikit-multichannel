@@ -39,6 +39,7 @@ extensions = ['numpydoc',
 # Add any paths that contain templates here, relative to this directory.
 templates_path = ['_templates']
 
+# Tell autosummary to make rst stub files
 autosummary_generate = True  # Turn on sphinx.ext.autosummary
 
 # List of patterns, relative to source directory, that match files and
