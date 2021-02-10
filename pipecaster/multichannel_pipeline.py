@@ -19,14 +19,16 @@ def get_live_channels(Xs, channel_indices=None):
 
     Parameters
     ----------
-    Xs : list of [nd.array(n_samples, n_features) or None]
+    Xs : list
+        List of feature matrices (or None).
     channel_indices : int, list/array of ints, or None, default=None
-        If int or list/array of int: Indices of the matrices in Xs to query.
-        If None: Query all input matrices in Xs
+        - If int or list/array of int: Indices of the matrices in Xs to query.
+        - If None: Query all input matrices in Xs.
 
     Returns
     -------
-    List of indices into Xs where the value is not None.
+    list
+        List of indices into Xs where the value is not None.
     """
     if channel_indices is None:
         channel_indices = range(len(Xs))
@@ -48,12 +50,13 @@ def has_live_channels(Xs, channel_indices=None):
     ----------
     Xs : list of nd.array(n_samples, n_features)
     channel_indices : int, list/array of ints, or None, default=None
-        If int or list/array of int: Indices of the matrices in Xs to query.
-        If None: Query all input matrices in Xs
+        - If int or list/array of int : Indices of the matrices in Xs to query.
+        - If None : Query all input matrices in Xs
 
     Returns
     -------
-    True if a value other than None is found, otherwise False.
+    bool
+        True if a value other than None is found, otherwise False.
     """
     return True if len(get_live_channels(Xs, channel_indices)) > 0 else False
 
@@ -72,10 +75,11 @@ class Layer(Cloneable, Saveable):
     n_channels : int
         The number of input matrices accepted by the layer. Must be >=1.
     pipe_processes : 'max' or int, default=1
-        If 1: Run all fitting computations with a single process. If 'max': Run
-        fitting computations in parallel, using all available CPUs. If >1: Run
-        fitting computationsin parallel with up to pipe_processes number of
-        CPUs
+        - If 1 : Run all fitting computations with a single process.
+        - If 'max' : Run fitting computations in parallel, using all available
+          CPUs.
+        - If >1 : Run fitting computationsin parallel with up to pipe_processes
+          number of CPUs.
 
     Notes
     -----
@@ -352,8 +356,8 @@ class Layer(Cloneable, Saveable):
 
         Parameters
         ----------
-        Xs: list of {ndarray.shape(n_samples, n_features) or None}
-            List of feature matrix inputs.
+        Xs: list
+            List of feature matrix inputs (or None value placeholders).
         y: list/array of length n_samples, default=None
             Optional targets for supervised ML.
         fit_params: dict, default={}
@@ -421,8 +425,8 @@ class Layer(Cloneable, Saveable):
 
         Parameters
         ----------
-        Xs: list of [ndarray.shape(n_samples, n_features) or None]
-            List of feature matrix inputs.
+        Xs: list
+            List of feature matrix inputs (or None value placeholders).
 
         Returns
         -------
@@ -453,8 +457,7 @@ class Layer(Cloneable, Saveable):
         Parameters
         ----------
         Xs: list
-            List of feature matrix inputs {ndarray.shape(n_samples, n_features)
-            or None}.
+            List of feature matrix inputs (or None value placeholders).
         method_name: str
             Name of method to use for prediction.
 
@@ -492,7 +495,7 @@ class Layer(Cloneable, Saveable):
 
     def get_clone(self):
         """
-        Get a stateful clone.
+        Get a stateful clone of the Layer.
 
         Uses methods inherited from utils.Cloneable to copy parameters
         and state variables, and utils.get_clone() to copy pipes and models.
@@ -521,8 +524,8 @@ class MultichannelPipeline(Cloneable, Saveable):
 
     MultichannelPipeline instances will be displayed in graphical form if the
     instance name is on the last line of a Jupyter Notebook cell. This can be
-    useful to inspect the topology of complex pipelines to find the coordinates
-    (layer, channel) of a pipe of interest.
+    useful for inspecting the topology of complex pipelines or for finding the
+    coordinates (layer, channel) of a pipe of interest.
 
     **Under the hood**
 
@@ -532,9 +535,9 @@ class MultichannelPipeline(Cloneable, Saveable):
     estimator/predictors, and pipecaster's multichannel analogs of these
     components.  Layer objects also track which channels the pipes use for
     input and output.  During calls to pipeline.fit(), each pipe in the
-    internal layers is called on to fit_transform() the data.  Predictors can't
+    internal layers is used to fit and transform the data.  Predictors can't
     be directly included in internal layers as they lack a required transform()
-    method, but must first be wrapped with classes from the
+    or fit_transform() method, but must first be wrapped with classes from the
     :mod:`pipecaster.transform_wrappers` module as shown in the example below.
     These wrappers are useful for model stacking.
 
@@ -695,20 +698,22 @@ class MultichannelPipeline(Cloneable, Saveable):
         Parameters
         ----------
         pipe_mapping : Layer, pipe, or (int, pipe, int, pipe ...)
-            If Layer : add the Layer instance and return.  If a single
-            argument : the argument will be atomatically repeated to fill all
-            channels if it is a single channel pipe, or set to receive all
-            channels as inputs into a single pipe if it is a multichannel pipe.
-            If multiple arguments : read as a list of alternating int, pipes,
-            int, pipe...  The int sets how many continguous channels are mapped
-            to the pipe.  Single channel pipes are automatically repeated for
-            each input channel specified by the int argument, and multichannel
-            pipes are set to receive the number of inputs specified by the int.
-            Input channels are mapped sequentially in the order in which the
-            arguments are received.
+            - If Layer : add the Layer instance and return.
+            - If a single argument : the argument will be atomatically repeated
+              to fill all channels if it is a single channel pipe, or set to
+              receive all channels as inputs into a single pipe if it is a
+              multichannel pipe.
+            - If multiple arguments : read as a list of alternating int, pipes,
+              int, pipe...  The int sets how many continguous channels are
+              mapped to the pipe.  Single channel pipes are automatically
+              repeated for each input channel specified by the int argument,
+              and multichannel  pipes are set to receive the number of inputs
+              specified by the int. Input channels are mapped sequentially in
+              the order in which the arguments are received.
         pipe_processes : int or 'max', default=1
-            The number of parallel processes to run when the layer is fit on
-            training data.  If 'max', all available CPUs will be used.
+            - If int : The number of parallel processes to run on call to
+              fit_transform().
+            - If 'max' : Use all available CPUs for fit_transform().
 
         Returns
         -------
@@ -792,11 +797,16 @@ class MultichannelPipeline(Cloneable, Saveable):
         Parameters
         ----------
         pipe_processes : int, 'max', or iterable
-            If int : Every layer is set to use the same number of parallel
-            processes. If 'max' : Every layer is set to use up to the maximum
-            number of available CPUs. If iterable: The number of processes
-            is set for each layer according to the values in the list {int or
-            'max'}.
+            - If int : Every layer is set to use the same number of parallel
+              processes.
+            - If 'max' : Every layer is set to use up to the maximum
+              number of available CPUs.
+            - If iterable: The number of processes is set for each layer
+              according to the values in the list {int or 'max'}.
+
+        Returns
+        -------
+        self
         """
         if isinstance(pipe_processes, (tuple, list, np.array)):
             if len(pipe_processes) != len(self.layers):
@@ -823,7 +833,7 @@ class MultichannelPipeline(Cloneable, Saveable):
         predict, predict_proba, decision_function, or predict_log_proba) so
         that they can be called directly on the pipeline itself.
 
-        Calls to layer.fit_transform() in turn call the fit_transform() method
+        Calls to layer.fit_transform() in turn calls the fit_transform() method
         of each cloned pipe in the layer, falling back on fit() then
         transform() when a fit_transform() method is not available.
 
@@ -838,6 +848,10 @@ class MultichannelPipeline(Cloneable, Saveable):
             Optional targets for supervised ML.
         fit_params : dict, defualt=None
             Auxiliary parameters to pass to the fit method of the predictors.
+
+        Returns
+        -------
+        self
         """
         if hasattr(self.layers[-1], '_estimator_type'):
             self._estimator_type = self.layers[-1]._estimator_type
@@ -865,7 +879,7 @@ class MultichannelPipeline(Cloneable, Saveable):
         Parameters
         ----------
         Xs : list
-            List of input feature matrices (or None for dead channels).
+            List of input feature matrices (or None value placeholders).
 
         Returns
         -------
@@ -880,12 +894,12 @@ class MultichannelPipeline(Cloneable, Saveable):
 
     def fit_transform(self, Xs, y, **fit_params):
         """
-        Fit and transform the inputs.
+        Fit and transform inputs.
 
         Parameters
         ----------
         Xs: list
-            List of feature matrix inputs (or None values).
+            List of feature matrix inputs (or None value placeholders).
         y: list/array of length n_samples, default=None
             Optional targets for supervised ML.
         fit_params: dict, defualt=None
@@ -909,16 +923,16 @@ class MultichannelPipeline(Cloneable, Saveable):
 
         Users will not generally call this method directly because available
         preditors are exposed through reflection for scikit-learn compliant
-        prediction:
-            pipeline.predict()
-            pipeline.predict_proba()
-            pipeline.predict_log_proba()
-            pipeline.decision_function()
+        prediction methods:
+            - pipeline.predict()
+            - pipeline.predict_proba()
+            - pipeline.predict_log_proba()
+            - pipeline.decision_function()
 
         Parameters
         ----------
         Xs: list
-            List of feature matrix inputs (or None)
+            List of input feature matrices (or None value placeholders).
         method_name: str
             Name of method to use for prediction.
 
@@ -950,15 +964,16 @@ class MultichannelPipeline(Cloneable, Saveable):
 
         Parameters
         ----------
-        layer_index: int
+        layer_index : int
             Index of the layer where the pipe is located.
-        pipe_index: int
+        pipe_index : int
             Index of the pipe within the layer's list of pipes (order of
             addition).
 
         Returns
         -------
-        The pipe (unfitted) specified by the index arguments.
+        pipe
+            The pipe (unfitted) specified by the index arguments.
         """
         return self.layers[layer_index].get_pipe(pipe_index)
 
@@ -968,33 +983,34 @@ class MultichannelPipeline(Cloneable, Saveable):
 
         Parameters
         ----------
-        layer_index: int
+        layer_index : int
             Index of the layer where the model is located.
-        pipe_index: int
+        pipe_index : int
             Index of the model within the layer's list of pipes (order of
             addition).
 
         Returns
         -------
-        The model (fitted pipe) specified by the index arguments.
+        model
+            The model (fitted pipe) specified by the index arguments.
         """
         return self.layers[layer_index].get_model(model_index)
 
     def get_pipe_from_channel(self, layer_index, channel_index):
         """
-        Get the pipe that takes input from the specified channel.
+        Get pipe with input from the specified channel.
 
         Parameters
         ----------
-        layer_index: int
+        layer_index : int
             Index of the layer where the pipe is located.
-        channel_index: int
+        channel_index : int
             Index of channel in question.
 
         Returns
         -------
         pipe or None
-        The pipe (unfitted) specified by the index arguments or None
+            The pipe (unfitted) specified by the index arguments or None.
         """
         return self.layers[layer_index].get_pipe_from_channel(channel_index)
 
@@ -1011,13 +1027,14 @@ class MultichannelPipeline(Cloneable, Saveable):
 
         Returns
         -------
-        The pipe (fitted) specified by the index arguments.
+        pipe
+            The pipe (fitted) specified by the index arguments.
         """
         return self.layers[layer_index].get_model_from_channel(channel_index)
 
     def get_clone(self):
         """
-        Get a stateful clone.
+        Get a stateful clone of the MultichannelPipeline.
 
         Uses methods inherited from utils.Cloneable to copy parameters
         and state variables, and utils.get_clone() to copy pipes and models.
@@ -1033,17 +1050,18 @@ class MultichannelPipeline(Cloneable, Saveable):
         Parameters
         ----------
         verbose: int, default=0
-            Set the length of the pipe's text descriptors.
-            If 0: return a string with no parameters,
-                e.g.: "RandomForestClassifier"
-            If 1: return a string including parameters in params argument.
-                e.g. "RandomForestClassifier(n_estimators=50)"
-            If -1: return a condensed class name, e.g. "RanForCla",
-                (not yet implemented)
+            - Set the length of the pipe's text descriptors:
+            - If 0 : return a string with no parameters,
+              e.g.: "RandomForestClassifier"
+            - If 1 : return a string including parameters in params argument.
+              e.g. "RandomForestClassifier(n_estimators=50)"
+            - If -1 : return a condensed class name, e.g. "RanForCla",
+              (not yet implemented)
         show_fit: bool, default=True
-            If True: Show the fit version of the pipeline with channel outputs.
-                Dead channels and counterselected models will not appear.
-            If False: Show the original, unfit version of the pipeline.
+            - If True: Show the fit version of the pipeline with channel
+              outputs. Dead channels and counterselected models will not
+              appear.
+            - If False: Show the original, unfit version of the pipeline.
 
         Returns
         -------
@@ -1095,21 +1113,23 @@ class MultichannelPipeline(Cloneable, Saveable):
         Parameters
         ----------
         verbose: int, default=0
-            Set the length of the pipe's text descriptors.
-            If 0: return a string with no parameters,
-                e.g.: "RandomForestClassifier"
-            If 1: return a string including parameters in params argument.
-                e.g. "RandomForestClassifier(n_estimators=50)"
-            If -1: return a condensed class name, e.g. "RanForCla",
-                (not implemented)
+            - Set the length of the pipe's text descriptors:
+            - If 0 : return a string with no parameters,
+              e.g.: "RandomForestClassifier"
+            - If 1 : return a string including parameters in params argument.
+              e.g. "RandomForestClassifier(n_estimators=50)"
+            - If -1 : return a condensed class name, e.g. "RanForCla",
+              (not implemented)
         show_fit: bool, default=True
-            If True: Show the fit version of the pipeline with channel outputs.
-                Dead channels and counterselected models will not appear.
-            If False: Show the original, unfit version of the pipeline.
+            - If True: Show the fit version of the pipeline with channel
+              outputs.  Dead channels and counterselected models will not
+              appear.
+            - If False: Show the original, unfit version of the pipeline.
 
         Returns
         -------
-        An html visualization of the pipeline.
+        html
+            An html visualization of the pipeline.
         """
         df = self.get_dataframe(verbose, show_fit)
         styler = df.style.set_properties(
@@ -1150,9 +1170,9 @@ class ChannelConcatenator(Cloneable, Saveable):
 
         Parameters
         ----------
-        Xs: list of [ndarray.shape(n_samples, n_features) or None]
+        Xs : list of [ndarray.shape(n_samples, n_features) or None]
             List of feature matrix inputs.
-        y: list/array of length n_samples, default=None
+        y : list/array of length n_samples, default=None
             Targets for supervised ML.
         fit_params: dict, defualt=None
             Auxiliary parameters to pass to the fit method of the predictor.
@@ -1165,13 +1185,14 @@ class ChannelConcatenator(Cloneable, Saveable):
 
         Parameters
         ----------
-        Xs: list of [ndarray.shape(n_samples, n_features) or None]
-            List of feature matrix inputs.
+        Xs: list
+            List of input feature matrices (or None value placeholders).
 
         Returns
         -------
-        List of Xs with the concatenated matrix at index 0 and all other
-        channel values set to None.
+        list
+            List of values, one per channel,  with the concatenated matrix at
+            index 0 and all other channel values set to None.
         """
         live_Xs = [X for X in Xs if X is not None]
         Xs_t = [None for X in Xs]
@@ -1184,17 +1205,18 @@ class ChannelConcatenator(Cloneable, Saveable):
 
         Parameters
         ----------
-        Xs: list of [ndarray.shape(n_samples, n_features) or None]
-            List of feature matrix inputs.
-        y: list/array of length n_samples, default=None
-            Targets for supervised ML.
-        fit_params: dict, defualt=None
+        Xs : list
+            List of input feature matrices (or None value placeholders).
+        y : list/array of length n_samples, default=None
+            Optional targets for supervised ML.
+        fit_params : dict, defualt=None
             Auxiliary parameters to pass to the fit method of the predictor.
 
         Returns
         -------
-        List of Xs with the concatenated matrix at index 0 and all other
-        channel values set to None.
+        list
+            List of values, one per channel, with the concatenated matrix at
+            index 0 and all other channel values set to None.
         """
         self.fit(Xs, y, **fit_params)
         return self.transform(Xs)

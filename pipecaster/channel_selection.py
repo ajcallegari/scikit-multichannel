@@ -51,20 +51,22 @@ class ChannelSelector(Cloneable, Saveable):
 
     Example
     -------
-    import numpy as np
-    import pipecaster as pc
-    from sklearn.ensemble import GradientBoostingClassifier
-    from sklearn.feature_selection import f_classif
+    ::
 
-    Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=10)
-    clf = pc.MultichannelPipeline(n_channels=10)
-    clf.add_layer(pc.ChannelSelector(
-                    channel_scorer=pc.AggregateFeatureScorer(f_classif,
-                                                             np.mean),
-                    score_selector=pc.RankScoreSelector(3)))
-    clf.add_layer(pc.MultichannelPredictor(GradientBoostingClassifier()))
-    pc.cross_val_score(clf, Xs, y)
-    >>> [0.9705882352941176, 0.9117647058823529, 0.9411764705882353]
+        import numpy as np
+        import pipecaster as pc
+        from sklearn.ensemble import GradientBoostingClassifier
+        from sklearn.feature_selection import f_classif
+
+        Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=10)
+        clf = pc.MultichannelPipeline(n_channels=10)
+        clf.add_layer(pc.ChannelSelector(
+                        channel_scorer=pc.AggregateFeatureScorer(f_classif,
+                                                                 np.mean),
+                        score_selector=pc.RankScoreSelector(3)))
+        clf.add_layer(pc.MultichannelPredictor(GradientBoostingClassifier()))
+        pc.cross_val_score(clf, Xs, y)
+        >>> [0.9705882352941176, 0.9117647058823529, 0.9411764705882353]
     """
     state_variables = ['selected_indices_', 'channel_scores_']
 
