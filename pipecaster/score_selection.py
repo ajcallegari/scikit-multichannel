@@ -1,7 +1,7 @@
 """
-Select items from a list based on scalar figure of merit scores.
+Selectors that choose items from a list based on figure of merit scores.
 
-Use for feature selection and channel selection.
+(Use for feature selection and channel selection).
 
 Signature:
     selection_indices = score_selector(scores)

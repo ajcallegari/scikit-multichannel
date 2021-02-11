@@ -275,11 +275,11 @@ class EnsemblePredictor(Cloneable, Saveable):
         If not int or None: Will be treated as a scikit-learn conformant split
             generator like KFold
     scorer : callable or 'auto', default='auto'
-        Figure of merit score used for model selection.
-        If callable: should return a scalar figure of merit with signature:
-            score = scorer(y_true, y_pred) and .
-        If 'auto': balanced_accuracy_score for classifiers,
-            explained_variance_score for regressors
+        - Figure of merit score used for model selection:
+        - If callable: should return a scalar figure of merit with signature:
+          score = scorer(y_true, y_pred).
+        - If 'auto': balanced_accuracy_score for classifiers,
+          explained_variance_score for regressors.
     score_selector : callable, default=None
         A callable with the pattern: selected_indices = callable(scores)
         If None, all models will be retained in the ensemble.

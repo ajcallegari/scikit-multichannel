@@ -1,5 +1,5 @@
 """
-Compute a scalar figure of merit score for a feature matrix.
+Scorers that estimate the predictive value of a feature matrix.
 
 Signature:
     score = channel_scorer(X, y)
