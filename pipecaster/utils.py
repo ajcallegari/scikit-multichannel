@@ -14,7 +14,7 @@ import ray
 __all__ = ['is_classifier', 'is_regressor', 'is_predictor', 'is_transformer',
            'detect_predictor_type', 'is_multichannel',
            'get_clone', 'get_sklearn_clone', 'get_clones',
-           'save_pipe', 'load_pipe', 'get_prediction_method_names',
+           'save_pipe', 'load_pipe', 'get_predict_methods',
            'is_predictor', 'FitError', 'PredictError',
            'ParallelBackendError', 'get_descriptor', 'get_param_names',
            'get_param_clone', 'Cloneable', 'Saveable', 'encode_labels',
@@ -181,7 +181,7 @@ def is_multichannel(pipe):
     return first_param == 'Xs'
 
 
-def get_prediction_method_names(pipe):
+def get_predict_methods(pipe):
     """
     Return a list of the pipe's recongized prediction methods or None.
     """

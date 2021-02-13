@@ -12,7 +12,7 @@ from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
 from sklearn.ensemble import RandomForestRegressor
 
 from pipecaster.multichannel_pipeline import MultichannelPipeline
-from pipecaster.channel_selection import SelectKBestScores, SelectKBestProbes, SelectKBestModels
+from pipecaster.channel_selection import SelectKBestScores, SelectKBestProbes
 from pipecaster.testing_utils import make_multi_input_classification, make_multi_input_regression
 import pipecaster.parallel as parallel
 
@@ -165,39 +165,6 @@ class TestChannelSelectors(unittest.TestCase):
                                                                verbose=verbose, seed=seed, **sklearn_params)
         self.assertTrue(passed, 'KBestPerformers failed to detect all weak clasification input matrices')
 
-    def test_SelectKBestModels_weak_strong_cls_input_discrimination(self, verbose=0, seed=42):
-        k = 5
-        sklearn_params = {'n_classes':2,
-                  'n_samples':2000,
-                  'n_features':20,
-                  'n_informative':10,
-                  'n_redundant':0,
-                  'n_repeated':0,
-                  'class_sep':2.0}
-
-        channel_selector = SelectKBestModels(predictors=KNeighborsClassifier(n_neighbors=10, weights='distance'),
-                                             cv=3, scorer=accuracy_score, k=k, channel_processes=n_cpus, cv_processes=1)
-        passed = TestChannelSelectors._test_weak_strong_cls_input_discrimination(channel_selector, n_weak=k,
-                                                                           n_strong=k, weak_noise_sd=50,
-                                                                           verbose=verbose, seed=seed, **sklearn_params)
-        self.assertTrue(passed, 'SelectKBestModels failed to discriminate between weak & strong classification input matrices')
-
-    def test_SelectKBestModels_weak_cls_input_detection(self, verbose=0, seed=42):
-        k = 10
-        sklearn_params = {'n_classes':2,
-                  'n_samples':2000,
-                  'n_features':20,
-                  'n_informative':15,
-                  'n_redundant':0,
-                  'n_repeated':0,
-                  'class_sep':2.0}
-        channel_selector = SelectKBestModels(predictors=KNeighborsClassifier(n_neighbors=5, weights='distance'),
-                                             cv=3, scorer=accuracy_score, k=k, channel_processes=n_cpus, cv_processes=1)
-        passed = TestChannelSelectors._test_weak_cls_input_detection(channel_selector, n_weak = int(k/2),
-                                                               n_strong = k - int(k/2), weak_noise_sd = 1,
-                                                               verbose=verbose, seed=seed, **sklearn_params)
-        self.assertTrue(passed, 'SelectKBestModels failed to detect all weak clasification input matrices')
-
     ### TEST CHANNEL SELECTORS USING SYNTHETIC REGRESSION DATA ###
 
     @staticmethod
@@ -326,36 +293,6 @@ class TestChannelSelectors(unittest.TestCase):
                                                 n_strong=k - int(k/2), weak_noise_sd=0.2,
                                                 verbose=verbose, seed=seed, **rgr_params)
         self.assertTrue(passed, 'SelectKBestProbes failed to detect all week regression input matrices')
-
-    def test_SelectKBestModels_weak_strong_rgr_input_discrimination(self, verbose=0, seed=42):
-        k = 5
-        rgr_params = {'n_samples':2000,
-                      'n_features':10,
-                      'n_informative':5
-                      }
-
-        channel_selector = SelectKBestModels(predictors=KNeighborsRegressor(n_neighbors=300, weights='uniform'),
-                                             cv=5, scorer=explained_variance_score, k=k,
-                                             channel_processes=n_cpus, cv_processes=1)
-        passed = TestChannelSelectors._test_weak_strong_rgr_input_discrimination(channel_selector, n_weak=k,
-                                                                           n_strong=k, weak_noise_sd=10,
-                                                                           verbose=verbose, seed=seed, **rgr_params)
-        self.assertTrue(passed, 'SelectKBestModels failed to discriminate between weak & strong classification input matrices')
-
-    def test_SelectKBestModels_weak_rgr_input_detection(self, verbose=0, seed=42):
-        k = 10
-        rgr_params = {'n_samples':2000,
-                      'n_features':10,
-                      'n_informative':7
-                      }
-        from sklearn.linear_model import LinearRegression
-        channel_selector = SelectKBestModels(predictors=KNeighborsRegressor(n_neighbors=300, weights='uniform'),
-                                             cv=5, scorer=explained_variance_score, k=k,
-                                             channel_processes=n_cpus, cv_processes=1)
-        passed = TestChannelSelectors._test_weak_rgr_input_detection(channel_selector, n_weak=int(k/2),
-                                                               n_strong=k - int(k/2), weak_noise_sd=0.1,
-                                                               verbose=verbose, seed=seed, **rgr_params)
-        self.assertTrue(passed, 'SelectKBestModels failed to detect all weak regression input matrices')
 
 if __name__ == '__main__':
     unittest.main()

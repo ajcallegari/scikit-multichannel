@@ -12,8 +12,8 @@ from sklearn.datasets import make_classification
 from sklearn.metrics import balanced_accuracy_score
 
 from pipecaster.multichannel_pipeline import MultichannelPipeline
-from pipecaster.channel_selection import SelectKBestScores, SelectKBestModels
-from pipecaster.ensemble_learning import MultichannelPredictor
+from pipecaster.channel_selection import SelectKBestScores
+from pipecaster.ensemble_learning import ChannelEnsemble
 from pipecaster.cross_validation import cross_val_score
 import pipecaster.transform_wrappers as transform_wrappers
 
@@ -40,7 +40,7 @@ class TestArchitectures(unittest.TestCase):
                                            aggregator=np.mean, k=2))
         LR = transform_wrappers.SingleChannelCV(LogisticRegression())
         clf.add_layer(
-            5, SelectKBestModels(predictors=KNeighborsClassifier(), k=1),
+            5, ChannelEnsemble(predictors=KNeighborsClassifier(), k=1),
             1, LR)
         clf.add_layer(MultichannelPredictor(SVC()))
 

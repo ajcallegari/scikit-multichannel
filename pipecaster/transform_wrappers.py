@@ -128,18 +128,24 @@ class SingleChannel(Cloneable, Saveable):
             if self.transform_method_name is None:
                 raise NameError('predictor lacks a recognized method for \
                                 conversion to transformer')
-        self._expose_predictor_interface(predictor)
+        predict_methods = utils.get_predict_methods(predictor)
+        self._set_predictor_interface(predict_methods)
         self._estimator_type = utils.detect_predictor_type(predictor)
         if self._estimator_type is None:
             raise TypeError('could not detect predictor type for {}'
                             .format(predictor))
 
-    def _expose_predictor_interface(self, predictor):
+    def _set_predictor_interface(self, predict_method_names):
         for method_name in utils.recognized_pred_methods:
-            if hasattr(predictor, method_name):
+            is_available = method_name in predict_method_names
+            is_exposed = hasattr(self, method_name)
+
+            if is_available and is_exposed is False:
                 prediction_method = functools.partial(self.predict_with_method,
                                                       method_name=method_name)
                 setattr(self, method_name, prediction_method)
+            elif is_exposed and is_available is False:
+                delattr(self, method_name)
 
     def set_transform_method(self, method_name):
         self.transform_method_name = method_name
@@ -153,7 +159,8 @@ class SingleChannel(Cloneable, Saveable):
             self.model.fit(X, y, **fit_params)
         if self._estimator_type == 'classifier':
             self.classes_ = self.model.classes_
-
+        predict_methods = utils.get_predict_methods(self.model)
+        self._set_predictor_interface(predict_methods)
         return self
 
     def predict_with_method(self, X, method_name):
@@ -177,21 +184,16 @@ class SingleChannel(Cloneable, Saveable):
             raise utils.FitError('transform called before model fitting')
 
     def fit_transform(self, X, y=None, **fit_params):
-        if hasattr(self.predictor, 'fit_transform'):
-            self.model = utils.get_clone(self.predictor)
-            if y is None:
-                X_t = self.model.fit_transform(X, **fit_params)
-            else:
-                X_t = self.model.fit_transform(X, y, **fit_params)
-        else:
-            if y is None:
-                self.fit(X, **fit_params)
-            else:
-                self.fit(X, y, **fit_params)
-            transform_method = getattr(self.model, self.transform_method_name)
-            X_t = transform_method(X)
-            X_t = X_t.reshape(-1, 1) if len(X_t.shape) == 1 else X_t
-
+        self.fit(X, y, **fit_params)
+        transform_method = getattr(self.model, self.transform_method_name)
+        X_t = np.array(transform_method(X))
+        # convert output array to output matrix:
+        if len(X_t.shape) == 1:
+            X_t = X_t.reshape(-1, 1)
+        # drop the redundant prob output from binary classifiers:
+        elif (len(X_t.shape) == 2 and X_t.shape[1] == 2 and
+              utils.is_classifier(self.model)):
+            X_t = X_t[:,1].reshape(-1, 1)
         return X_t
 
     def _more_tags(self):
@@ -281,8 +283,13 @@ class SingleChannelCV(SingleChannel):
                     self.score_ = self.scorer(y, utils.classify_samples(X_t))
                 else:
                     self.score_ = self.scorer(y, X_t)
-        if (X_t is not None and len(X_t.shape) == 1):
+        # convert output array to output matrix:
+        if len(X_t.shape) == 1:
             X_t = X_t.reshape(-1, 1)
+        # drop the redundant prob output from binary classifiers:
+        elif (len(X_t.shape) == 2 and X_t.shape[1] == 2 and
+              utils.is_classifier(self.model)):
+            X_t = X_t[:,1].reshape(-1, 1)
 
         return X_t
 
@@ -335,14 +342,20 @@ class Multichannel(Cloneable, Saveable):
             if self.transform_method_name is None:
                 raise TypeError('missing recognized method for transforming \
                                 with a predictor')
-        self._expose_predictor_interface(multichannel_predictor)
+        predict_methods = utils.get_predict_methods(multichannel_predictor)
+        self._set_predictor_interface(predict_methods)
 
-    def _expose_predictor_interface(self, multichannel_predictor):
+    def _set_predictor_interface(self, predict_method_names):
         for method_name in utils.recognized_pred_methods:
-            if hasattr(multichannel_predictor, method_name):
+            is_available = method_name in predict_method_names
+            is_exposed = hasattr(self, method_name)
+
+            if is_available and is_exposed is False:
                 prediction_method = functools.partial(self.predict_with_method,
                                                       method_name=method_name)
                 setattr(self, method_name, prediction_method)
+            elif is_exposed and is_available is False:
+                delattr(self, method_name)
 
     def fit(self, Xs, y=None, **fit_params):
         self.model = utils.get_clone(self.multichannel_predictor)
@@ -352,7 +365,8 @@ class Multichannel(Cloneable, Saveable):
             if utils.is_classifier(self.model):
                 self.classes_, y = np.unique(y, return_inverse=True)
             self.model.fit(Xs, y, **fit_params)
-
+        predict_methods = utils.get_predict_methods(self.model)
+        self._set_predictor_interface(predict_methods)
         return self
 
     def predict_with_method(self, Xs, method_name):
@@ -365,12 +379,17 @@ class Multichannel(Cloneable, Saveable):
         if hasattr(self, 'model') is False:
             raise FitError('transform attempted before call to fit()')
         transform_method = getattr(self.model, self.transform_method_name)
-        predictions = transform_method(Xs)
-        Xs_t = [None for X in Xs]
+        predictions = np.array(transform_method(Xs))
+
+        # convert output array to output matrix:
         if len(predictions.shape) == 1:
-            Xs_t[0] = predictions[0].reshape(-1, 1)
-        else:
-            Xs_t[0] = predictions
+            predictions = predictions.reshape(-1, 1)
+        # drop the redundant prob output from binary classifiers:
+        elif (len(predictions.shape) == 2 and predictions.shape[1] == 2
+              and utils.is_classifier(self.model)):
+            predictions = predictions[:,1].reshape(-1, 1)
+
+        Xs_t = [predictions if i == 0 else None for i, X in enumerate(Xs)]
         return Xs_t
 
     def fit_transform(self, Xs, y=None, **fit_params):

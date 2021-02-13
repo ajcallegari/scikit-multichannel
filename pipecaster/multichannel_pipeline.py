@@ -383,7 +383,7 @@ class Layer(Cloneable, Saveable):
                     model.fit(input_, y, **fit_params)
 
                 prediction_method_names.extend(
-                                    utils.get_prediction_method_names(model))
+                                    utils.get_predict_methods(model))
                 estimator_type = utils.detect_predictor_type(model)
 
                 if estimator_type is not None:
@@ -454,6 +454,14 @@ class Layer(Cloneable, Saveable):
         """
         Predict with each pipe using methods that match a specified name.
 
+        Users will not generally call this method directly because available
+        preditors are exposed through reflection for scikit-learn compliant
+        prediction methods:
+            - pipeline.predict()
+            - pipeline.predict_proba()
+            - pipeline.predict_log_proba()
+            - pipeline.decision_function()
+
         Parameters
         ----------
         Xs: list
@@ -522,10 +530,12 @@ class MultichannelPipeline(Cloneable, Saveable):
 
     **Visual feedback**
 
-    MultichannelPipeline instances will be displayed in graphical form if the
-    instance name is on the last line of a Jupyter Notebook cell. This can be
-    useful for inspecting the topology of complex pipelines or for finding the
-    coordinates (layer, channel) of a pipe of interest.
+    In Jupyter Notebook interactive mode, pipelines are depicted graphically
+    when the instance name is on the last line of a cell.  In command line
+    interactive mode, my_pipeline.get_dataframe() can be used to visualize a
+    pipeline instance.  Visual outputs can be useful for inspecting the
+    topology of complex pipelines or for finding the coordinates
+    (layer, channel) of a pipeline component of interest.
 
     **Under the hood**
 
@@ -866,7 +876,7 @@ class MultichannelPipeline(Cloneable, Saveable):
         self.layers[-1].fit_last(Xs, y, **fit_params)
 
         # expose the prediction methods found in the last layer
-        for method_name in utils.get_prediction_method_names(self.layers[-1]):
+        for method_name in utils.get_predict_methods(self.layers[-1]):
             prediction_method = functools.partial(self.predict_with_method,
                                                   method_name=method_name)
             setattr(self, method_name, prediction_method)
@@ -1151,17 +1161,20 @@ class ChannelConcatenator(Cloneable, Saveable):
 
     Example
     -------
-    from sklearn.ensemble import GradientBoostingClassifier
-    import pipecaster as pc
+    ::
 
-    Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
-                                                  n_random_Xs=7)
-    clf = pc.MultichannelPipeline(n_channels=10)
-    clf.add_layer(GradientBoostingClassifier())
-    clf.add_layer(pc.ChannelConcatenator())
-    clf.add_layer(pc.SoftVotingClassifier())
-    pc.cross_val_score(clf, Xs, y, cv=3)
-    >>>[0.8235294117647058, 0.7849264705882353, 0.7886029411764706]
+        from sklearn.ensemble import GradientBoostingClassifier
+        import pipecaster as pc
+
+        Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
+                                                      n_random_Xs=7)
+        clf = pc.MultichannelPipeline(n_channels=10)
+        base_clf = pc.transform_wrappers.SingleChannel(GradientBoostingClassifier())
+        clf.add_layer(base_clf)
+        clf.add_layer(pc.ChannelConcatenator())
+        clf.add_layer(1, pc.SoftVotingClassifier())
+        pc.cross_val_score(clf, Xs, y, cv=3)
+        # output: [0.8235294117647058, 0.7849264705882353, 0.7886029411764706]
     """
 
     def fit(self, Xs, y=None, **fit_params):
@@ -1177,7 +1190,7 @@ class ChannelConcatenator(Cloneable, Saveable):
         fit_params: dict, defualt=None
             Auxiliary parameters to pass to the fit method of the predictor.
         """
-        pass
+        return self
 
     def transform(self, Xs):
         """
@@ -1218,5 +1231,4 @@ class ChannelConcatenator(Cloneable, Saveable):
             List of values, one per channel, with the concatenated matrix at
             index 0 and all other channel values set to None.
         """
-        self.fit(Xs, y, **fit_params)
         return self.transform(Xs)

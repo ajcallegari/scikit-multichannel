@@ -173,10 +173,9 @@ class SelectKBestScores(ChannelSelector):
     feature_scorer : callable, default=None
         Callable that returns a scalar figure of merit score for each feature
         with signature: scores = feature_scorer(X, y).
-    aggregator: callable, default=np.sum
-        Callable that computes a scalar feature matrix score from individual
-        features scores with the signature:
-        matrix_score = aggregator(features_scores).
+    aggregator : callable, default=np.sum
+        Function that converts feature scores into a single aggregate matrix
+        score with signature: matrix_score = aggregator(features_scores).
     k: int, default=1
         The number of channels to select.  Selected channels are those with
         the highest matrix_scores.
@@ -231,9 +230,8 @@ class SelectPercentBestScores(ChannelSelector):
         Callable that returns a scalar figure of merit score for each feature
         with signature: scores = feature_scorer(X, y).
     aggregator: callable, default=np.sum
-        Callable that computes a scalar feature matrix score from individual
-        features scores with the signature:
-        matrix_score = aggregator(features_scores).
+        Function that converts feature scores into a single aggregate matrix
+        score with signature: matrix_score = aggregator(features_scores).
     pct : float
         The percentage of channels to select.
     channel_processes : int or 'max', default=1
@@ -287,9 +285,8 @@ class SelectHighPassScores(ChannelSelector):
         Callable that returns a scalar figure of merit score for each feature
         with signature: scores = feature_scorer(X, y).
     aggregator : callable, default=np.sum
-        Callable that computes a scalar feature matrix score from individual
-        features scores with the signature:
-        matrix_score = aggregator(features_scores).
+        Function that converts feature scores into a single aggregate matrix
+        score with signature: matrix_score = aggregator(features_scores).
     cutoff : float, default=0.0
         Items with scores above this value are selected.
     n_min : int, default=1
@@ -352,9 +349,8 @@ class SelectVarianceHighPassScores(ChannelSelector):
         Callable that returns a scalar figure of merit score for each feature
         with signature: scores = feature_scorer(X, y).
     aggregator : callable, default=np.sum
-        Callable that computes a scalar feature matrix score from individual
-        features scores with the signature:
-        matrix_score = aggregator(features_scores).
+        Function that converts feature scores into a single aggregate matrix
+        score with signature: matrix_score = aggregator(features_scores).
     variance_cutoff : float, default=2.0
         The number of units of variance used to define the cutoff.
     get_variance : callable, default=np.nanstd
@@ -422,15 +418,17 @@ class SelectKBestProbes(ChannelSelector):
     """
     Select fixed number of channels based on ML performance.
 
-    Computes performance of a predictor probe for each input matrix using
-    cross validation and passes through a fixed number of the top-scoring
-    matrices.
+    This pipe component estimates the predictive value of each feature matrix
+    using cross validation of an ML probe.  Probe performance is calculated
+    using a metric specified by the scorer argument of __init__() and by taking
+    the mean score of the cross validation splits.  A fixed number of matrices
+    with the highest probe performances are passed through as outputs.
 
     Parameters
     ----------
     predictor_probe : predictor, default=None
         Predictor instance with the scikit-learn estimator & predictor
-        interfaces.  Used to estimate channel inforation content.
+        interfaces.  Used to estimate channel information content.
     cv : int, or callable, default=5
         - Set the cross validation method:
         - If int > 1: Use StratifiedKfold(n_splits=internal_cv) for
@@ -438,8 +436,8 @@ class SelectKBestProbes(ChannelSelector):
         - If None or 5: Use 5 splits with the default split generator.
         - If callable: Assumes interface like Kfold scikit-learn.
     scorer : callable or 'auto', default='auto'
-        - If callable: accuracy metric for measuring probe performance with the
-          signature: score = scorer(y_true, y_pred).
+        - If callable: probe performance metric with the signature:
+          score = scorer(y_true, y_pred).
         - If 'auto': explained_variance_score for regressor or
           balanced_accuracy_score for classifier.
     k : int, default=1
@@ -492,24 +490,27 @@ class SelectPercentBestProbes(ChannelSelector):
     """
     Select a fixed percentage of channels based on ML performance.
 
-    Computes performance of a predictor probe for each input matrix using
-    cross validation and passes through a specified percentage of the
-    top-scoring matrices.
+    This pipe component estimates the predictive value of each feature matrix
+    using cross validation of an ML probe.  Probe performance is calculated
+    using a metric specified by the scorer argument of __init__() and by taking
+    the mean score of the cross validation splits.  A specified percentage of
+    the matrices with the highest probe performances are passed through as
+    outputs.
 
     Parameters
     ----------
     predictor_probe : predictor, default=None
         Predictor instance with the scikit-learn estimator & predictor
-        interfaces.  Used to estimate channel inforation content.
+        interfaces.  Used to estimate channel information content.
     cv : int, or callable, default=5
-        - Set the cross validation method:
+        - Set the cross validation method.
         - If int > 1: Use StratifiedKfold(n_splits=internal_cv) for
           classifiers or Kfold(n_splits=internal_cv) for regressors.
         - If None or 5: Use 5 splits with the default split generator.
         - If callable: Assumes interface like Kfold scikit-learn.
     scorer : callable or 'auto', default='auto'
-        - If callable: accuracy metric for measuring probe performance with the
-          signature: score = scorer(y_true, y_pred).
+        - If callable: probe performance metric with the signature:
+          score = scorer(y_true, y_pred).
         - If 'auto': explained_variance_score for regressor or
           balanced_accuracy_score for classifier.
     pct: float
@@ -562,24 +563,27 @@ class SelectHighPassProbes(ChannelSelector):
     """
     Select channels based on ML performance and an absolute cutoff.
 
-    Computes performance of a predictor probe for each input matrix using
-    cross validation and passes through matrices with scores that exceed a
-    specified performance value.
+    This pipe component estimates the predictive value of each feature matrix
+    using cross validation of an ML probe.  Probe performance is calculated
+    using a metric specified by the scorer argument of __init__() and by taking
+    the mean score of the cross validation splits.  Matrices with probe
+    performance scores that exceed a specified cutoff are passed through as
+    outputs.
 
     Parameters
     ----------
     predictor_probe : predictor, default=None
         Predictor instance with the scikit-learn estimator & predictor
-        interfaces.  Used to estimate channel inforation content.
+        interfaces.  Used to estimate channel information content.
     cv : int, or callable, default=5
-        - Set the cross validation method:
+        - Set the cross validation method.
         - If int > 1: Use StratifiedKfold(n_splits=internal_cv) for
           classifiers or Kfold(n_splits=internal_cv) for regressors.
         - If None or 5: Use 5 splits with the default split generator.
         - If callable: Assumes interface like Kfold scikit-learn.
     scorer : callable or 'auto', default='auto'
-        - If callable: accuracy metric for measuring probe performance with the
-          signature: score = scorer(y_true, y_pred).
+        - If callable: probe performance metric with the signature:
+          score = scorer(y_true, y_pred).
         - If 'auto': explained_variance_score for regressor or
           balanced_accuracy_score for classifier.
     cutoff: float, default=0.0
@@ -587,7 +591,7 @@ class SelectHighPassProbes(ChannelSelector):
     n_min: int, default=1
         Minimum number of channels to select.  Takes precedence over cutoff.
     channel_processes : int or 'max', default=1
-        - Set the number of processes used during training:
+        - Set the number of processes used during training.
         - If 1: Run all channel computations in a single process.
         - If 'max': Run each channel in a different process, using all
           available CPUs.
@@ -635,10 +639,13 @@ class SelectVarianceHighPassProbes(ChannelSelector):
     """
     Select channels based on ML performance and a relative cutoff.
 
-    Computes performance of a predictor probe for each input matrix using
-    cross validation and passes through matrices with performance scores above
-    a cutoff value definied relative to a statistic describing score variance
-    and a statistic describing the baseline:
+    This pipe component estimates the predictive value of each feature matrix
+    using cross validation of an ML probe.  Probe performance is calculated
+    using a metric specified by the scorer argument of __init__() and by taking
+    the mean score of the cross validation splits.  Matrices are passed through
+    as outputs if their probe performances exceed a cutoff value definied
+    relative to a statistic describing score variance and a statistic
+    describing the baseline:
 
     *cutoff = baseline + variance_cutoff * variance*
 
@@ -646,17 +653,17 @@ class SelectVarianceHighPassProbes(ChannelSelector):
     ----------
     predictor_probe : predictor, default=None
         Predictor instance with the scikit-learn estimator & predictor
-        interfaces.  Used to estimate channel inforation content.
+        interfaces.  Used to estimate channel information content.
     cv : int, or callable, default=5
-        - Set the cross validation method:
-        - If int > 1: Use StratifiedKfold(n_splits=internal_cv) for
+        - Set the cross validation method.
+        - If int > 1 : Use StratifiedKfold(n_splits=internal_cv) for
           classifiers or Kfold(n_splits=internal_cv) for regressors.
-        - If None or 5: Use 5 splits with the default split generator.
-        - If callable: Assumes interface like Kfold scikit-learn.
+        - If None or 5 : Use 5 splits with the default split generator.
+        - If callable : Assumes interface like Kfold scikit-learn.
     scorer : callable or 'auto', default='auto'
-        - If callable: accuracy metric for measuring probe performance with the
-          signature: score = scorer(y_true, y_pred).
-        - If 'auto': explained_variance_score for regressor or
+        - If callable : accuracy metric for measuring probe performance with
+          the signature : score = scorer(y_true, y_pred).
+        - If 'auto' : explained_variance_score for regressor or
           balanced_accuracy_score for classifier.
     variance_cutoff : float, default=2.0
         The number of units of performance variance used to define the cutoff.
@@ -672,8 +679,8 @@ class SelectVarianceHighPassProbes(ChannelSelector):
         The minimum number of items to select.  Takes precedence over other
         parameters.
     channel_processes : int or 'max', default=1
-        - Set the number of processes used during training:
-        - If 1: Run all channel computations in a single process.
+        - Set the number of processes used during training.
+        - If 1 : Run all channel computations in a single process.
         - If 'max': Run each channel in a different process, using all
           available CPUs.
         - If int > 1: Run each channel in a different process, using up to
