@@ -9,7 +9,7 @@ from scipy.stats import pearsonr
 from sklearn.datasets import make_classification, make_regression
 from sklearn.preprocessing import StandardScaler
 from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
-from sklearn.linear_model import LinearRegression
+from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.svm import SVC, SVR
 from sklearn.metrics import roc_auc_score, explained_variance_score
 
@@ -22,8 +22,9 @@ from pipecaster.ensemble_learning import SoftVotingClassifier
 from pipecaster.ensemble_learning import HardVotingClassifier
 from pipecaster.ensemble_learning import AggregatingRegressor
 from pipecaster.ensemble_learning import MultichannelPredictor
-from pipecaster.ensemble_learning import ChannelEnsemblePredictor
+from pipecaster.ensemble_learning import ChannelEnsemble
 from pipecaster.cross_validation import cross_val_score
+from pipecaster.score_selection import RankScoreSelector
 import pipecaster.transform_wrappers as transform_wrappers
 
 n_cpus = multiprocessing.cpu_count()
@@ -48,7 +49,7 @@ class TestMultichannelClassification(unittest.TestCase):
         mclf = MultichannelPipeline(n_channels=1)
         base_clf = transform_wrappers.SingleChannel(KNeighborsClassifier(
                                             n_neighbors=5, weights='uniform'))
-        mclf.add_layer(base_clf, pipe_processes=1)
+        mclf.add_layer(base_clf)
         mclf.add_layer(MultichannelPredictor(SoftVotingClassifier()))
         mclf.fit([X], y)
         mclf_predictions = mclf.predict([X])
@@ -59,8 +60,7 @@ class TestMultichannelClassification(unittest.TestCase):
         # implementation 2
         mclf = MultichannelPipeline(n_channels=1)
         base_clf = KNeighborsClassifier(n_neighbors=5, weights='uniform')
-        mclf.add_layer(ChannelEnsemblePredictor(base_clf,
-                                                   SoftVotingClassifier()))
+        mclf.add_layer(ChannelEnsemble(base_clf, SoftVotingClassifier()))
         mclf.fit([X], y)
         mclf_predictions = mclf.predict([X])
         self.assertTrue(np.array_equal(clf_predictions, mclf_predictions),
@@ -96,8 +96,7 @@ class TestMultichannelClassification(unittest.TestCase):
         # implementation 2
         mclf = MultichannelPipeline(n_channels=1)
         base_clf = KNeighborsClassifier(n_neighbors=5, weights='uniform')
-        mclf.add_layer(ChannelEnsemblePredictor(
-            base_clf, HardVotingClassifier()))
+        mclf.add_layer(ChannelEnsemble(base_clf, HardVotingClassifier()))
         mclf.fit([X], y)
         mclf_predictions = mclf.predict([X])
         self.assertTrue(np.array_equal(clf_predictions, mclf_predictions),
@@ -207,7 +206,7 @@ class TestMultichannelClassification(unittest.TestCase):
             mclf.add_layer(StandardScaler(), pipe_processes=n_cpus)
             base_clf = KNeighborsClassifier(n_neighbors=5, weights='uniform')
             mclf.add_layer(
-                ChannelEnsemblePredictor(
+                ChannelEnsemble(
                     base_clf, SoftVotingClassifier(), base_processes=n_cpus))
             split_accuracies = cross_val_score(mclf, Xs, y,
                                                scorer=roc_auc_score,
@@ -256,7 +255,8 @@ class TestMultichannelClassification(unittest.TestCase):
                         'threshold of 0.80 pearsonr'.format(linearity))
 
     def test_multi_matrices_svm_metaclassifier(self, seed=42, verbose=0):
-        """Test if KNN classifier->ChannelClassifier(SVC) in a pipecaster
+        """
+        Test if KNN classifier->ChannelClassifier(SVC) in a pipecaster
         pipeline gives monotonically increasing accuracy with increasing number
         of inputs, and test if accuracy is > 75%.
         """
@@ -330,7 +330,7 @@ class TestMultichannelClassification(unittest.TestCase):
             mclf.add_layer(StandardScaler(), pipe_processes='max')
             base_clf = KNeighborsClassifier(n_neighbors=5, weights='uniform')
             mclf.add_layer(
-                ChannelEnsemblePredictor(
+                ChannelEnsemble(
                     base_clf, SVC(), internal_cv=5, base_processes='max'))
             split_accuracies = cross_val_score(mclf, Xs, y,
                                                scorer=roc_auc_score, cv=3,
@@ -356,6 +356,36 @@ class TestMultichannelClassification(unittest.TestCase):
                         'SVC metaclassification linearity of {} below \
                         acceptable threshold of 0.75 pearsonr'
                         .format(linearity))
+
+    def test_multi_matrices_no_metaclassifier(self, verbose=0, seed=42):
+        """
+        Determine if ChannelEnsemble works without a meta-predictor.
+
+        Determine if it can pick informative input over random and
+        test its performance.
+        """
+
+        Xs, y, types = make_multi_input_classification(n_informative_Xs=1,
+                                n_weak_Xs=0, n_random_Xs=4, weak_noise_sd=None,
+                                seed = seed, n_samples=500, n_features=20,
+                                n_informative=10, class_sep=3)
+
+        mclf = MultichannelPipeline(n_channels=5)
+        mclf.add_layer(StandardScaler())
+        mclf.add_layer(ChannelEnsemble(LogisticRegression(), internal_cv=5,
+                                score_selector=RankScoreSelector(k=1)))
+        mclf.fit(Xs, y)
+
+        selection = types[mclf.get_model(1, 0).get_support()[0]]
+
+        self.assertTrue(selection == 'informative',
+                        'Ensemble failed to pick informative channel')
+
+        acc = np.mean(cross_val_score(mclf, Xs, y))
+        if verbose > 0:
+            print('cross val accuracy: {}'.format(acc))
+
+        self.assertTrue(acc > 0.90, 'Accuracy tolerance failure.')
 
 
 class TestMultiChannelRegression(unittest.TestCase):
@@ -388,7 +418,7 @@ class TestMultiChannelRegression(unittest.TestCase):
         # implementation 2
         mrgr = MultichannelPipeline(n_channels=1)
         base_rgr = KNeighborsRegressor(n_neighbors=5, weights='uniform')
-        mrgr.add_layer(ChannelEnsemblePredictor(
+        mrgr.add_layer(ChannelEnsemble(
             base_rgr, AggregatingRegressor(np.mean), base_processes='max'))
         mrgr.fit([X], y)
         mrgr_predictions = mrgr.predict([X])
@@ -506,7 +536,7 @@ class TestMultiChannelRegression(unittest.TestCase):
             mrgr = MultichannelPipeline(n_channels)
             mrgr.add_layer(StandardScaler(), pipe_processes=n_cpus)
             base_rgr = KNeighborsRegressor(n_neighbors=20, weights='distance')
-            mrgr.add_layer(ChannelEnsemblePredictor(
+            mrgr.add_layer(ChannelEnsemble(
                 base_rgr, AggregatingRegressor(np.mean), base_processes='max'))
             split_accuracies = cross_val_score(
                 mrgr, Xs, y, scorer=explained_variance_score,
@@ -517,7 +547,7 @@ class TestMultiChannelRegression(unittest.TestCase):
             mrgr = MultichannelPipeline(n_channels)
             mrgr.add_layer(StandardScaler(), pipe_processes=n_cpus)
             rgr = KNeighborsRegressor(n_neighbors=20, weights='distance')
-            mrgr.add_layer(ChannelEnsemblePredictor(
+            mrgr.add_layer(ChannelEnsemble(
                 base_rgr, AggregatingRegressor(np.median),
                 base_processes='max'))
             split_accuracies = cross_val_score(mrgr, Xs, y,
@@ -641,7 +671,7 @@ class TestMultiChannelRegression(unittest.TestCase):
             mrgr = MultichannelPipeline(n_channels)
             mrgr.add_layer(StandardScaler(), pipe_processes=n_cpus)
             base_rgr = LinearRegression()
-            mrgr.add_layer(ChannelEnsemblePredictor(
+            mrgr.add_layer(ChannelEnsemble(
                 base_rgr, SVR(), internal_cv=5, base_processes='max'))
             split_accuracies = cross_val_score(
                 mrgr, Xs, y, scorer=explained_variance_score,
@@ -754,7 +784,7 @@ class TestMultiChannelRegression(unittest.TestCase):
             mrgr = MultichannelPipeline(n_channels)
             mrgr.add_layer(StandardScaler(), pipe_processes=n_cpus)
             base_rgr = LinearRegression()
-            mrgr.add_layer(ChannelEnsemblePredictor(
+            mrgr.add_layer(ChannelEnsemble(
                 base_rgr, SVR(), internal_cv=5, base_processes='max'))
             split_accuracies = cross_val_score(mrgr, Xs, y,
                                                scorer=explained_variance_score,
@@ -866,7 +896,7 @@ class TestMultiChannelRegression(unittest.TestCase):
                            pipe_processes='max')
             base_rfrs = [LinearRegression() for i in range(2)]
             base_rfrs += [LinearRegression() for i in range(3)]
-            mrgr.add_layer(ChannelEnsemblePredictor(
+            mrgr.add_layer(ChannelEnsemble(
                 base_rfrs, SVR(), base_processes='max', internal_cv=5))
             split_accuracies = cross_val_score(
                 mrgr, Xs, y, scorer=explained_variance_score,
@@ -897,6 +927,36 @@ class TestMultiChannelRegression(unittest.TestCase):
         self.assertTrue(linearity > 0.0,
                         'SVR stacking linearity of {} below acceptable '
                         'threshold of 0.80 pearsonr'.format(linearity))
+
+    def test_multi_matrices_no_metapredictor(self, verbose=0, seed=42):
+        """
+        Determine if ChannelEnsemble works without a meta-predictor.
+
+        Determine if it can pick informative input over random and
+        test its performance.
+        """
+
+        Xs, y, types = make_multi_input_regression(n_informative_Xs=1,
+                                n_weak_Xs=0, n_random_Xs=4, weak_noise_sd=None,
+                                seed = seed, n_samples=500, n_features=20,
+                                n_informative=20)
+
+        mclf = MultichannelPipeline(n_channels=5)
+        mclf.add_layer(StandardScaler())
+        mclf.add_layer(ChannelEnsemble(LinearRegression(), internal_cv=5,
+                                       score_selector=RankScoreSelector(k=1)))
+        mclf.fit(Xs, y)
+
+        selected_type = types[mclf.get_model(1, 0).get_support()[0]]
+
+        self.assertTrue(selected_type == 'informative',
+                        'Ensemble failed to pick informative channel')
+
+        acc = np.mean(cross_val_score(mclf, Xs, y))
+        if verbose > 0:
+            print('cross val accuracy: {}'.format(acc))
+
+        self.assertTrue(acc > 0.10, 'Accuracy tolerance failure.')
 
 
 if __name__ == '__main__':

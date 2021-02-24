@@ -46,7 +46,8 @@ class RankScoreSelector(Cloneable, Saveable):
         """
         scores = [np.NINF if s is None else s for s in scores]
         scores = np.array(scores, dtype=object)
-        k = len(scores) if self.k > len(scores) else self.k
+        n_live = sum([1 for s in scores if s is not None])
+        k = n_live if self.k > n_live else self.k
         return np.argsort(scores)[-k:]
 
 
@@ -83,7 +84,8 @@ class PctRankScoreSelector(Cloneable, Saveable):
         scores = np.array(scores, dtype=object)
         k = int(len(scores) * self.pct/100.0)
         k = 1 if k < 1 else k
-        k = len(scores) if k > len(scores) else k
+        n_live = sum([1 for s in scores if s is not None])
+        k = n_live if k > n_live else k
         selected_indices = np.argsort(scores)[-k:]
         if len(selected_indices) < self.n_min:
             selected_indices = RankScoreSelector(self.n_min)(scores)

@@ -177,24 +177,20 @@ class SingleChannel(Cloneable, Saveable):
         if hasattr(self, 'model'):
             transform_method = getattr(self.model, self.transform_method_name)
             X_t = transform_method(X)
-            if (X_t is not None and len(X_t.shape) == 1):
+            # convert output array to output matrix:
+            if len(X_t.shape) == 1:
                 X_t = X_t.reshape(-1, 1)
+            # drop the redundant prob output from binary classifiers:
+            elif (len(X_t.shape) == 2 and X_t.shape[1] == 2 and
+                  utils.is_classifier(self.model)):
+                X_t = X_t[:, 1].reshape(-1, 1)
             return X_t
         else:
             raise utils.FitError('transform called before model fitting')
 
     def fit_transform(self, X, y=None, **fit_params):
         self.fit(X, y, **fit_params)
-        transform_method = getattr(self.model, self.transform_method_name)
-        X_t = np.array(transform_method(X))
-        # convert output array to output matrix:
-        if len(X_t.shape) == 1:
-            X_t = X_t.reshape(-1, 1)
-        # drop the redundant prob output from binary classifiers:
-        elif (len(X_t.shape) == 2 and X_t.shape[1] == 2 and
-              utils.is_classifier(self.model)):
-            X_t = X_t[:,1].reshape(-1, 1)
-        return X_t
+        return self.transform(X)
 
     def _more_tags(self):
         return {'multichannel': False}
@@ -289,7 +285,7 @@ class SingleChannelCV(SingleChannel):
         # drop the redundant prob output from binary classifiers:
         elif (len(X_t.shape) == 2 and X_t.shape[1] == 2 and
               utils.is_classifier(self.model)):
-            X_t = X_t[:,1].reshape(-1, 1)
+            X_t = X_t[:, 1].reshape(-1, 1)
 
         return X_t
 
@@ -387,7 +383,7 @@ class Multichannel(Cloneable, Saveable):
         # drop the redundant prob output from binary classifiers:
         elif (len(predictions.shape) == 2 and predictions.shape[1] == 2
               and utils.is_classifier(self.model)):
-            predictions = predictions[:,1].reshape(-1, 1)
+            predictions = predictions[:, 1].reshape(-1, 1)
 
         Xs_t = [predictions if i == 0 else None for i, X in enumerate(Xs)]
         return Xs_t
@@ -475,8 +471,14 @@ class MultichannelCV(Multichannel):
                                   fit_params=fit_params)
 
             Xs_t = [None for X in Xs]
+
+            # convert output array to output matrix:
             if len(predictions.shape) == 1:
                 Xs_t[0] = predictions.reshape(-1, 1)
+            # drop the redundant prob output from binary classifiers:
+            elif (len(predictions.shape) == 2 and predictions.shape[1] == 2
+                  and utils.is_classifier(self.model)):
+                Xs_t[0] = predictions[:, 1].reshape(-1, 1)
             else:
                 Xs_t[0] = predictions
 

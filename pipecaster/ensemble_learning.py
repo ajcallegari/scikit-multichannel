@@ -26,13 +26,15 @@ class SoftVotingClassifier(Cloneable, Saveable):
     """
     Predict using mean predictions of a classifier ensemble.
 
-    This pipeline component takes marginal probabilies from a prior pipeline
-    stage that have been concatenated into a single meta-feature matrix. The
-    predicted classes are inferred from the order of the meta-feature
-    matrix columns and probabilies from each base classifier are averaged to
-    generate a prediction.  Can be used alone or as a meta-predictor within
-    MultichannelPredictor, Ensemble, and ChannelEnsemble
-    pipeline components.
+    This pipeline component takes marginal probabilities from a prior pipeline
+    stage and averages them to make an ensemble prediction.  For binary
+    classifiers, the predicted probabilies must sum to 1.0 over the classes for
+    each sample so the dropped negative class probabilites can be inferred from
+    the positive class.  The inputs, which must be concatenated into a single
+    meta-feature matrix in a prior stage, are decatenated and predicted classes
+    inferred from the order of the meta-feature matrix columns.  Can be used
+    alone or as a meta-predictor within MultichannelPredictor, Ensemble, and
+    ChannelEnsemble pipeline components.
 
     Examples
     --------
@@ -87,13 +89,22 @@ class SoftVotingClassifier(Cloneable, Saveable):
 
     def _decatenate(self, meta_X):
         n_classes = len(self.classes_)
+        if n_classes == 2:
+            # expand binary classification probs to 2 columns
+            n_rows, n_cols = meta_X.shape[0], 2 * meta_X.shape[1]
+            Xs_expanded = np.empty((n_rows, n_cols))
+            Xs_expanded[:, range(0, n_cols, 2)] =  1.0 - meta_X
+            Xs_expanded[:, range(1, n_cols + 1, 2)] =  meta_X
+            meta_X = Xs_expanded
+
         if meta_X.shape[1] % n_classes != 0:
             raise ValueError(
                 '''Number of meta-features not divisible by number of classes.
                 This can happen if base classifiers were trained on different
                 subsamples with different number of classes.  Pipecaster uses
                 StratifiedKFold to prevent this, but GroupKFold can lead to
-                violations.  Someone needs to make StratifiedGroupKFold''')
+                violations.  Someone need to make StratifiedGroupKFold''')
+
         Xs = [meta_X[:, i:i+n_classes]
               for i in range(0, meta_X.shape[1], n_classes)]
         return Xs
@@ -111,16 +122,20 @@ class SoftVotingClassifier(Cloneable, Saveable):
 
 class HardVotingClassifier(Cloneable, Saveable):
     """
-    Predict using most frequently predicted classes of a classifier
-    ensemble.
+    Predict using most frequently predicted class in an ensemble.
 
-    This pipeline component takes predictions (marginal probabilities) from a
-    prior pipeline stage that have been concatenated into a single meta-feature
-    matrix. The predicted classes are inferred from the order of the
-    meta-feature matrix columns and probabilies and the modal prediction of the
-    base classifiers is selected.  Can be used alone or as a meta-predictor within
-    MultichannelPredictor, Ensemble, and ChannelEnsemble
-    pipeline components.
+    This pipeline component takes marginal probabilities from a prior pipeline
+    stage and uses them them to make an ensemble prediction.  Predictions are
+    made for each classifier in the ensemble by taking the class with the
+    highest probability, then an ensemble prediction is make by taking the
+    modal prediction. For binary classifiers, the predicted probabilies must
+    sum to 1.0 over the classes for each sample so the dropped negative class
+    probabilites can be inferred from the positive class.  The inputs, which
+    must be concatenated into a single meta-feature matrix in a prior stage,
+    are decatenated and predicted classes inferred from the order of the
+    meta-feature matrix columns.  Can be used alone or as a meta-predictor
+    within MultichannelPredictor, Ensemble, and ChannelEnsemble pipeline
+    components.
 
     Notes
     -----
@@ -181,6 +196,14 @@ class HardVotingClassifier(Cloneable, Saveable):
 
     def _decatenate(self, meta_X):
         n_classes = len(self.classes_)
+        if n_classes == 2:
+            # expand binary classification probs to 2 columns
+            n_rows, n_cols = meta_X.shape[0], 2 * meta_X.shape[1]
+            Xs_expanded = np.empty((n_rows, n_cols))
+            Xs_expanded[:, range(0, n_cols, 2)] =  1.0 - meta_X
+            Xs_expanded[:, range(1, n_cols + 1, 2)] = meta_X
+            meta_X = Xs_expanded
+
         if meta_X.shape[1] % n_classes != 0:
             raise ValueError(
                 '''Number of meta-features not divisible by number of classes.
@@ -188,6 +211,7 @@ class HardVotingClassifier(Cloneable, Saveable):
                 subsamples with different number of classes.  Pipecaster uses
                 StratifiedKFold to prevent this, but GroupKFold can lead to
                 violations.  Someone need to make StratifiedGroupKFold''')
+
         Xs = [meta_X[:, i:i+n_classes]
               for i in range(0, meta_X.shape[1], n_classes)]
         return Xs
@@ -201,24 +225,6 @@ class HardVotingClassifier(Cloneable, Saveable):
         decisions = scipy.stats.mode(input_decisions, axis=0)[0][0]
         predictions = self.classes_[decisions]
         return predictions
-
-    def predict_proba(self, X):
-        """
-        Return the fraction of the base classifiers that picked the class -
-            shape (n_samples, n_classes)
-        """
-        Xs = self._decatenate(X)
-        input_predictions = [np.argmax(X, axis=1).reshape(-1, 1) for X in Xs]
-        input_predictions = np.concatenate(input_predictions, axis=1)
-        n_samples, n_votes = input_predictions.shape
-        n_classes = len(self.classes_)
-        class_counts = [np.bincount(input_predictions[i, :],
-                                    minlength=n_classes)
-                        for i in range(n_samples)]
-        class_counts = np.stack(class_counts).astype(float)
-        class_counts /= n_votes
-
-        return class_counts
 
 
 class AggregatingRegressor(Cloneable, Saveable):
@@ -463,6 +469,7 @@ class Ensemble(Cloneable, Saveable):
                 setattr(self, method_name, prediction_method)
             elif is_exposed and is_available is False:
                 delattr(self, method_name)
+        return self
 
     @staticmethod
     def _fit_job(predictor, X, y, internal_cv, base_predict_method,
@@ -532,7 +539,8 @@ class Ensemble(Cloneable, Saveable):
         if self.score_selector is not None:
             self.selected_indices_ = self.score_selector(scores)
         else:
-            self.selected_indices_ = list(range(len(Xs)))
+            self.selected_indices_ = [
+                i for i, p in enumerate(self.base_predictors)]
 
         if self.internal_cv is not None and self.disable_cv_train is False:
             predictions = cv_predictions
@@ -547,7 +555,7 @@ class Ensemble(Cloneable, Saveable):
                                 'one base predictors is selected.')
         elif self.meta_predictor is None and len(self.selected_indices_) == 1:
             if hasattr(self.base_models[0], 'classes_'):
-               self.classes_ = self.self.base_models[0].classes_
+               self.classes_ = self.base_models[0].classes_
             predict_methods = utils.get_predict_methods(self.base_models[0])
         elif self.meta_predictor is not None:
             meta_X = np.concatenate(predictions, axis=1)
@@ -852,20 +860,20 @@ class MultichannelPredictor(Cloneable, Saveable):
         self._estimator_type = utils.detect_predictor_type(predictor)
         if self._estimator_type is None:
             raise TypeError('could not detect predictor type')
-        predict_methods = utils.get_predict_methods(predictor)
-        self._set_predictor_interface(predict_methods)
+        predict_method_names = utils.get_predict_methods(predictor)
+        self._set_predictor_interface(predict_method_names)
 
     def _set_predictor_interface(self, predict_method_names):
         for method_name in utils.recognized_pred_methods:
             is_available = method_name in predict_method_names
             is_exposed = hasattr(self, method_name)
-            if is_available and is_exposed is False:
+            if is_available and (is_exposed is False):
                 prediction_method = functools.partial(self.predict_with_method,
                                                       method_name=method_name)
                 setattr(self, method_name, prediction_method)
-            elif is_exposed and is_available is False:
+            elif is_exposed and (is_available is False):
                 delattr(self, method_name)
-            return self
+        return self
 
     def fit(self, Xs, y=None, **fit_params):
         self.model = utils.get_clone(self.predictor)
@@ -879,8 +887,8 @@ class MultichannelPredictor(Cloneable, Saveable):
                 self.model.fit(X, y, **fit_params)
             if hasattr(self.model, 'classes_'):
                 self.classes_ = self.model.classes_
-        predict_methods = utils.get_predict_methods(self.model)
-        self._set_predictor_interface(predict_methods)
+        predict_method_names = utils.get_predict_methods(self.model)
+        self._set_predictor_interface(predict_method_names)
         return self
 
     def predict_with_method(self, Xs, method_name):
@@ -1077,10 +1085,13 @@ class ChannelEnsemble(Cloneable, Saveable):
                 setattr(self, method_name, prediction_method)
             elif is_exposed and is_available is False:
                 delattr(self, method_name)
+        return self
 
     @staticmethod
     def _fit_job(predictor, X, y, internal_cv, base_predict_method,
                  cv_processes, scorer, fit_params):
+        if X is None:
+            return None, None, None, None
         model = transform_wrappers.SingleChannel(predictor,
                                                  base_predict_method)
         model = utils.get_clone(model)
@@ -1154,7 +1165,8 @@ class ChannelEnsemble(Cloneable, Saveable):
         if self.score_selector is not None:
             self.selected_indices_ = self.score_selector(scores)
         else:
-            self.selected_indices_ = list(range(len(Xs)))
+            self.selected_indices_ = [i for i, X in enumerate(Xs)
+                                      if X is not None]
 
         if self.internal_cv is not None and self.disable_cv_train is False:
             predictions = cv_predictions
@@ -1230,15 +1242,21 @@ class ChannelEnsemble(Cloneable, Saveable):
             - If method_name is 'predict_proba', 'decision_function', or
               'predict_log_proba': ndarray(n_samples, n_classes)
         """
-        if (hasattr(self, 'base_models') is False or
-                hasattr(self, 'meta_model') is False):
+        if hasattr(self, 'base_models') is False:
             raise utils.FitError('prediction attempted before model fitting')
-        predictions_list = [m.transform(X) for i, (m, X) in
-                            enumerate(zip(self.base_models, Xs))
-                            if i in self.selected_indices_]
-        meta_X = np.concatenate(predictions_list, axis=1)
-        prediction_method = getattr(self.meta_model, method_name)
-        predictions = prediction_method(meta_X)
+
+        if self.meta_predictor is None:
+            sel_idx = self.selected_indices_[0]
+            prediction_method = getattr(self.base_models[sel_idx], method_name)
+            predictions = prediction_method(Xs[sel_idx])
+        else:
+            predictions_list = [m.transform(X) for i, (m, X) in
+                                enumerate(zip(self.base_models, Xs))
+                                if i in self.selected_indices_]
+            meta_X = np.concatenate(predictions_list, axis=1)
+            prediction_method = getattr(self.meta_model, method_name)
+            predictions = prediction_method(meta_X)
+
         if self._estimator_type == 'classifier' and method_name == 'predict':
             predictions = self.classes_[predictions]
         return predictions

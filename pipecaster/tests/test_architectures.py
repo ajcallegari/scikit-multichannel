@@ -13,9 +13,10 @@ from sklearn.metrics import balanced_accuracy_score
 
 from pipecaster.multichannel_pipeline import MultichannelPipeline
 from pipecaster.channel_selection import SelectKBestScores
-from pipecaster.ensemble_learning import ChannelEnsemble
+from pipecaster.ensemble_learning import ChannelEnsemble, MultichannelPredictor
 from pipecaster.cross_validation import cross_val_score
 import pipecaster.transform_wrappers as transform_wrappers
+from pipecaster.score_selection import RankScoreSelector
 
 class TestArchitectures(unittest.TestCase):
 
@@ -38,10 +39,12 @@ class TestArchitectures(unittest.TestCase):
         clf.add_layer(SelectPercentile(percentile=25))
         clf.add_layer(5, SelectKBestScores(feature_scorer=f_classif,
                                            aggregator=np.mean, k=2))
-        LR = transform_wrappers.SingleChannelCV(LogisticRegression())
-        clf.add_layer(
-            5, ChannelEnsemble(predictors=KNeighborsClassifier(), k=1),
-            1, LR)
+        LR_cv = transform_wrappers.SingleChannelCV(LogisticRegression())
+        CE = ChannelEnsemble(base_predictors=KNeighborsClassifier(),
+                             internal_cv=5,
+                             score_selector=RankScoreSelector(1))
+        CE_cv = transform_wrappers.MultichannelCV(CE)
+        clf.add_layer(5, CE_cv, 1, LR_cv)
         clf.add_layer(MultichannelPredictor(SVC()))
 
         score = np.mean(
@@ -52,7 +55,7 @@ class TestArchitectures(unittest.TestCase):
                         'tolerance value of 95%'.format(score))
 
         clf.fit(Xs, y)
-        score_selector = clf.get_model(3,0)
+        score_selector = transform_wrappers.unwrap_model(clf.get_model(3,0))
         if verbose > 0:
             print('indices selected by SelectKBestScores: {}'
                   .format(score_selector.get_support()))
@@ -60,7 +63,7 @@ class TestArchitectures(unittest.TestCase):
         self.assertTrue(np.array_equal(score_selector.get_support(), [2, 4]),
                         'SelectKBestScores selected the wrong channels.')
 
-        model_selector = clf.get_model(4,0)
+        model_selector = transform_wrappers.unwrap_model(clf.get_model(4, 0))
         if verbose > 0:
             print('indices selected by SelectKBestModels: {}'
                   .format(model_selector.get_support()))
