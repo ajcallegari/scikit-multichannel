@@ -1,8 +1,8 @@
 """
 Pipeline components that select a subset of the pipeline's channels.
 
-Selections are made using channel scorers and score selectors defined in:
-:mod:`pipecaster.channel_scoring` and :mod:`pipecaster.score_selection`.
+Selections are made using channel scorers and score selectors like those found
+in: :mod:`pipecaster.channel_scoring` and :mod:`pipecaster.score_selection`.
 """
 
 import numpy as np

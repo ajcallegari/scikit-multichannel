@@ -98,10 +98,10 @@ class HighPassScoreSelector(Cloneable, Saveable):
 
     Parameters
     ----------
-    cutoff: float, default=0.0
+    cutoff : float, default=0.0
         Score that defines the selection.  Items with scores above this value
         are selected.
-    n_min: int, default=1
+    n_min : int, default=1
         The minimum number of items to select.  Takes precedence over cutoff.
     """
 
@@ -133,24 +133,27 @@ class HighPassScoreSelector(Cloneable, Saveable):
 
 class VarianceHighPassScoreSelector(Cloneable, Saveable):
     """
-    Select items with scores above a cutoff value that is definied relative
-    to a statistic describing score variance and a statistic describing the
-    baseline:  cutoff = baseline + variance_cutoff * variance.
+    Select items with scores above a relative cutoff.
+
+    Cutoff value is definied relative to a statistic describing score variance
+    and a statistic describing the baseline:
+
+    cutoff = baseline + variance_cutoff * variance.
 
     Parameters
     ----------
-    variance_cutoff: float, default=2.0
+    variance_cutoff : float, default=2.0
         The number of units of variance used to define the cutoff.  Items with
         scores above variance_cutoff * variance will will be selected.
-    get_variance: callable, default=np.nanstd
+    get_variance : callable, default=np.nanstd
         Callable that provides a scalar measure of the variability of the
         scores (e.g. np.nanstd, scipy.stats.iqr).
         Pattern: variance = get_variance(scores)
-    get_baseline: callable, default=np.nanmean
+    get_baseline : callable, default=np.nanmean
         Callable that provides a scalar baseline score (e.g. np.nanmean or
         np.nanmedian).
-        Pattern: baseline = get_baseline(scores)
-    n_min: int, default=1
+        Pattern : baseline = get_baseline(scores)
+    n_min : int, default=1
         The minimum number of items to select.  Takes precedence over other
         parameters.
     """
@@ -166,7 +169,7 @@ class VarianceHighPassScoreSelector(Cloneable, Saveable):
 
         Parameters:
         ----------
-        scores: list or nd.array.shape(n_samples,)
+        scores : list or nd.array.shape(n_samples,)
             Ordered list of scalar figure of merit scores for each item of
             selection.
 

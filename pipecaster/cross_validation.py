@@ -16,10 +16,10 @@ import pipecaster.parallel as parallel
 __all__ = ['cross_val_score', 'cross_val_predict']
 
 
-def fit_and_predict(predictor, Xs, y, train_indices, test_indices,
+def _fit_and_predict(predictor, Xs, y, train_indices, test_indices,
                     predict_method_name, fit_params):
         """
-        Clone, fit, and predict a singlechannel or multichannel model.
+        Clone, fit, and predict a single channel or multichannel pipe.
         """
         model = utils.get_clone(predictor)
         fit_params = {} if fit_params is None else fit_params
@@ -56,48 +56,60 @@ def cross_val_predict(predictor, Xs, y=None, groups=None,
 
     Parameters
     ----------
-    predictor : predictor instance implementing 'fit' and 'predict'
-    Xs: ndarray.shape(n_samples, n_features) or list of ndarrays
-        A single feature matrix, or a list of feature matrices, each with
-        identical samples in the same order.
-    y: nd.array(n_samples,) or list with length n_samples, default=None
-        If list-like: Supervised learning target values.
-        If None: Value used for unsupervised machine learning.
-    groups: ndarray.shape(n_samples,) or list of n_samples, default=None
+    predictor : estimator/predictor instance
+        Classifier or regressor that implements the scikit-learn estimator and
+        predictor interfaces.
+    Xs : list
+        List of feature matrices and None spaceholders.
+    y : list/array, default=None
+        Optional targets for supervised ML.
+    groups: list/array, default=None
         Group labels for the samples used while splitting the dataset into
-        train/test set. Only used in conjunction with a "Group" :term:'cv'
-        instance (e.g., :class:'GroupKFold').
-    predict_method: String or None, default='predict'
+        train/test set. Only used if cv parameter is set to GroupKFold.
+    predict_method : str, default='predict'
         Name of the method to use for predictions
-    cv: None, int, or cross-validation generator or an iterable, default=None
-        Determines the cross-validation splitting strategy.
-        Possible inputs for cv are:
-        - None, to use the default 5-fold cross validation,
-        - int, to specify the number of folds in a '(Stratified)KFold',
-        - An iterable yielding (train, test) splits as arrays of indices.
-        For int/None inputs, if the predictor is a classifier and 'y' is
-        either binary or multiclass, :class:'StratifiedKFold' is used. In all
-        other cases, :class:'KFold' is used.
-    combine_splits: bool, default=True
-        If False: Return results for separate splits.
-        If True: Concatenate results for splits into a single array.
-    n_processes: int or 'max', default='max'
-        If 1: Run all split computations in a single process.
-        If 'max': Run each split in a different process, using all available
-            CPUs
-        If int > 1: Run each split in a different process, using up to
-            n_processes number of CPUs
-    fit_params: dict, defualt=None
-        Auxiliary parameters to pass to the fit method of the predictor.
+    cv : int, or callable, default=5
+        - Set the cross validation method:
+        - If int > 1: Use StratifiedKfold(n_splits=internal_cv) for
+          classifiers or Kfold(n_splits=internal_cv) for regressors.
+        - If None or 5: Use 5 splits with the default split generator.
+        - If callable: Assumes interface like Kfold scikit-learn.
+    combine_splits : bool, default=True
+        - If True: Concatenate results for splits into a single array.
+        - If False: Return results for separate splits.
+    n_processes : int or 'max', default=1
+        - If 1: Run all split computations in a single process.
+        - If 'max': Run splits in multiple processes, using all
+          available CPUs.
+        - If int > 1: Run splits in multiple processes, using up to
+          n_processes number of CPUs.
+    fit_params : dict, default={}
+        Auxiliary parameters sent to pipe fit_transform and fit methods.
 
     Returns
     -------
-    If combine_splits is False:
-        Returns a list containing (predictions, sample indices) for each
-        split.
-    If combine_splits it True:
-        Returns a single array with predictions for each sample in Xs
-        in the order in which they were provided.
+    Predictions
+        - If combine_splits is False:
+          Returns a list of tuples (predictions, sample indices), one for each
+          split.
+        - If combine_splits it True:
+          Returns a single array with predictions for each sample in Xs
+          in the order in which they were provided.
+
+    Examples
+    --------
+    ::
+
+        import pipecaster as pc
+        from sklearn.ensemble import GradientBoostingClassifier
+        from sklearn.svm import SVC
+
+        Xs, y, X_types = pc.make_multi_input_classification(n_informative_Xs=3,
+                                                            n_random_Xs=7)
+        clf = pc.MultichannelPipeline(n_channels=10)
+        clf.add_layer(pc.ChannelEnsemble(GradientBoostingClassifier(), SVC()))
+
+        predictions = pc.cross_val_predict(clf, Xs, y)
     """
     is_classifier = utils.is_classifier(predictor)
     if is_classifier and y is not None:
@@ -134,7 +146,7 @@ def cross_val_predict(predictor, Xs, y=None, groups=None,
         try:
             shared_mem_objects = [Xs, y, fit_params]
             split_results = parallel.starmap_jobs(
-                                fit_and_predict, args_list,
+                                _fit_and_predict, args_list,
                                 n_cpus=n_processes,
                                 shared_mem_objects=shared_mem_objects)
         except Exception as e:
@@ -144,7 +156,7 @@ def cross_val_predict(predictor, Xs, y=None, groups=None,
             n_processes = 1
     if n_processes == 1:
         # print('running a single process with {} jobs'.format(len(args_list)))
-        split_results = [fit_and_predict(*args) for args in args_list]
+        split_results = [_fit_and_predict(*args) for args in args_list]
 
     split_predictions, split_indices = zip(*split_results)
 
@@ -170,41 +182,57 @@ def cross_val_score(predictor, Xs, y=None, groups=None, scorer='auto',
 
     Parameters
     ----------
-    predictor : predictor instance implementing 'fit' and 'predict'
-    Xs: ndarray.shape(n_samples, n_features) or list of ndarrays
-        A single feature matrix, or a list of feature matrices, each with
-        identical samples in the same order.
-    y: nd.array(n_samples,) or list with length n_samples, default=None
-        If list-like: Supervised learning target values.
-        If None: Value used for unsupervised machine learning.
-    groups: ndarray.shape(n_samples,) or list of n_samples, default=None
+    predictor : estimator/predictor instance
+        Classifier or regressor that implements the scikit-learn estimator and
+        predictor interfaces.
+    Xs : list
+        List of feature matrices and None spaceholders.
+    y : list/array, default=None
+        Optional targets for supervised ML.
+    groups: list/array, default=None
         Group labels for the samples used while splitting the dataset into
-        train/test set. Only used in conjunction with a "Group" :term:'cv'
-        instance (e.g., :class:'GroupKFold').
+        train/test set. Only used if cv parameter is set to GroupKFold.
     scorer : 'auto' or callable, default='auto'
-        If 'auto': balanced_accuracy_score for classifiers or
-            explained_variance_score for regressors
-        If callable: A scorer object with signature
-            'scorer(y_true, y_pred)' which returns a scalar figure of
-            merit.
-    cv: None, int, or cross-validation generator or an iterable, default=None
-        Determines the cross-validation splitting strategy.
-        Possible inputs for cv are:
-        - None, to use the default 5-fold cross validation,
-        - int, to specify the number of folds in a '(Stratified)KFold',
-        - An iterable yielding (train, test) splits as arrays of indices.
-        For int/None inputs, if the predictor is a classifier and 'y' is
-        either binary or multiclass, :class:'StratifiedKFold' is used. In all
-        other cases, :class:'KFold' is used.
-    n_processes: int, default='max'
-        The number of parallel fit/predict processes to run.
-    fit_params: dict, defualt=None
-        Auxiliary parameters to pass to the fit method of the predictor.
+        - If 'auto': balanced_accuracy_score for classifiers or
+          explained_variance_score for regressors
+        - If callable: A scorer object that returns a scalar figure of
+          merit score with signature:
+          score = scorer(y_true, y_pred).
+    cv : int, or callable, default=5
+        - Set the cross validation method:
+        - If int > 1: Use StratifiedKfold(n_splits=internal_cv) for
+          classifiers or Kfold(n_splits=internal_cv) for regressors.
+        - If None or 5: Use 5 splits with the default split generator.
+        - If callable: Assumes interface like Kfold scikit-learn.
+    n_processes : int or 'max', default=1
+        - If 1: Run all split computations in a single process.
+        - If 'max': Run splits in multiple processes, using all
+          available CPUs.
+        - If int > 1: Run splits in multiple processes, using up to
+          n_processes number of CPUs.
+    fit_params : dict, default={}
+        Auxiliary parameters sent to pipe fit_transform and fit methods.
 
     Returns
     -------
-    scores : List of scalar figure of merit scores, one for each split.
+    list
+        List of scalar figure of merit scores, one for each split.
 
+    Examples
+    --------
+    ::
+
+        import pipecaster as pc
+        from sklearn.ensemble import GradientBoostingClassifier
+        from sklearn.svm import SVC
+
+        Xs, y, X_types = pc.make_multi_input_classification(n_informative_Xs=3,
+                                                            n_random_Xs=7)
+        clf = pc.MultichannelPipeline(n_channels=10)
+        clf.add_layer(pc.ChannelEnsemble(GradientBoostingClassifier(), SVC()))
+
+        pc.cross_val_score(clf, Xs, y)
+        # ouput: [0.7647058823529411, 0.8455882352941176, 0.8180147058823529]
     """
     if scorer is None or scorer == 'auto':
         if utils.is_classifier(predictor):

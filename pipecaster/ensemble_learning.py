@@ -27,14 +27,17 @@ class SoftVotingClassifier(Cloneable, Saveable):
     Predict using mean predictions of a classifier ensemble.
 
     This pipeline component takes marginal probabilities from a prior pipeline
-    stage and averages them to make an ensemble prediction.  For binary
-    classifiers, the predicted probabilies must sum to 1.0 over the classes for
-    each sample so the dropped negative class probabilites can be inferred from
-    the positive class.  The inputs, which must be concatenated into a single
-    meta-feature matrix in a prior stage, are decatenated and predicted classes
-    inferred from the order of the meta-feature matrix columns.  Can be used
-    alone or as a meta-predictor within MultichannelPredictor, Ensemble, and
+    stage and averages them to make an ensemble prediction.  Can be used alone
+    or as a meta-predictor within MultichannelPredictor, Ensemble, and
     ChannelEnsemble pipeline components.
+
+    The inputs, which must be concatenated into a single meta-feature matrix in
+    a prior stage, are decatenated and predicted classes inferred from the
+    order of the meta-feature matrix columns.
+
+    For binary classifiers, the predicted probabilies must sum to 1.0 over the
+    classes for each sample so the dropped negative class probabilites can be
+    inferred from the positive class.
 
     Examples
     --------
@@ -127,22 +130,17 @@ class HardVotingClassifier(Cloneable, Saveable):
     This pipeline component takes marginal probabilities from a prior pipeline
     stage and uses them them to make an ensemble prediction.  Predictions are
     made for each classifier in the ensemble by taking the class with the
-    highest probability, then an ensemble prediction is make by taking the
-    modal prediction. For binary classifiers, the predicted probabilies must
-    sum to 1.0 over the classes for each sample so the dropped negative class
-    probabilites can be inferred from the positive class.  The inputs, which
-    must be concatenated into a single meta-feature matrix in a prior stage,
-    are decatenated and predicted classes inferred from the order of the
-    meta-feature matrix columns.  Can be used alone or as a meta-predictor
-    within MultichannelPredictor, Ensemble, and ChannelEnsemble pipeline
-    components.
+    highest probability, then an ensemble prediction is made by taking the
+    modal prediction.  Can be used alone or as a meta-predictor within
+    MultichannelPredictor, Ensemble, and ChannelEnsemble pipeline components.
 
-    Notes
-    -----
-    This implementation of hard voting also adds a predict_proba function to
-    be used in the event that hard outputs are needed for additional model
-    stacking.  Predict_proba() outputs the fraction of the input classifiers
-    that picked the class - shape (n_samples, n_classes).
+    The inputs, which must be concatenated into a single meta-feature matrix in
+    a prior stage, are decatenated and predicted classes inferred from the
+    order of the meta-feature matrix columns.
+
+    For binary classifiers, the predicted probabilies must sum to 1.0 over the
+    classes for each sample so the dropped negative class probabilites can be
+    inferred from the positive class.
 
     Examples
     --------
@@ -303,42 +301,47 @@ class AggregatingRegressor(Cloneable, Saveable):
 
 class Ensemble(Cloneable, Saveable):
     """
-    Ensemble predictor with optional in-pipeline model selection.
+    Model ensemble with optional in-pipeline model selection.
 
-    Ensemble makes inferences with a set of base predictors
-    and a meta-predictor that uses their inferences as input features.  The
-    meta-predictor may be a voting or aggregating algorithm (e.g.
-    SoftVotingClassifier, AggregatingRegressor) or a scikit-learn conformant
-    ML algorithm.  When the meta-predictor is an ML algorithm, it is standard
-    practice (1) to use internal cross validation training of the base
-    classifiers to prevent them from making inferences on training samples.  To
-    activate internal cross validation training, set the internal_cv argument
-    during initialization.  Cross validation is only used to generate outputs
-    for meta-predictor training.  The whole training set is always used to
-    train the final base predictor models.
+    This pipeline component makes inferences with a set of base predictors by
+    either selecting the single best base predictor during fitting or by
+    pooling base predictor inferences with a meta-predictor.
+
+    The meta-predictor may be a voting or aggregating algorithm (e.g.
+    SoftVotingClassifier, AggregatingRegressor) or a scikit-learn conformant ML
+    algorithm.  In the latter case, it is standard practice to use internal
+    cross validation training of the base classifiers to prevent them from
+    making inferences on training samples (1).  To activate internal cross
+    validation training, set the internal_cv constructor argument of Ensemble
+    (cross validation is only used to generate outputs for meta-predictor
+    training; the whole training set is always used to train the final base
+    predictor models).
+
+    Ensemble also takes advantage of internal cross validation
+    to enable in-pipeline screening of base predictors during model
+    fitting. To enable model selection, provide a score_selector (e.g.
+    those found in the :mod:`pipecaster.score_selection` module) to the
+    contructor.
 
     (1) Wolpert, David H. "Stacked generalization."
     Neural networks 5.2 (1992): 241-259.
 
-    Ensemble also takes advantage of internal cross validation
-    to enable in-pipeling screening of base predictors during model
-    fitting. To enable model selection, provide a score_selector (e.g.
-    those found in the :mod:`pipecaster.score_selection` module) during
-    initialization.
-
     Parameters
     ----------
-    base_predictors : predictor list of predictors, default=None
-        Ensemble of scikit-learn conformant base predictor instances (either
-        all classifiers or all regressors).
-    meta_predictor : predictor, default=None
-        Scikit-learn conformant classifier or regresor instance that makes
-        predictions from the inference of the base predictors.
+    base_predictors : predictor instance or list of predictor instances
+        Ensemble of scikit-learn conformant base predictors (either all
+        classifiers or all regressors).
+    meta_predictor : predictor instance, default=None
+        Scikit-learn conformant classifier or regressor that makes predictions
+        from the base predictor inferences.  This parameter is optional when
+        the internal_cv and score_selector parameters are set, in which case
+        predictions from the top performing model will be used in the absence
+        of a meta-predictor.
     internal_cv : int, None, or callable, default=None
         - Function for train/test subdivision of the training data.  Used to
           estimate performance of base classifiers and ensure they do not
-          generate predictions from their training samples during meta-predictor
-          training.
+          generate predictions from their training samples during
+          meta-predictor training.
         - If int : StratifiedKfold(n_splits=internal_cv) if classifier or
           KFold(n_splits=internal_cv) if regressor.
         - If None : default value of 5.
@@ -350,7 +353,7 @@ class Ensemble(Cloneable, Saveable):
         - If 'auto' : balanced_accuracy_score if classifier,
           explained_variance_score if regressor.
     score_selector : callable or None, default=None
-        - Selection method.
+        - Method for selecting models from the ensemble.
         - If callable : Selector with signature:
           selected_indices = callable(scores).
         - If None :  All models will be retained in the ensemble.
@@ -359,8 +362,8 @@ class Ensemble(Cloneable, Saveable):
         - If True : cv predictions not used to train the meta-predictor.
     base_predict_methods : str or list, default='auto'
         - Set the name of the base predictor methods to use.
-        - If 'auto' : Use the precedence order specified in transform_wrappers
-          module to select a predict method.
+        - If 'auto' : Use the precedence order specified in
+          :mod:`pipecaster.transform_wrappers` to select a predict method.
         - If str other than 'auto' : Name is broadcast over all base
           predictors.
         - If list : List of names, one per base predictor.
@@ -369,12 +372,16 @@ class Ensemble(Cloneable, Saveable):
         - If int : Use up to base_processes number of processes.
         - If 'max' : Use all available CPUs.
     cv_processes : int or 'max', default=1
-        - The number of parallel processes to run for internal cross validation.
-        - If int : Use up to base_processes number of processes.
+        - The number of parallel processes to run for internal cross
+          validation.
+        - If int : Use up to cv_processes number of processes.
         - If 'max' : Use all available CPUs.
 
     Examples
     --------
+    Measure accuracy of 6 different ML models on a single input channel using
+    internal cross validation, select the top 2 performers, and meta-predict
+    with SoftVotingClassifier:
     ::
 
         from sklearn.datasets import make_classification
@@ -410,7 +417,7 @@ class Ensemble(Cloneable, Saveable):
     """
     state_variables = ['classes_', 'scores_', 'selected_indices_']
 
-    def __init__(self, base_predictors=None, meta_predictor=None,
+    def __init__(self, base_predictors, meta_predictor=None,
                  internal_cv=None, scorer='auto',
                  score_selector=None,
                  disable_cv_train=False,
@@ -649,37 +656,29 @@ class Ensemble(Cloneable, Saveable):
 
 class GridSearchEnsemble(Ensemble):
     """
-    Ensemble predictor that screens model hyperparameters.
+    Model ensemble with in-pipeline hyperparameter screening.
 
-    GridSearchEnsemble makes inferences with an ensemble of identical ML
-    algorithms with different hyperparameters.  A subset of models is selected
-    based on cross validation performance when a score_selector method is
-    provided during initialization (score selectors can be found in the
-    :mod:`pipecaster.score_selection` module).  If more than one model is
-    selected, inferences can be pooled with a meta-predictor.
+    This pipeline component makes inferences with a set of base predictors by
+    either selecting the single best base predictor during fitting or by
+    pooling base predictor inferences with a meta-predictor.  The base
+    predictor ensemble consists of a single algorithm and an ensemble of
+    hyperparameters.  GridSearchEnsemble uses internal cross validation to
+    enable in-pipeline screening of hyperparameters during model fitting. To
+    enable hyperparameter screening, provide a score_selector to the contructor
+    (e.g. those found in the :mod:`pipecaster.score_selection` module).
 
-     and a meta-predictor that uses their
-    inferences as input features.  It selects a subset of the best models with
-    the best hyperparameters if
-
-    The
-    meta-predictor may be a voting or aggregating algorithm (e.g.
-    SoftVotingClassifier, AggregatingRegressor) or a scikit-learn conformant
-    ML algorithm.  When the meta-predictor is an ML algorithm, it is standard
-    practice (1) to use internal cross validation training of the base
-    classifiers to prevent them from making inferences on training samples.  To
-    activate internal cross validation training, set the internal_cv argument
-    during initialization.  Cross validation is only used to generate outputs
-    for meta-predictor training.  The whole training set is always used to
-    train the final base predictor models.
+    The optional meta-predictor may be a voting or aggregating
+    algorithm (e.g. SoftVotingClassifier, AggregatingRegressor) or a
+    scikit-learn conformant ML algorithm.  In the latter case, it is standard
+    practice to use internal cross validation training of the base classifiers
+    to prevent them from making inferences on training samples (1).  To
+    activate internal cross validation training, set the internal_cv
+    constructor argument of GridSearchEnsemble (cross validation is only used
+    to generate outputs for meta-predictor training; the whole training set is
+    always used to train the final base predictor models).
 
     (1) Wolpert, David H. "Stacked generalization."
     Neural networks 5.2 (1992): 241-259.
-
-    GridSearchEnsemble uses internal cross validation to enable in-pipeling screening of base predictors during model
-    fitting. To enable model selection, provide a score_selector (e.g.
-    those found in the :mod:`pipecaster.score_selection` module) during
-    initialization.
 
     Parameters
     ----------
@@ -689,9 +688,15 @@ class GridSearchEnsemble(Ensemble):
 
         {'param1':[value1, value2, value3],
         'param2':[value1, value2, value3]}
-    base_predictor_cls: class, default=None
+    base_predictor_cls : class, default=None
         Predictor class to be used for base prediction.  Must implement the
         scikit-learn estimator and predictor interfaces.
+    meta_predictor : predictor instance, default=None
+        Scikit-learn conformant classifier or regressor that makes predictions
+        from the base predictor inferences.  This parameter is optional when
+        the internal_cv and score_selector parameters are set, in which case
+        predictions from the top performing model will be used in the absence
+        of a meta-predictor.
     internal_cv : int, None, or callable, default=None
         - Function for train/test subdivision of the training data.  Used to
           estimate performance of base classifiers and ensure they do not
@@ -708,7 +713,7 @@ class GridSearchEnsemble(Ensemble):
         - If 'auto' : balanced_accuracy_score if classifier,
           explained_variance_score if regressor.
     score_selector : callable or None, default=None
-        - Selection method.
+        - Method for selecting models from the ensemble.
         - If callable : Selector with signature:
           selected_indices = callable(scores).
         - If None :  All models will be retained in the ensemble.
@@ -717,8 +722,8 @@ class GridSearchEnsemble(Ensemble):
         - If True : cv predictions not used to train the meta-predictor.
     base_predict_methods : str or list, default='auto'
         - Set the name of the base predictor methods to use.
-        - If 'auto' : Use the precedence order specified in transform_wrappers
-          module to select a predict method.
+        - If 'auto' : Use the precedence order specified in
+          :mod:`pipecaster.transform_wrappers` to select a predict method.
         - If str other than 'auto' : Name is broadcast over all base
           predictors.
         - If list : List of names, one per base predictor.
@@ -727,8 +732,9 @@ class GridSearchEnsemble(Ensemble):
         - If int : Use up to base_processes number of processes.
         - If 'max' : Use all available CPUs.
     cv_processes : int or 'max', default=1
-        - The number of parallel processes to run for internal cross validation.
-        - If int : Use up to base_processes number of processes.
+        - The number of parallel processes to run for internal cross
+          validation.
+        - If int : Use up to cv_processes number of processes.
         - If 'max' : Use all available CPUs.
 
     Examples
@@ -823,7 +829,7 @@ class MultichannelPredictor(Cloneable, Saveable):
 
     Parameters
     ----------
-    predictor : predictor instance, default=None
+    predictor : predictor instance
         Classifier or regressor that implements the scikit-learn estimator and
         predictor interfaces.
 
@@ -835,6 +841,20 @@ class MultichannelPredictor(Cloneable, Saveable):
 
     Examples
     --------
+    Prediction with multiple input channels:
+    ::
+
+        from sklearn.ensemble import GradientBoostingClassifier
+        import pipecaster as pc
+
+        Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
+                                                      n_random_Xs=7)
+        clf = pc.MultichannelPipeline(n_channels=10)
+        clf.add_layer(pc.MultichannelPredictor(GradientBoostingClassifier()))
+        pc.cross_val_score(clf, Xs, y, cv=3)
+        # output: [0.9117647058823529, 0.8768382352941176, 0.9099264705882353]
+
+    Model stacking:
     ::
 
         from sklearn.ensemble import GradientBoostingClassifier
@@ -853,7 +873,7 @@ class MultichannelPredictor(Cloneable, Saveable):
     """
     state_variables = ['classes_']
 
-    def __init__(self, predictor=None):
+    def __init__(self, predictor):
         self._params_to_attributes(MultichannelPredictor.__init__, locals())
         utils.enforce_fit(predictor)
         utils.enforce_predict(predictor)
@@ -921,45 +941,47 @@ class MultichannelPredictor(Cloneable, Saveable):
 
 class ChannelEnsemble(Cloneable, Saveable):
     """
-    Ensemble predictor with one model per channel and optional in-pipeline
-    model selection.
+    Model ensemble that takes multiple input channels (one model per channel).
 
-    This pipeline component makes inferences with a set of base predictors
-    and a meta-predictor that uses their inferences as input features.  The
-    meta-predictor may be a voting or aggregating algorithm (e.g.
-    SoftVotingClassifier, AggregatingRegressor) or a scikit-learn conformant
-    ML algorithm.  In the latter case, it is standard practice (1) to use
-    internal cross validation training of the base classifiers to prevent them
-    from making inferences on training samples.  To activate internal cross
+    This pipeline component makes inferences with a set of base predictors by
+    either selecting the single best base predictor during fitting or by
+    pooling base predictor inferences with a meta-predictor.
+
+    The meta-predictor may be a voting or aggregating algorithm (e.g.
+    SoftVotingClassifier, AggregatingRegressor) or a scikit-learn conformant ML
+    algorithm.  In the latter case, it is standard practice to use internal
+    cross validation training of the base classifiers to prevent them from
+    making inferences on training samples (1).  To activate internal cross
     validation training, set the internal_cv constructor argument of
-    ChannelEnsemble.  Cross validation is only used to generate
-    outputs for meta-predictor training.  The whole training set is always used
-    to train the final base predictor models.
+    ChannelEnsemble (cross validation is only used to generate outputs for
+    meta-predictor training, the whole training set is always used to train the
+    final base predictor models).
+
+    ChannelEnsemble also takes advantage of internal cross validation
+    to enable in-pipeline screening of base predictors during model
+    fitting. To enable model selection, provide a score_selector (e.g.
+    those found in the :mod:`pipecaster.score_selection` module) to the
+    contructor.
 
     (1) Wolpert, David H. "Stacked generalization."
     Neural networks 5.2 (1992): 241-259.
 
-    ChannelEnsemble also takes advantage of internal cross validation
-    to enable in-pipeling screening of base predictors during model
-    fitting. To enable model selection, provide a score_selector (e.g.
-    those found in the score_selection module) to the contructor.
-
     Parameters
     ----------
-    base_predictors : predictor list of predictors, default=None
-        Ensemble of scikit-learn conformant base predictor instances (either
-        all classifiers or all regressors).  One predictor is trained per input
-        channel.  If a single predictor, it will be broadcast across all
-        channels.  If a list of predictors, the list length must be the same
-        as the number of input channels.
-    meta_predictor : predictor, default=None
-        Scikit-learn conformant classifier or regresor instance that makes
-        predictions from the inference of the base predictors.
+    base_predictors : predictor instance or list of predictor instances
+        Ensemble of scikit-learn conformant base predictors (either all
+        classifiers or all regressors).
+    meta_predictor : predictor instance, default=None
+        Scikit-learn conformant classifier or regressor that makes predictions
+        from the base predictor inferences.  This parameter is optional when
+        the internal_cv and score_selector parameters are set, in which case
+        predictions from the top performing model will be used in the absence
+        of a meta-predictor.
     internal_cv : int, None, or callable, default=None
         - Function for train/test subdivision of the training data.  Used to
           estimate performance of base classifiers and ensure they do not
-          generate predictions from their training samples during meta-predictor
-          training.
+          generate predictions from their training samples during
+          meta-predictor training.
         - If int : StratifiedKfold(n_splits=internal_cv) if classifier or
           KFold(n_splits=internal_cv) if regressor.
         - If None : default value of 5.
@@ -971,7 +993,7 @@ class ChannelEnsemble(Cloneable, Saveable):
         - If 'auto' : balanced_accuracy_score if classifier,
           explained_variance_score if regressor.
     score_selector : callable or None, default=None
-        - Selection method.
+        - Method for selecting models from the ensemble.
         - If callable : Selector with signature:
           selected_indices = callable(scores).
         - If None :  All models will be retained in the ensemble.
@@ -980,21 +1002,25 @@ class ChannelEnsemble(Cloneable, Saveable):
         - If True : cv predictions not used to train the meta-predictor.
     base_predict_methods : str or list, default='auto'
         - Set the name of the base predictor methods to use.
-        - If 'auto' : Use the precedence order specified in transform_wrappers
-          module to select a predict method.
+        - If 'auto' : Use the precedence order specified in
+          :mod:`pipecaster.transform_wrappers` to select a predict method.
         - If str other than 'auto' : Name is broadcast over all channels.
         - If list : List of names, one per channel.
     base_processes : int or 'max', default=1
         - The number of parallel processes to run for base predictor fitting.
-         - If int : Use up to base_processes number of processes.
-         - If 'max' : Use all available CPUs.
-    cv_processes : int or 'max', default=1
-        - The number of parallel processes to run for internal cross validation.
         - If int : Use up to base_processes number of processes.
         - If 'max' : Use all available CPUs.
+    cv_processes : int or 'max', default=1
+        - The number of parallel processes to run for internal cross
+          validation.
+        - If int : Use up to cv_processes number of processes.
+        - If 'max' : Use all available CPUs.
 
-    Example
-    -------
+    Examples
+    --------
+    Measure accuracy of KNeighborsClassifier on each of 10 input channels using
+    internal cross validation, select the top 3 performers, and metapredict
+    with SVC:
     ::
 
         from sklearn.datasets import make_classification
@@ -1026,13 +1052,13 @@ class ChannelEnsemble(Cloneable, Saveable):
     """
     state_variables = ['classes_', 'scores_', 'selected_indices_']
 
-    def __init__(self, base_predictors=None, meta_predictor=None,
+    def __init__(self, base_predictors, meta_predictor=None,
                  internal_cv=None, scorer='auto',
                  score_selector=None,
                  disable_cv_train=False,
                  base_predict_methods='auto',
                  base_processes=1, cv_processes=1):
-        self._params_to_attributes(Ensemble.__init__, locals())
+        self._params_to_attributes(ChannelEnsemble.__init__, locals())
 
         if internal_cv is None and score_selector is not None:
             raise ValueError('Must choose an internal cv method when channel '

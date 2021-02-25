@@ -1,5 +1,5 @@
 """
-Ray multiprocessing back end for pipecaster.parallel.
+Ray multiprocessing back end for :mod:`pipecaster.parallel`.
 """
 
 import os
@@ -35,30 +35,30 @@ def get_index(obj, iterable):
 
 class RayDistributor:
     """
-    Class that provides ray distributed computing to back the pipecaster
-    parallel.py module.
+    Ray distributed computing back end for :mod:`pipecaster.parallel`.
 
     Examples
     --------
     Building a cluster with an ssh computer id:
+    ::
 
-    import pipecaster as pc
-    import pipecaster.ray_backend as rb
+        import pipecaster as pc
+        import pipecaster.ray_backend as ray_backend
 
-    backend = rb.RayDistributor()
-    backend.connect_remote_computer(computer_id='ellen',
-                               app_path='/usr/venv/bin/',
-                               n_cpus='all', n_gpus=0,
-                               object_store_memory='auto')
-    pc.set_distributor(distributor)
+        distributor = ray_backend.RayDistributor()
+        distributor.connect_remote_computer(computer_id='ellen',
+                                   app_path='/home/john/venv/bin/ray',
+                                   n_cpus='all', n_gpus=0,
+                                   object_store_memory='auto')
+        pc.set_distributor(distributor)
 
-    Tips on ray clusters
-    --------------------
-    * Python and ray versions must be identical on all cluster computers.
-    * Ray makes it very hard to set communication ports, so it's not convenient
-    to distribute jobs through a firewall.  Typically cluster computers will
-    have no individual firewalls but will be protected from external attacks
-    by a router firewall.
+    Notes
+    -----
+        - Python and ray versions must be identical on all cluster computers.
+        - Ray makes it very hard to set communication ports, so it's not
+          convenient to distribute jobs through a firewall.  Typically cluster
+          computers will have no individual firewalls but will be protected
+          from external attacks by a router firewall.
     """
 
     def __init__(self):
@@ -82,14 +82,14 @@ class RayDistributor:
         Parameters
         ----------
         n_cpus: int or 'all', default='all'
-            The number of CPUs to request from the local computer.
-            If int: request n_cpus number of cpus
-            If 'all': request all CPUs
+            - The number of CPUs to request from the local computer.
+            - If int: request n_cpus number of cpus
+            - If 'all': request all CPUs
         n_gpus: None, int or 'all', default=None
-            The number of GPUs to request from the local computer.
-            If None: no GPUs will be requested
-            If int: n_gpus number of GPUs will be requested
-            If 'all': request all availalbe GPUs
+            - The number of GPUs to request from the local computer.
+            - If None: no GPUs will be requested
+            - If int: n_gpus number of GPUs will be requested
+            - If 'all': request all availalbe GPUs
         object_store_memory: int or 'auto'
             The number of bytes to request from the in-memory shared object
             store.
@@ -154,12 +154,11 @@ class RayDistributor:
         """
         return self.dashboard_url
 
-    def _start_remote_computer(self, computer_id, app_path=None, n_cpus='all',
+    def _start_remote_computer(self, computer_id, app_path, n_cpus='all',
                                n_gpus='all', object_store_memory='auto'):
         command_string = 'ssh {} '.format(computer_id)
-        if app_path is not None:
-            command_string += app_path
-        command_string += ('ray start --address={} --redis-password={}'
+        command_string += app_path
+        command_string += (' start --address={} --redis-password={}'
                            .format(self.redis_address, self.redis_password))
 
         if n_cpus != 'all':
@@ -181,18 +180,16 @@ class RayDistributor:
         ----------
         computer_id: string
             ssh server id.
-        app_path: string, default=None
-            Optional path to folder on the remote computer containing the ray
-            executable.
+        app_path: string
+            Path to the remote ray executable.
         n_cpus: int or 'all', default='all'
-            The number of CPUs to request from the local computer.
-            If int: request n_cpus number of cpus
-            If 'all': request all CPUs
+            - The number of CPUs to request from the local computer.
+            - If int: request n_cpus number of cpus
+            - If 'all': request all CPUs
         n_gpus: None, int or 'all', default=None
-            The number of GPUs to request from the local computer.
-            If None: no GPUs will be requested
-            If int: n_gpus number of GPUs will be requested
-            If 'all': request all availalbe GPUs
+            - The number of GPUs to request from the local computer.
+            - If int: n_gpus number of GPUs will be requested
+            - If 'all': request all availalbe GPUs
         object_store_memory: int or 'auto'
             The number of bytes to request from the in-memory shared object
             store.
@@ -213,9 +210,8 @@ class RayDistributor:
         ray.shutdown()
         for computer_id, app_path, _, _, _ in self.remote_computers:
             command_string = 'ssh {} '.format(computer_id)
-            if app_path is not None:
-                command_string += app_path
-            command_string += 'ray stop'.format(computer_id, app_path)
+            command_string += app_path
+            command_string += ' stop'.format(computer_id, app_path)
             os.system(command_string)
         self._is_started = False
 
@@ -248,9 +244,9 @@ class RayDistributor:
 
         Parameters
         ----------
-        shared_mem_objects: iterable of objects
+        shared_mem_objects : list
             The objects designated for shared memory storage.
-        arg_lists: variable number of lists
+        arg_lists : variable number of lists
             Each list contains a list of objects.
         """
         if shared_mem_objects is None or len(shared_mem_objects) == 0:
@@ -274,40 +270,42 @@ class RayDistributor:
 
         Arguments
         ---------
-        f: callable
+        f : callable
             Python callable object that you want to execute in parallel.
-        arg_lists: list of tuples
+        arg_lists : list of tuples
             List of argument tuples or lists, where each tuple/list specifies a
                 job.
             e.g. [(arg1-job1, arg2-job1, arg3-job1),
                   (arg1-job2, arg2-job2, arg3-job2)]
-        n_cpus: 'max' or int, default='max'
+        n_cpus : 'max' or int, default='max'
             Number of parallel processes to use for the jobs.
             'max' requests all available CPUs.
-        shared_mem_objects: iterable or None, default=None
+        shared_mem_objects : list or None, default=None
             List of Python objects to pre-store in the plasma in-memory object
             store to prevent repeated storage of large objects.
 
-        Example
-        -------
-        import pipecaster.parallel as parallel
-        import numpy as np
+        Examples
+        --------
+        ::
 
-        def f(a, big_arg):
-            return a + np.mean(big_arg)
+            import pipecaster.parallel as parallel
+            import numpy as np
 
-        big_arg = np.ones(1000)
+            def f(a, big_arg):
+                return a + np.mean(big_arg)
 
-        As = [1, 2, 3]
-        Bs = [big_arg, big_arg, big_arg]
+            big_arg = np.ones(1000)
 
-        args_list = zip(As, Bs)
-        results = parallel.starmap_jobs(f, args_list, n_cpus='max',
-                                        shared_mem_objects=[big_arg])
-        print(results)
+            As = [1, 2, 3]
+            Bs = [big_arg, big_arg, big_arg]
 
-        output:
-        [2.0, 3.0, 4.0]
+            args_list = zip(As, Bs)
+            results = parallel.starmap_jobs(f, args_list, n_cpus='max',
+                                            shared_mem_objects=[big_arg])
+            print(results)
+
+            output:
+            [2.0, 3.0, 4.0]
         '''
         arg_lists = list(zip(*args_list))
         return self.map_jobs(f, *arg_lists, n_cpus=n_cpus,
@@ -320,33 +318,35 @@ class RayDistributor:
 
         Parameters
         ----------
-        f: callable
+        f : callable
             Python callable object that you want to execute in parallel.
-        *arg_lists: iterable
+        *arg_lists : iterable
             List of arg_lists, where each arg_list is list of arguments to be
             sent to f() ordered by job number.
             e.g. [arg1-job1, arg1-job2, arg1-job3],
                  [arg2-job1, arg2-job2, arg2-job3]
-        n_cpus: 'max' or int, default='max'
+        n_cpus : 'max' or int, default='max'
             Number of parallel processes to use for the jobs.  'max' requests
             all available CPUs.
-        shared_mem_objects: iterable or None, default=None
+        shared_mem_objects : iterable or None, default=None
             List of Python objects to pre-store in the plasma in-memory object
             store to prevent repeated storage of large objects.
 
-        Example
-        -------
-        import pipecaster.parallel as parallel
+        Examples
+        --------
+        ::
 
-        def f(a, big_arg):
-            return a + big_arg
+            import pipecaster.parallel as parallel
 
-        As = [1, 2, 3]
-        Bs = [big_arg, big_arg, big_arg]
+            def f(a, big_arg):
+                return a + big_arg
 
-        args_list = zip(As, Bs)
-        results = parallel.starmap_jobs(f, args_list, n_cpus='max',
-                                        shared_mem_objects=[big_arg])
+            As = [1, 2, 3]
+            Bs = [big_arg, big_arg, big_arg]
+
+            args_list = zip(As, Bs)
+            results = parallel.starmap_jobs(f, args_list, n_cpus='max',
+                                            shared_mem_objects=[big_arg])
 
         note: Using shared_mem_objects only increases speed when a large
         argument is passed multiple times in the jobs list because in those

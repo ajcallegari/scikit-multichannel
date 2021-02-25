@@ -20,7 +20,7 @@ def get_live_channels(Xs, channel_indices=None):
     Parameters
     ----------
     Xs : list
-        List of feature matrices (or None).
+        List of feature matrices and None placeholders.
     channel_indices : int, list/array of ints, or None, default=None
         - If int or list/array of int: Indices of the matrices in Xs to query.
         - If None: Query all input matrices in Xs.
@@ -285,9 +285,9 @@ class Layer(Cloneable, Saveable):
 
         Parameters
         ----------
-        Xs : list of {ndarray.shape(n_samples, n_features) or None}
-            List of feature matrix inputs.
-        y : list/array of length n_samples, default=None
+        Xs : list
+            List of feature matrices and None spaceholders.
+        y : list/array, default=None
             Optional targets for supervised ML.
         fit_params : dict, default={}
             Auxiliary parameters to be sent to the fit_transform or fit methods
@@ -521,12 +521,12 @@ class MultichannelPipeline(Cloneable, Saveable):
     """
     ML pipeline with multiple inputs.
 
-    MultichannelPipeline implements a multi-channel analog of the scikit-learn
-    estimator/transformer and estimator/predictor interfaces.  For instance,
-    a scikit-learn estimator/predictor is fit by calling
+    MultichannelPipeline implements a multichannel analog of the scikit-learn
+    Pipeline class.  For instance, a scikit-learn pipeline (which has the
+    estimator and predictor interfaces) is fit by calling
     pipeline.fit(X_train, y_train) and predicts with pipeline.predict(X), while
     a MultichannelPipeline is fit by calling pipeline.fit(Xs_train, y_train)
-    and predicts with pipeline.fit(Xs).
+    and predicts with pipeline.predict(Xs).
 
     **Visual feedback**
 
@@ -853,10 +853,10 @@ class MultichannelPipeline(Cloneable, Saveable):
         Parameters
         ----------
         Xs : list
-            List of input feature matrices (or None for dead channels).
+            List of feature matrices and None spaceholders.
         y : list/array, default=None
             Optional targets for supervised ML.
-        fit_params : dict, defualt=None
+        fit_params : dict, default=None
             Auxiliary parameters to pass to the fit method of the predictors.
 
         Returns
@@ -912,7 +912,7 @@ class MultichannelPipeline(Cloneable, Saveable):
             List of feature matrix inputs (or None value placeholders).
         y: list/array of length n_samples, default=None
             Optional targets for supervised ML.
-        fit_params: dict, defualt=None
+        fit_params: dict, default=None
             Auxiliary parameters passed to the fit method of the predictor.
 
         Returns
@@ -1159,8 +1159,8 @@ class ChannelConcatenator(Cloneable, Saveable):
     output the concatemer in the first ouptut channel and None into the
     remaining channels.
 
-    Example
-    -------
+    Examples
+    --------
     ::
 
         from sklearn.ensemble import GradientBoostingClassifier
@@ -1183,11 +1183,11 @@ class ChannelConcatenator(Cloneable, Saveable):
 
         Parameters
         ----------
-        Xs : list of [ndarray.shape(n_samples, n_features) or None]
-            List of feature matrix inputs.
-        y : list/array of length n_samples, default=None
-            Targets for supervised ML.
-        fit_params: dict, defualt=None
+        Xs : list
+            List of feature matrices and None spaceholders.
+        y : list/array, default=None
+            Optional targets for supervised ML.
+        fit_params: dict, default=None
             Auxiliary parameters to pass to the fit method of the predictor.
         """
         return self
@@ -1219,10 +1219,10 @@ class ChannelConcatenator(Cloneable, Saveable):
         Parameters
         ----------
         Xs : list
-            List of input feature matrices (or None value placeholders).
-        y : list/array of length n_samples, default=None
+            List of feature matrices and None spaceholders.
+        y : list/array, default=None
             Optional targets for supervised ML.
-        fit_params : dict, defualt=None
+        fit_params : dict, default=None
             Auxiliary parameters to pass to the fit method of the predictor.
 
         Returns

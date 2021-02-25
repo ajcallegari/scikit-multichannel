@@ -65,10 +65,11 @@ class AggregateFeatureScorer(Cloneable, Saveable):
 
 class CvPerformanceScorer(Cloneable, Saveable):
     """
-    Channel scorer that uses a probe predictor and cross validation.
+    Channel scorer that computes performance of a predictor probe using cross
+    validation.
 
     Callable class that estimates the predictive value of a feature matrix
-    using a machine learning probe and cross validaction.
+    using a machine learning probe and cross validation.
 
     Parameters
     ----------
@@ -77,7 +78,7 @@ class CvPerformanceScorer(Cloneable, Saveable):
         high speed, used to estimate the predictive value of a feature matrix.
     cv : None, int, or callable, default=5
         - Set the cross validation method:
-        - If 1: Internal cv training is inactivated
+        - If 1: Internal cv training is inactivated.
         - If int > 1: StratifiedKFold(n_splits=internal_cv) for classifiers and
           KFold(n_splits=internal_cv) for regressors.
         - If None: The default value of 5 is used.

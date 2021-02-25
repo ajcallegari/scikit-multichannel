@@ -3,26 +3,25 @@ Distributed computing interface.
 
 Users can typically ignore this module unless they want to get information
 about resources or set a custom back end using
-set_distributor(my_backend_instance).  For info on building a cluster, see the
-ray_backend module.
+set_distributor(my_backend_instance).  For info on building a cluster, see
+:class:`pipecaster.ray_backend.RayDistributor`.
 
 Notes
 -----
 Custom parallel backend implementations need to provide a distributor Class
 with these methods:
-1) map_jobs(f, *arg_lists, n_cpus='max', shared_mem_objects=None)
-2) is_started(): takes no args, indicates if start() needs to be called before
-    jobs can be executed
-3) startup(n_cpus='all', n_gpus='all', object_store_memory='auto')
-4) count_cpus(): return total number of CPUs available for computing
-5) count_gpus(): return total number of GPUs available for computing
-6) shutdown(): free up the computing resources of the Distributor
+    - map_jobs(f, *arg_lists, n_cpus='max', shared_mem_objects=None)
+    - is_started() : takes no args, indicates if start() needs to be called
+      before jobs can be executed
+    - startup(n_cpus='all', n_gpus='all', object_store_memory='auto')
+    - count_cpus() : return total number of CPUs available for computing
+    - count_gpus() : return total number of GPUs available for computing
+    - shutdown() : free up the computing resources of the Distributor
 
 Examples
 --------
+basic multiprocessing with map interface:
 ::
-
-    # basic multiprocessing with map interface
 
     import pipecaster.parallel as parallel
 
@@ -38,7 +37,10 @@ Examples
     output:
     [5, 7, 9]
 
-    # basic multiprocessing with starmap interface
+basic multiprocessing with starmap interface:
+::
+
+    import pipecaster.parallel as parallel
 
     # same as example 2 but add zip() and change the map call as follows:
     args_list = zip(As, Bs)
@@ -48,8 +50,9 @@ Examples
     output:
     [5, 7, 9]
 
-    # fast distribution of large objects for multiprocessing using a shared
-    # memory stores
+fast distribution of large objects for multiprocessing using a shared memory
+stores:
+::
 
     import pipecaster.parallel as parallel
     import numpy as np
