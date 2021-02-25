@@ -1,52 +1,27 @@
 """
-Add transform methods and internal cross validation training to predictors.
+Wrapper classes for model stacking.
 
-These wrapper classes provide single channel and multichannel predictors with
-transform and fit_transform methods, internal cv_training, and internal_cv
-performance scoring.  Used for meta-prediction and model selection.  Users
-don't generally need to use these wrappers because they are applied
-automatically within MultichannelPipeline objects when a pipe lacks a required
-transform or fit_transform method.
+MultichannelPipelines treat internal component as transfomers (i.e. invoking
+fit/transform/fit_transform).  As a consequence, when predictors are used
+internally in stacked architectures, a transformer interface must be added to
+the internal predictors.  In practice, this just means choosing a prediction
+method to use when transforming and converting 1D outputs to 2D outputs.
 
-Conversion of prediction methods to tranform methods is done using the
-transform_method_name argument, but this argument can usually be left at its
-default value of None to allow autoconversion using the precedence of
-prediction functions defined in the transform_method_precedence module
-variable.
+:class:`SingleChannel` and :class:`Multichannel` classes add a transformer
+interface to single channel and multichannel predictors respectively.
 
-Internal cross validation (internal cv) training is typically used when
-traning a meta-predictor so that base predictors do not make inferences on
-their own training samples (1).  Internal cv training can improve metapredictor
-accuracy if overfitting is a limiting problem, or it can reduce metapredictor
-accuracy if the number of training samples is limiting.
+:class:`SingleChannelCV` and :class:`MultichannelCV` classes add a transformer
+interface and internal cross validaiton training to single channel and
+multichannel predictors respectively.  Internal cross validation (internal cv)
+training is typically used when outputs of a base predictor will be used to
+train a meta-predictor.  It guarantees that base predictors do not make
+inferences on their own training samples (1).  Internal cv training can improve
+meta-predictor accuracy if overfitting is a limiting problem, or it can reduce
+metapredictor accuracy if the number of training samples is limiting.
 
 (1) Wolpert, David H. "Stacked generalization." Neural networks 5.2
     (1992): 241-259.
-
-Examples
---------
-::
-
-    # give a single channel predictor transform and fit_transform methods
-    import pipecaster as pc:
-    pipe = pc.transformer_wrappers.SingleChannel(pipe)
-
-    # give a single channel predictor transform & fit_transform methods,
-        and internal_cv training:
-    import pipecaster as pc
-    pipe = pc.transformer_wrappers.SingleChannelCV(pipe, internal_cv=3,
-                                                   cv_processes=1)
-
-    # give a multichannel predictor transform and fit_transform methods:
-    import pipecaster as pc
-    pipe = pc.transformer_wrappers.Multichannel(pipe)
-
-    # give a multichannel predictor transform & fit_transform methods, and
-        internal_cv training:
-    import pipecaster as pc
-    pipe = pc.transformer_wrappers.MultichannelCV(pipe, internal_cv=3,
-                                                  cv_processes=1)
-    """
+"""
 
 import functools
 import numpy as np
@@ -62,8 +37,7 @@ transform_method_precedence = ['predict_proba', 'decision_function',
 
 def get_transform_method(pipe):
     """
-    Get a reference to a transform method for a pipe using
-        transform_method_precedence.
+    Get reference to a transform method.
 
     Parameters
     ----------
@@ -81,7 +55,7 @@ def get_transform_method(pipe):
 
 def get_transform_method_name(pipe):
     """
-    Get a transform method name for a pipe using transform_method_precedence.
+    Get transform method name for a pipe using transform_method_precedence.
 
     Parameters
     ----------
@@ -99,17 +73,38 @@ def get_transform_method_name(pipe):
 
 class SingleChannel(Cloneable, Saveable):
     """
+    Add transformer interface to a scikit-learn predictor.
+
     Wrapper class that provides scikit-learn conformant predictors with
-        transform and fit_transform methods.
+    transform() and fit_transform methods().
 
     Parameters
     ----------
-    predictor: predictor instance, default=None
-        The sklearn conformant predictor to wrap.
+    predictor : predictor instance
+        The scikit-learn conformant predictor to wrap.
     transform_method_name : string, default='auto'
         Name of the prediction method to used for generating outputs on call to
         transform or fit_transform. If 'auto', the method is automatically
         chosen using the order specified in transform_method_precedence.
+
+    Examples
+    --------
+    Model stacking:
+    ::
+
+        from sklearn.ensemble import GradientBoostingClassifier
+        from sklearn.svm import SVC
+        import pipecaster as pc
+
+        Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
+                                                      n_random_Xs=7)
+        clf = pc.MultichannelPipeline(n_channels=10)
+        base_clf = pc.transform_wrappers.SingleChannel(
+                                                GradientBoostingClassifier())
+        clf.add_layer(base_clf, pipe_processes='max')
+        clf.add_layer(pc.MultichannelPredictor(SVC()))
+        pc.cross_val_score(clf, Xs, y, cv=3)
+        # output: [0.8529411764705882, 0.8216911764705883, 0.9099264705882353]
 
     Notes
     -----
@@ -120,7 +115,7 @@ class SingleChannel(Cloneable, Saveable):
     """
     state_variables = ['classes_']
 
-    def __init__(self, predictor=None, transform_method_name='auto'):
+    def __init__(self, predictor, transform_method_name='auto'):
         self._params_to_attributes(SingleChannel.__init__, locals())
         utils.enforce_fit(predictor)
         if transform_method_name == 'auto':
@@ -208,31 +203,60 @@ class SingleChannel(Cloneable, Saveable):
 
 class SingleChannelCV(SingleChannel):
     """
-    Wrapper class that provides predictors with transform and fit_transform
-    methods, and internal cross validation training and scoring.
+    Add transformer interface and internal cross validation training to
+    scikit-learn predictor.
 
-    arguments
-    ---------
-    predictor: scikit-learn conformant predictor instance
-        The predictor to wrap.
+    Wrapper class that provides predictors with transform() and fit_transform()
+    methods, and internal cross validation training with performance scoring.
+
+    Parameters
+    ----------
+    predictor : predictor instance
+        The scikit-learn conformant predictor to wrap.
     transform_method_name: string, default='auto'
         Name of the prediction method to used for generating outputs on call to
         transform or fit_transform. If 'auto', the method is automatically
         chosen using the order specified in transform_method_precedence.
-    internal_cv: int, sklearn cross validation splitter, or None, default=5
-        If 1: Internal cv training is inactivated.
-        If >1: KFold is used for regressors and StratifiedKFold used for
-            classifiers.
-        If None: Default value of 5 is used.
-    cv_processes: int, default=1
-        Number of parallel fit jobs to run during internal cv training.
-    scorer: callable, default=None
-        Callable with the pattern scorer(y_true, y_pred) that computes a figure
-        of merit for the internal_cv run.  The figure of merit is exposed
-        through creation of a score_ attribute. This value is use by by
-        ModelSelector to select models based on performance.
+    internal_cv : int, None, or callable, default=5
+        - Function for train/test subdivision of the training data.  Used to
+          estimate performance of base classifiers and ensure they do not
+          generate predictions from their training samples during
+          meta-predictor training.
+        - If int : StratifiedKfold(n_splits=internal_cv) if classifier or
+          KFold(n_splits=internal_cv) if regressor.
+        - If None : default value of 5.
+        - If callable: Assumed to be split generator like scikit-learn KFold.
+    cv_processes : int or 'max', default=1
+        - The number of parallel processes to run for internal cross
+          validation.
+        - If int : Use up to cv_processes number of processes.
+        - If 'max' : Use all available CPUs.
+    scorer : callable, default=None
+        Callable that computes a figure of merit score for the internal_cv run.
+        Expected pattern: score = scorer(y_true, y_pred). The cross validation
+        score is exposed through creation of a score_ attribute during calls to
+        fit_transform().
 
-    notes
+    Examples
+    --------
+    Model stacking:
+    ::
+
+        from sklearn.ensemble import GradientBoostingClassifier
+        from sklearn.svm import SVC
+        import pipecaster as pc
+
+        Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
+                                                      n_random_Xs=7)
+        clf = pc.MultichannelPipeline(n_channels=10)
+        base_clf = pc.transform_wrappers.SingleChannelCV(
+                                                GradientBoostingClassifier())
+        clf.add_layer(base_clf, pipe_processes='max')
+        clf.add_layer(pc.MultichannelPredictor(SVC()))
+        pc.cross_val_score(clf, Xs, y, cv=3)
+        # output: [0.9411764705882353, 0.9411764705882353, 0.9375]
+
+    Notes
     -----
     fit().transform() is not the same as fit_tranform() because only the latter
     uses internal cv training and inference.
@@ -240,8 +264,7 @@ class SingleChannelCV(SingleChannel):
     set and cv splits of the training set. The model fit on the entire dataset
     is stored for inference on subsequent calls to predict(), predict_proba(),
     decision_function(), or tranform().  The models fit on cv splits are used
-    to make the predictions returned by fit_transform but are not stored for
-    future use.
+    to make the outputs of fit_transform() but are not stored for future use.
 
     This class uses reflection to expose the predictor methods found in the
     object that it wraps, so the method attributes in a SingleChannelCV
@@ -302,29 +325,49 @@ class SingleChannelCV(SingleChannel):
 
 class Multichannel(Cloneable, Saveable):
     """
-    Wrapper class that provides scikit-learn conformant predictors with
-        transform and fit_transform methods.
+    Add transformer interface to a multichannel predictor.
+
+    Wrapper class that provides pipecaster's multichannel predictors with
+    transform() and fit_transform methods().
 
     Parameters
     ----------
-    predictor: predictor instance, default=None
-        The sklearn conformant predictor to wrap.
+    multichannel_predictor : multichannel_predictor instance
+        The predictor to wrap.
     transform_method_name : string, default='auto'
         Name of the prediction method to used for generating outputs on call to
         transform or fit_transform. If 'auto', the method is automatically
         chosen using the order specified in transform_method_precedence.
 
+    Examples
+    --------
+    model stacking:
+    ::
+
+        from sklearn.ensemble import GradientBoostingClassifier
+        from sklearn.svm import SVC
+        import pipecaster as pc
+
+        Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
+                                                      n_random_Xs=7)
+        clf = pc.MultichannelPipeline(n_channels=10)
+        base_clf = pc.transform_wrappers.Multichannel(
+            pc.MultichannelPredictor(GradientBoostingClassifier()))
+        clf.add_layer(5, base_clf, 5, base_clf, pipe_processes=1)
+        clf.add_layer(pc.MultichannelPredictor(SVC()))
+        pc.cross_val_score(clf, Xs, y, cv=3)
+        # output: [0.9411764705882353, 0.9411764705882353, 0.8768382352941176]
+
     Notes
     -----
     This class uses reflection to expose the predictor methods found in the
-    object that it wraps, so the method attributes in a SingleChannel instance
-    are not usually identical to the method attributes of the SingleChannel
+    object that it wraps, so the method attributes in a Multichannel instance
+    are not usually identical to the method attributes of the Multichannel
     class.
     """
     state_variables = ['classes_']
 
-    def __init__(self, multichannel_predictor=None,
-                 transform_method_name='auto'):
+    def __init__(self, multichannel_predictor, transform_method_name='auto'):
         self._params_to_attributes(Multichannel.__init__, locals())
         utils.enforce_fit(multichannel_predictor)
         utils.enforce_predict(multichannel_predictor)
@@ -389,7 +432,7 @@ class Multichannel(Cloneable, Saveable):
         return Xs_t
 
     def fit_transform(self, Xs, y=None, **fit_params):
-        self.fit(Xs, y=None, **fit_params)
+        self.fit(Xs, y, **fit_params)
         return self.transform(Xs)
 
     def get_descriptor(self, verbose=1):
@@ -399,31 +442,61 @@ class Multichannel(Cloneable, Saveable):
 
 class MultichannelCV(Multichannel):
     """
-    Wrapper class that provides multichannel predictors with transform and
-    fit_transform methods, and internal cross validation training and scoring.
+    Add transformer interface and internal cross validation training to
+    multichannel predictor.
 
-    arguments
-    ---------
-    predictor: scikit-learn conformant predictor instance
-        The predictor to wrap.
-    transform_method_name : string, default='auto'
+    Wrapper class that provides pipecaster's multichannel predictors with
+    transform() and fit_transform() methods, and internal cross validation
+    training with performance scoring.
+
+    Parameters
+    ----------
+    multichannel_predictor : multichannel_predictor instance
+        The pipecaster predictor to wrap.
+    transform_method_name: string, default='auto'
         Name of the prediction method to used for generating outputs on call to
         transform or fit_transform. If 'auto', the method is automatically
         chosen using the order specified in transform_method_precedence.
-    internal_cv: int, sklearn cross validation splitter, or None, default=5
-        If 1: Internal cv training is inactivated.
-        If >1: KFold is used for regressors and StratifiedKFold used for
-            classifiers.
-        If None: Default value of 5 is used.
-    cv_processes: int, default=1
-        Number of parallel fit jobs to run during internal cv training.
-    scorer: callable, default=None
-        Callable with the pattern scorer(y_true, y_pred) that computes a figure
-        of merit for the internal_cv run.  The figure of merit is exposed
-        through creation of a score_ attribute. This value is use by by
-        ModelSelector to select models based on performance.
+    internal_cv : int, None, or callable, default=5
+        - Function for train/test subdivision of the training data.  Used to
+          estimate performance of base classifiers and ensure they do not
+          generate predictions from their training samples during
+          meta-predictor training.
+        - If int : StratifiedKfold(n_splits=internal_cv) if classifier or
+          KFold(n_splits=internal_cv) if regressor.
+        - If None : default value of 5.
+        - If callable: Assumed to be split generator like scikit-learn KFold.
+    cv_processes : int or 'max', default=1
+        - The number of parallel processes to run for internal cross
+          validation.
+        - If int : Use up to cv_processes number of processes.
+        - If 'max' : Use all available CPUs.
+    scorer : callable, default=None
+        Callable that computes a figure of merit score for the internal_cv run.
+        Expected pattern: score = scorer(y_true, y_pred). The cross validation
+        score is exposed through creation of a score_ attribute during calls to
+        fit_transform().
 
-    notes
+    Examples
+    --------
+    model stacking:
+    ::
+
+        from sklearn.ensemble import GradientBoostingClassifier
+        from sklearn.svm import SVC
+        import pipecaster as pc
+
+        Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
+                                                      n_random_Xs=7)
+        clf = pc.MultichannelPipeline(n_channels=10)
+        base_clf = pc.transform_wrappers.MultichannelCV(
+            pc.MultichannelPredictor(GradientBoostingClassifier()))
+        clf.add_layer(5, base_clf, 5, base_clf, pipe_processes=1)
+        clf.add_layer(pc.MultichannelPredictor(SVC()))
+        pc.cross_val_score(clf, Xs, y, cv=3)
+        # output: [0.8823529411764706, 0.9393382352941176, 0.9080882352941176]
+
+    Notes
     -----
     fit().transform() is not the same as fit_tranform() because only the latter
     uses internal cv training and inference.
@@ -431,8 +504,7 @@ class MultichannelCV(Multichannel):
     set and cv splits of the training set. The model fit on the entire dataset
     is stored for inference on subsequent calls to predict(), predict_proba(),
     decision_function(), or tranform().  The models fit on cv splits are used
-    to make the predictions returned by fit_transform but are not stored for
-    future use.
+    to make the outputs of fit_transform() but are not stored for future use.
 
     This class uses reflection to expose the predictor methods found in the
     object that it wraps, so the method attributes in a MultichannelCV
@@ -441,8 +513,7 @@ class MultichannelCV(Multichannel):
     """
     state_variables = ['score_']
 
-    def __init__(self, multichannel_predictor=None,
-                 transform_method_name='auto',
+    def __init__(self, multichannel_predictor, transform_method_name='auto',
                  internal_cv=5, cv_processes=1, scorer=None):
         internal_cv = 5 if internal_cv is None else internal_cv
         self._params_to_attributes(MultichannelCV.__init__, locals())

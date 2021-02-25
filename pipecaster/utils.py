@@ -1,8 +1,9 @@
 """
 Utilities for characterizing and defining pipeline components.
 
-The term "pipes" is used to describe objects with the scikit-learn
-estimator/transformer/predictor interfaces or multichannel analogs.
+Note: The term "pipes" is used to describe objects with the scikit-learn
+estimator/transformer or estimator/predictor interfaces, or multichannel
+analog of these interfaces.
 """
 
 import numpy as np
@@ -33,14 +34,14 @@ def get_clone(pipe, stateless=False):
     ----------
     pipe : pipe instance
     stateless : bool, default=False
-        False: Use the pipe's get_clone() method or fall back on scikit-learn
-            stateless clone sklearn.base.clone(pipe).
-        True: Force scikit-learn stateless clone:
-            sklearn.base.clone(pipe)
+        - If False: Use the pipe's get_clone() method or fall back on
+          scikit-learn stateless clone sklearn.base.clone(pipe).
+        - If True: Force scikit-learn stateless clone:
+          sklearn.base.clone(pipe).
 
     Returns
     -------
-    A copy of the pipe argument.
+    Copy of the pipe argument.
 
     Notes
     -----
@@ -231,22 +232,21 @@ class ParallelBackendError(Exception):
 
 def get_descriptor(obj, verbose=0, params=None):
     """
-    Get a text description of on object (e.g. a pipe) with optional
-    information about parameter values.
+    Get a text description of on object.
 
     Parameters
     ----------
-    class_name: string
+    class_name : string
         Name of the class to describe.
-    params: dict, default=None
+    params : dict, default=None
         Dict of parameter value mappings to be included in description.
-    verbose: int, default=0
-        if 0: return a string with no parameters,
-            e.g.: "RandomForestClassifier"
-        if 1: return a string including parameters in params argument.
-            e.g. "RandomForestClassifier(n_estimators=50)"
-        if -1: return a condensed class name, e.g. "RanForCla",
-            (not implemented)
+    verbose : int, default=0
+        - If 0: return a string with no parameters,
+          e.g.: "RandomForestClassifier"
+        - If 1: return a string including parameters in params argument.
+          e.g. "RandomForestClassifier(n_estimators=50)"
+        - If -1: return a condensed class name, e.g. "RanForCla",
+          not implemented)
     """
     if hasattr(obj, 'get_descriptor'):
         return obj.get_descriptor(verbose)
@@ -277,7 +277,7 @@ def get_descriptor(obj, verbose=0, params=None):
 
 def get_param_names(callable_, omit_self=True):
     """
-    Get the names of the arguments of a function or method.
+    Get names of the arguments of a function or method.
     """
     param_names = set(getfullargspec(callable_)[0])
     if omit_self:
@@ -287,7 +287,7 @@ def get_param_names(callable_, omit_self=True):
 
 def get_param_clone(pipe):
     """
-    Clone a pipe instance by getting its parameters (scikit-learn pattern)
+    Clone pipe instance by getting/setting parameters (scikit-learn pattern).
     """
     return pipe.__class__(**pipe.get_params())
 
@@ -295,11 +295,12 @@ def get_param_clone(pipe):
 class Cloneable:
 
     """
-    Base class that provides stateless and stateful cloning, and eliminates
-        the sci-kit estimator boilerplate code that converts
-        initialization parameters to class attributes.
+    Base class that provides stateless and stateful cloning.
 
-    Usage
+    Eliminates the scikit-learn estimator boilerplate code that converts
+    initialization parameters to class attributes.
+
+    Notes
     -----
     Include this line in sublass __init__() to automatically store params:
         _params_to_attributes(self, callable_, locals())
@@ -369,11 +370,17 @@ class Saveable:
     Base class for saveable objects, including pipes and pipelines.
     """
     def save(self, filepath):
+        """
+        Save the model to a filepath using joblib pickling.
+        """
         joblib.dump(self, filepath)
         return self
 
     @staticmethod
     def load(filepath):
+        """
+        Load the model from a filepath using joblib pickling.
+        """
         return joblib.load(filepath)
 
 
@@ -395,23 +402,22 @@ def decode_labels(y, classes_):
     return classes_[y]
 
 
-def classify_sample(class_probs, classes_=None,
+def classify_sample(class_probs, class_names=None,
                     operating_characteristic=None):
     """
-    Choose a class based on marginal probabilities output by
-        a classifier.
+    Choose a class based on marginal probabilities.
 
     Parameters
     ----------
-    class_probs: ndarray.shape(n_classes) or list of len n_classes
+    class_probs : ndarray.shape(n_classes) or list of len n_classes
         Predicted marginal probility of each class.
-    class_names: ndarray, default=None
+    class_names : ndarray, default=None
         Ordered array of class names for decoding.
-    operating_characteristic: float, default=None
-        Classification threshold for binary classification.
-        If None: choose the class with the greatest marginal probability
-        If float: classify positive class marginal prob values of
-            operating_characteristic or above as positive, else negative.
+    operating_characteristic : float, default=None
+        - Classification threshold for binary classification:
+        - If None : choose the class with the greatest marginal probability
+        - If float : classify positive class marginal prob values of
+          operating_characteristic or above as positive, else negative.
     """
     if operating_characteristic is None:
         class_number = np.argmax(class_probs)
@@ -433,23 +439,23 @@ def classify_sample(class_probs, classes_=None,
                     return decode_labels(0, classes_)
 
 
-def classify_samples(sample_probs, classes_=None,
+def classify_samples(sample_probs, class_names=None,
                      operating_characteristic=None):
     """
-    Choose classes based on marginal probabilities output by
-        a classifier.
+    Choose classes based on marginal probabilities.
 
     Parameters
     ----------
-    class_probs: ndarray.shape(n_samples, n_classes)
-        Predicted marginal probility of each class.
-    class_names: ndarray, default=None
+    sample_probs : ndarray/list
+        List of predicted marginal probility of each class for multiple
+        samples.
+    class_names : ndarray, default=None
         Ordered array of class names for decoding.
-    operating_characteristic: float, default=None
-        Classification threshold for binary classification.
-        If None: choose the class with the greatest marginal probability
-        If float: classify positive class marginal prob values of
-            operating_characteristic or above as positive, else negative.
+    operating_characteristic : float, default=None
+        - Classification threshold for binary classification:
+        - If None : choose the class with the greatest marginal probability
+        - If float : classify positive class marginal prob values of
+          operating_characteristic or above as positive, else negative.
     """
     classes = [classify_sample(ps, classes_, operating_characteristic)
                for ps in sample_probs]
