@@ -421,22 +421,22 @@ def classify_sample(class_probs, class_names=None,
     """
     if operating_characteristic is None:
         class_number = np.argmax(class_probs)
-        if classes_ is None:
+        if class_names is None:
             return class_number
         else:
-            return decode_labels(class_number, classes_)
+            return decode_labels(class_number, class_names)
     else:
         if len(class_probs) > 2:
             raise NotImplmentedError('Operating characteristic not \
                                      implemented for more than 2 classes.')
         elif len(class_probs) == 2:
-            if classes_ is None:
+            if class_names is None:
                 return 1 if class_probs[1] >= operating_characteristic else 0
             else:
                 if class_probs[1] >= operating_characteristic:
-                    return decode_labels(1, classes_)
+                    return decode_labels(1, class_names)
                 else:
-                    return decode_labels(0, classes_)
+                    return decode_labels(0, class_names)
 
 
 def classify_samples(sample_probs, class_names=None,
@@ -457,6 +457,6 @@ def classify_samples(sample_probs, class_names=None,
         - If float : classify positive class marginal prob values of
           operating_characteristic or above as positive, else negative.
     """
-    classes = [classify_sample(ps, classes_, operating_characteristic)
+    classes = [classify_sample(ps, class_names, operating_characteristic)
                for ps in sample_probs]
     return np.array(classes)

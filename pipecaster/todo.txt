@@ -1,0 +1,24 @@
+
+Add wrapper that makes MultichannelPipeline look like a standard single
+channel pipeline/
+
+Add distributed hyperparameter screen function.
+
+Add memory / cache support to allow disk caching of transformer results to
+accelerate hyperparameter screens (described here
+https://scikit-learn.org/dev/modules/compose.html)
+
+OOB errors for SelectivePredictorStack and ChannelModelSelector
+
+Implement model exporting that reduces complexity and footprint to active
+input channels and predictors only.
+
+multilabel and multiclass support
+also, multilabel support with label subsets (i.e. allow what nikulin called a
+“detector net” and intermediate labels).
+
+Get rid of predictor interface detection or add transformer interface detection
+for consistency.  Sklearn exposes all possible interfaces, but pipecaster is
+mixed, exposing the transformer interface regardless of its internal status
+but presenting only the predictor interface that exists internally on the
+final layers.
