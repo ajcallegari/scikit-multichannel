@@ -379,9 +379,7 @@ class Ensemble(Cloneable, Saveable):
 
     Examples
     --------
-    Measure accuracy of 6 different ML models on a single input channel using
-    internal cross validation, select the top 2 performers, and meta-predict
-    with SoftVotingClassifier:
+    Voting ensemble:
     ::
 
         from sklearn.datasets import make_classification
@@ -392,6 +390,7 @@ class Ensemble(Cloneable, Saveable):
         from sklearn.ensemble import GradientBoostingClassifier
         from sklearn.ensemble import RandomForestClassifier
         from sklearn.naive_bayes import GaussianNB
+        from sklearn.pipeline import Pipeline
         import pipecaster as pc
 
         X, y = make_classification(n_classes=2, n_samples=500, n_features=100,
@@ -401,19 +400,134 @@ class Ensemble(Cloneable, Saveable):
                       KNeighborsClassifier(),  GradientBoostingClassifier(),
                       RandomForestClassifier(), GaussianNB()]
 
-        clf = pc.Ensemble(
+        ensemble_clf = pc.Ensemble(
+                         base_predictors=predictors,
+                         meta_predictor=pc.SoftVotingClassifier(),
+                         base_processes='max')
+
+        clf = Pipeline([('scaler', StandardScaler()),
+                        ('ensemble_clf', ensemble_clf)])
+
+        pc.cross_val_score(clf, X, y)
+        # output: [0.8142570281124498, 0.8262335054503729, 0.8429152148664344]
+
+    Ensemble voting with model selection:
+    ::
+
+        from sklearn.datasets import make_classification
+        from sklearn.preprocessing import StandardScaler
+        from sklearn.neural_network import MLPClassifier
+        from sklearn.linear_model import LogisticRegression
+        from sklearn.neighbors import KNeighborsClassifier
+        from sklearn.ensemble import GradientBoostingClassifier
+        from sklearn.ensemble import RandomForestClassifier
+        from sklearn.naive_bayes import GaussianNB
+        from sklearn.pipeline import Pipeline
+        import pipecaster as pc
+
+        X, y = make_classification(n_classes=2, n_samples=500, n_features=100,
+                                   n_informative=5, class_sep=0.6)
+
+        predictors = [MLPClassifier(), LogisticRegression(),
+                      KNeighborsClassifier(),  GradientBoostingClassifier(),
+                      RandomForestClassifier(), GaussianNB()]
+
+        ensemble_clf = pc.Ensemble(
                          base_predictors=predictors,
                          meta_predictor=pc.SoftVotingClassifier(),
                          internal_cv=5, scorer='auto',
                          score_selector=pc.RankScoreSelector(k=2),
-                         base_processes=pc.count_cpus())
+                         disable_cv_train=True, base_processes='max')
+
+        clf = Pipeline([('scaler', StandardScaler()),
+                        ('ensemble_clf', ensemble_clf)])
+
         pc.cross_val_score(clf, X, y)
-        # output: [0.7066838783706253, 0.7064687320711417, 0.6987951807228916]
+        # output: [0.8625215146299483, 0.8440189328743546, 0.8373493975903614]
 
         clf.fit(X, y)
         # Models selected by the Ensemble:
-        [p for i, p in enumerate(predictors) if i in clf.get_support()]
+        ensemble_clf = clf.named_steps['ensemble_clf']
+        [p for i, p in enumerate(predictors)
+         if i in ensemble_clf.get_support()]
         # output: [GradientBoostingClassifier(), RandomForestClassifier()]
+
+    Stacked generalization:
+    ::
+
+        from sklearn.datasets import make_classification
+        from sklearn.preprocessing import StandardScaler
+        from sklearn.neural_network import MLPClassifier
+        from sklearn.linear_model import LogisticRegression
+        from sklearn.neighbors import KNeighborsClassifier
+        from sklearn.ensemble import GradientBoostingClassifier
+        from sklearn.ensemble import RandomForestClassifier
+        from sklearn.naive_bayes import GaussianNB
+        from sklearn.svm import SVC
+        from sklearn.pipeline import Pipeline
+        import pipecaster as pc
+
+        X, y = make_classification(n_classes=2, n_samples=500, n_features=100,
+                                   n_informative=5, class_sep=0.6)
+
+        predictors = [MLPClassifier(), LogisticRegression(),
+                      KNeighborsClassifier(),  GradientBoostingClassifier(),
+                      RandomForestClassifier(), GaussianNB()]
+
+        ensemble_clf = pc.Ensemble(
+                         base_predictors=predictors,
+                         meta_predictor=SVC(),
+                         internal_cv=5,
+                         disable_cv_train=False,
+                         base_processes='max')
+
+        clf = Pipeline([('scaler', StandardScaler()),
+                        ('ensemble_clf', ensemble_clf)])
+
+        pc.cross_val_score(clf, X, y)
+        # output: [0.7541594951233506, 0.7360154905335627, 0.7289156626506024]
+
+    Model selection (no meta-prediction):
+    ::
+
+        from sklearn.datasets import make_classification
+        from sklearn.preprocessing import StandardScaler
+        from sklearn.neural_network import MLPClassifier
+        from sklearn.linear_model import LogisticRegression
+        from sklearn.neighbors import KNeighborsClassifier
+        from sklearn.ensemble import GradientBoostingClassifier
+        from sklearn.ensemble import RandomForestClassifier
+        from sklearn.naive_bayes import GaussianNB
+        from sklearn.pipeline import Pipeline
+        import pipecaster as pc
+
+        X, y = make_classification(n_classes=2, n_samples=500, n_features=100,
+                                   n_informative=5, class_sep=0.6)
+
+        predictors = [MLPClassifier(), LogisticRegression(),
+                      KNeighborsClassifier(),  GradientBoostingClassifier(),
+                      RandomForestClassifier(), GaussianNB()]
+
+        ensemble_clf = pc.Ensemble(
+                         base_predictors=predictors,
+                         meta_predictor=None,
+                         internal_cv=5,
+                         scorer='auto',
+                         base_processes='max')
+
+        clf = Pipeline([('scaler', StandardScaler()),
+                        ('ensemble_clf', ensemble_clf)])
+
+        pc.cross_val_score(clf, X, y)
+        # output: [0.8443775100401607, 0.7972022955523672, 0.8617886178861789]
+
+        # inspect models selected by Ensemble
+        clf.fit(X, y)
+        ensemble_clf = clf.named_steps['ensemble_clf']
+        selected_models = [p for i, p in enumerate(predictors)
+            if i in ensemble_clf.get_support()]
+        selected_models
+        # output: [GradientBoostingClassifier()]
     """
     state_variables = ['classes_', 'scores_', 'selected_indices_']
 
@@ -447,6 +561,9 @@ class Ensemble(Cloneable, Saveable):
             else:
                 raise AttributeError('predictor type required for automatic '
                                      'assignment of scoring metric')
+
+        if meta_predictor is None and score_selector is None:
+            self.score_selector = RankScoreSelector(k=1)
 
         # expose availbable predictor interface (may change after fit)
         if meta_predictor is not None:
@@ -1082,6 +1199,9 @@ class ChannelEnsemble(Cloneable, Saveable):
             else:
                 raise AttributeError('predictor type required for automatic '
                                      'assignment of scoring metric')
+
+        if meta_predictor is None and score_selector is None:
+            self.score_selector = RankScoreSelector(k=1)
 
         # expose availbable predictor interface (may change after fit)
         if meta_predictor is not None:
