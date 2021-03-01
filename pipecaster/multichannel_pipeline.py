@@ -631,41 +631,7 @@ class MultichannelPipeline(Cloneable, Saveable):
         pc.cross_val_score(clf, Xs, y)
         # output: [0.9705882352941176, 1.0, 0.9099264705882353]
 
-    **Model stacking, method 1:**
-    ::
-
-        import numpy as np
-        from sklearn.preprocessing import StandardScaler
-        from sklearn.linear_model import LogisticRegression
-        from sklearn.svm import SVC
-        import pipecaster as pc
-
-        # make a synthetic dataset with 10 input matrices
-        Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
-                                                      n_random_Xs=7)
-
-        clf = pc.MultichannelPipeline(n_channels=10)
-
-        # create 10 StandardScaler objs, one per input:
-        clf.add_layer(StandardScaler())
-
-        # wrap LogisticRegression for stacked generalization
-        # (with internal cross validation training):
-        base_clf = pc.transform_wrappers.SingleChannelCV(LogisticRegression())
-
-        # create 10 LogisticRegression models, one per input,
-        # that train in parallel using all available CPUs:
-        clf.add_layer(base_clf, pipe_processes='max')
-
-        # add a SVC meta-predictor that takes all channels as inputs:
-        clf.add_layer(pc.MultichannelPredictor(SVC()))
-
-        # test the pipeline on synthetic data
-        pc.cross_val_score(clf, Xs, y)
-
-        # output: [0.9705882352941176, 1.0, 0.8805147058823529]
-
-    **Model stacking, method 2:**
+    **Model stacking, style 1:**
     ::
 
         import numpy as np
@@ -688,11 +654,79 @@ class MultichannelPipeline(Cloneable, Saveable):
         # Predictions will be identical to pipeline in previous example.
         base_clf, meta_clf = LogisticRegression(), SVC()
         clf.add_layer(
-            pc.ChannelEnsemblePredictor(base_clf, meta_clf, internal_cv=5),
+            pc.ChannelEnsemble(base_clf, meta_clf, internal_cv=5),
             pipe_processes='max')
 
         # test the pipeline on synthetic data
         pc.cross_val_score(clf, Xs, y)
+
+    **Model stacking, style 2:**
+    ::
+
+        import numpy as np
+        from sklearn.preprocessing import StandardScaler
+        from sklearn.linear_model import LogisticRegression
+        from sklearn.svm import SVC
+        import pipecaster as pc
+
+        # make a synthetic dataset with 10 input matrices
+        Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
+                                                      n_random_Xs=7)
+
+        clf = pc.MultichannelPipeline(n_channels=10)
+
+        # create 10 StandardScaler objs, one per input:
+        clf.add_layer(StandardScaler())
+
+        # add internal cross validation training for stacked generalizion:
+        base_clf = pc.transform_wrappers.SingleChannelCV(LogisticRegression())
+
+        # create 10 LogisticRegression models, one per input,
+        # that train in parallel using all available CPUs:
+        clf.add_layer(base_clf, pipe_processes='max')
+
+        # add a SVC meta-predictor that takes all channels as inputs:
+        clf.add_layer(pc.MultichannelPredictor(SVC()))
+
+        # test the pipeline on synthetic data
+        pc.cross_val_score(clf, Xs, y)
+
+        # output: [0.9705882352941176, 1.0, 0.8805147058823529]
+
+    **Model stacking, style 3:**
+    ::
+
+        import numpy as np
+        from sklearn.preprocessing import StandardScaler
+        from sklearn.linear_model import LogisticRegression
+        from sklearn.svm import SVC
+        import pipecaster as pc
+
+        # make a synthetic dataset with 10 input matrices
+        Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
+                                                      n_random_Xs=7)
+
+        clf = pc.MultichannelPipeline(n_channels=10)
+
+        # create 10 StandardScaler objs, one per input:
+        clf.add_layer(StandardScaler())
+
+        # add internal cross validation training for stacked generalizion:
+        base_clf = pc.transform_wrappers.SingleChannelCV(LogisticRegression())
+
+        # create 10 LogisticRegression models, one per input,
+        # that train in parallel using all available CPUs:
+        clf.add_layer(base_clf, pipe_processes='max')
+
+        clf.add_layer(pc.ChannelConcatenator())
+
+        # add a SVC meta-predictor that takes all channels as inputs:
+        clf.add_layer(SVC())
+
+        # test the pipeline on synthetic data
+        pc.cross_val_score(clf, Xs, y)
+
+        # output: [0.9705882352941176, 0.9393382352941176, 0.9393382352941176]
     """
 
     state_variables = ['classes_']

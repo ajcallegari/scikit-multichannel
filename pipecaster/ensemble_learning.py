@@ -890,7 +890,8 @@ class GridSearchEnsemble(Ensemble):
     def __init__(self, param_dict=None, base_predictor_cls=None,
                  meta_predictor=None, internal_cv=5, scorer='auto',
                  score_selector=RankScoreSelector(k=3),
-                 base_transform_method=None,
+                 disable_cv_train=False,
+                 base_transform_method='auto',
                  base_processes=1, cv_processes=1):
         self._params_to_attributes(GridSearchEnsemble.__init__, locals())
 
@@ -900,8 +901,10 @@ class GridSearchEnsemble(Ensemble):
                            for ps in self.params_list_]
         super().__init__(base_predictors, self.meta_predictor,
                          self.internal_cv, self.scorer,
-                         self.score_selector, self.base_transform_method,
+                         self.score_selector, self.disable_cv_train,
+                         self.base_transform_method,
                          self.base_processes, self.cv_processes)
+
         super().fit(X, y, **fit_params)
 
     def get_results(self):
