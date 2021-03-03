@@ -78,7 +78,6 @@ class SoftVotingClassifier(Cloneable, Saveable):
         pc.cross_val_score(clf, Xs, y, cv=3)
         # output: [0.9117647058823529, 0.8180147058823529, 0.9117647058823529]
     """
-    state_variables = ['classes_']
 
     def __init__(self):
         self._estimator_type = 'classifier'
@@ -121,6 +120,15 @@ class SoftVotingClassifier(Cloneable, Saveable):
         decisions = np.argmax(mean_probs, axis=1)
         predictions = self.classes_[decisions]
         return predictions
+
+    def get_clone(self):
+        """
+        Get a stateful clone.
+        """
+        clone = super().get_clone()
+        if hasattr(self, 'classes_'):
+            clone.classes_ = self.classes_.copy()
+        return clone
 
 
 class HardVotingClassifier(Cloneable, Saveable):
@@ -180,7 +188,6 @@ class HardVotingClassifier(Cloneable, Saveable):
         pc.cross_val_score(clf, Xs, y, cv=3)
         # output: [0.8235294117647058, 0.8161764705882353, 0.6911764705882353]
     """
-    state_variables = ['classes_']
 
     def __init__(self):
         self._estimator_type = 'classifier'
@@ -223,6 +230,15 @@ class HardVotingClassifier(Cloneable, Saveable):
         decisions = scipy.stats.mode(input_decisions, axis=0)[0][0]
         predictions = self.classes_[decisions]
         return predictions
+
+    def get_clone(self):
+        """
+        Get a stateful clone.
+        """
+        clone = super().get_clone()
+        if hasattr(self, 'classes_'):
+            clone.classes_ = self.classes_.copy()
+        return clone
 
 
 class AggregatingRegressor(Cloneable, Saveable):
@@ -286,7 +302,6 @@ class AggregatingRegressor(Cloneable, Saveable):
         pc.cross_val_score(clf, Xs, y, cv=3)
         # output: [0.01633148118462313, 0.03953337266754531, 0.04450143]
     """
-    state_variables = []
 
     def __init__(self, aggregator=np.mean):
         self._params_to_attributes(AggregatingRegressor.__init__, locals())
@@ -356,7 +371,8 @@ class Ensemble(Cloneable, Saveable):
         - Method for selecting models from the ensemble.
         - If callable : Selector with signature:
           selected_indices = callable(scores).
-        - If None :  All models will be retained in the ensemble.
+        - If None :  All models will be retained in the ensemble if there is
+          a meta-predictor, otherwise RankScoreSelector(k=1) is used.
     disable_cv_train : bool, default=False
         - If False : cv predictions will be used to train the meta-predictor.
         - If True : cv predictions not used to train the meta-predictor.
@@ -529,7 +545,6 @@ class Ensemble(Cloneable, Saveable):
         selected_models
         # output: [GradientBoostingClassifier()]
     """
-    state_variables = ['classes_', 'scores_', 'selected_indices_']
 
     def __init__(self, base_predictors, meta_predictor=None,
                  internal_cv=None, scorer='auto',
@@ -658,7 +673,7 @@ class Ensemble(Cloneable, Saveable):
         models, predictions, cv_predictions, scores = zip(*fit_results)
 
         if scores is not None:
-            self.scores_ = scores
+            self.scores_ = list(scores)
 
         if self.score_selector is not None:
             self.selected_indices_ = self.score_selector(scores)
@@ -755,6 +770,14 @@ class Ensemble(Cloneable, Saveable):
             predictions = self.classes_[predictions]
         return predictions
 
+    def get_screen_results(self):
+        df = pd.DataFrame({'model':self.base_predictors,
+                           'performance':self.scores_,
+                           'selections':['+++' if i in self.get_support()
+                                         else '-' for i, p
+                                         in enumerate(self.scores_)]})
+        return df.set_index('model')
+
     def _more_tags(self):
         return {'multichannel': False}
 
@@ -763,6 +786,12 @@ class Ensemble(Cloneable, Saveable):
         Get a stateful clone.
         """
         clone = super().get_clone()
+        if hasattr(self, 'classes_'):
+            clone.classes_ = self.classes_.copy()
+        if hasattr(self, 'scores_'):
+            clone.scores_ = self.scores_.copy()
+        if hasattr(self, 'selected_indices_'):
+            clone.selected_indices_ = self.selected_indices_.copy()
         if hasattr(self, 'base_models'):
             clone.base_models = [utils.get_clone(m) if m is not None else None
                                  for m in self.base_models]
@@ -833,7 +862,8 @@ class GridSearchEnsemble(Ensemble):
         - Method for selecting models from the ensemble.
         - If callable : Selector with signature:
           selected_indices = callable(scores).
-        - If None :  All models will be retained in the ensemble.
+        - If None :  All models will be retained in the ensemble if there is
+          a meta-predictor, otherwise RankScoreSelector(k=1) is used.
     disable_cv_train : bool, default=False
         - If False : cv predictions will be used to train the meta-predictor.
         - If True : cv predictions not used to train the meta-predictor.
@@ -878,14 +908,12 @@ class GridSearchEnsemble(Ensemble):
                              score_selector=pc.RankScoreSelector(k=2),
                              base_processes=pc.count_cpus())
             clf.fit(X, y)
-            clf.get_results_df()
+            clf.get_screen_results()
             # output: (outputs a dataframe with the screen results)
 
             cross_val_score(clf, X, y, scoring='balanced_accuracy', cv=5)
             # output: array([0.9 , 0.85, 0.85, 0.85, 0.65])
     """
-    state_variables = ['classes_', 'scores_',
-                       'selected_indices_', 'params_list_']
 
     def __init__(self, param_dict=None, base_predictor_cls=None,
                  meta_predictor=None, internal_cv=5, scorer='auto',
@@ -894,16 +922,16 @@ class GridSearchEnsemble(Ensemble):
                  base_transform_method='auto',
                  base_processes=1, cv_processes=1):
         self._params_to_attributes(GridSearchEnsemble.__init__, locals())
-
-    def fit(self, X, y=None, **fit_params):
         self.params_list_ = list(ParameterGrid(self.param_dict))
         base_predictors = [self.base_predictor_cls(**ps)
-                           for ps in self.params_list_]
+                                   for ps in self.params_list_]
         super().__init__(base_predictors, self.meta_predictor,
                          self.internal_cv, self.scorer,
                          self.score_selector, self.disable_cv_train,
                          self.base_transform_method,
                          self.base_processes, self.cv_processes)
+
+    def fit(self, X, y=None, **fit_params):
 
         super().fit(X, y, **fit_params)
 
@@ -923,19 +951,30 @@ class GridSearchEnsemble(Ensemble):
             order of params_list.
         """
         if hasattr(self, 'base_models') is True:
-            selections = ['+' if i in self.selected_indices_ else '-'
+            selections = [True if i in self.selected_indices_ else False
                           for i, p in enumerate(self.params_list_)]
             return selections, self.params_list_, self.scores_
 
-    def get_results_df(self):
+    def get_screen_results(self):
         """
         Get pandas DataFrame with screen results.
         """
         selections, params_list, scores = self.get_results()
+        selections = ['+++' if s is True else '-' for s in selections]
         df = pd.DataFrame({'selections':selections,
-                           'parameters':params_list, 'score':scores})
-        df.sort_values('score', ascending=False, inplace=True)
-        return df.set_index('score')
+                           'parameters':params_list, 'performance':scores})
+        df.sort_values('performance', ascending=False, inplace=True)
+        return df.set_index('parameters')
+
+    def get_clone(self):
+        """
+        Get a stateful clone.
+        """
+        clone = super().get_clone()
+        if hasattr(self, 'params_list'):
+            clone.params_list = self.params_list.copy()
+
+        return clone
 
 
 class MultichannelPredictor(Cloneable, Saveable):
@@ -991,7 +1030,6 @@ class MultichannelPredictor(Cloneable, Saveable):
         pc.cross_val_score(clf, Xs, y, cv=3)
         # output: [0.9411764705882353, 0.9411764705882353, 0.9375]
     """
-    state_variables = ['classes_']
 
     def __init__(self, predictor):
         self._params_to_attributes(MultichannelPredictor.__init__, locals())
@@ -1051,6 +1089,8 @@ class MultichannelPredictor(Cloneable, Saveable):
         Get a stateful clone.
         """
         clone = super().get_clone()
+        if hasattr(self, 'classes_'):
+            clone.classes_ = self.classes_.copy()
         if hasattr(self, 'model'):
             clone.model = utils.get_clone(self.model)
         return clone
@@ -1116,7 +1156,8 @@ class ChannelEnsemble(Cloneable, Saveable):
         - Method for selecting models from the ensemble.
         - If callable : Selector with signature:
           selected_indices = callable(scores).
-        - If None :  All models will be retained in the ensemble.
+        - If None :  All models will be retained in the ensemble if there is
+          a meta-predictor, otherwise RankScoreSelector(k=1) is used.
     disable_cv_train : bool, default=False
         - If False : cv predictions will be used to train the meta-predictor.
         - If True : cv predictions not used to train the meta-predictor.
@@ -1170,7 +1211,6 @@ class ChannelEnsemble(Cloneable, Saveable):
                           for i, X in enumerate(Xs)]
         pd.DataFrame({'selections':selection_mask, 'input type':X_types})
     """
-    state_variables = ['classes_', 'scores_', 'selected_indices_']
 
     def __init__(self, base_predictors, meta_predictor=None,
                  internal_cv=None, scorer='auto',
@@ -1309,7 +1349,7 @@ class ChannelEnsemble(Cloneable, Saveable):
         models, predictions, cv_predictions, scores = zip(*fit_results)
         self.base_models = models
         if scores is not None:
-            self.scores_ = scores
+            self.scores_ = list(scores)
 
         if self.score_selector is not None:
             self.selected_indices_ = self.score_selector(scores)
@@ -1410,6 +1450,14 @@ class ChannelEnsemble(Cloneable, Saveable):
             predictions = self.classes_[predictions]
         return predictions
 
+    def get_screen_results(self):
+        df = pd.DataFrame({'performance':self.scores_,
+                             'selections':['+++' if i in self.get_support()
+                                           else '-' for i, p
+                                           in enumerate(self.scores_)]})
+        df.index.name='channel'
+        return df
+
     def _more_tags(self):
         return {'multichannel': False}
 
@@ -1418,6 +1466,12 @@ class ChannelEnsemble(Cloneable, Saveable):
         Get a stateful clone.
         """
         clone = super().get_clone()
+        if hasattr(self, 'classes_'):
+            clone.classes_ = self.classes_.copy()
+        if hasattr(self, 'scores_'):
+            clone.scores_ = self.scores_.copy()
+        if hasattr(self, 'selected_indices_'):
+            clone.selected_indices_ = self.selected_indices_.copy()
         if hasattr(self, 'base_models'):
             clone.base_models = [utils.get_clone(m) if m is not None else None
                                  for m in self.base_models]

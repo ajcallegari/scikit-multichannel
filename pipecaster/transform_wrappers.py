@@ -113,7 +113,6 @@ class SingleChannel(Cloneable, Saveable):
     are not usually identical to the method attributes of the SingleChannel
     class.
     """
-    state_variables = ['classes_']
 
     def __init__(self, predictor, transform_method_name='auto'):
         self._params_to_attributes(SingleChannel.__init__, locals())
@@ -191,7 +190,12 @@ class SingleChannel(Cloneable, Saveable):
         return {'multichannel': False}
 
     def get_clone(self):
+        """
+        Get a stateful clone.
+        """
         clone = super().get_clone()
+        if hasattr(self, 'classes_'):
+            clone.classes_ = self.classes_.copy()
         if hasattr(self, 'model'):
             clone.model = utils.get_clone(self.model)
         return clone
@@ -271,11 +275,9 @@ class SingleChannelCV(SingleChannel):
     instance are usually not identical to the method attributes of the
     SingleChannelCV class.
     """
-    state_variables = ['score_']
 
     def __init__(self, predictor, transform_method_name='auto', internal_cv=5,
                  cv_processes=1, scorer=None):
-        self._inherit_state_variables(super())
         self._params_to_attributes(SingleChannelCV.__init__, locals())
         super().__init__(predictor, transform_method_name)
         self.internal_cv = 5 if internal_cv is None else internal_cv
@@ -314,9 +316,6 @@ class SingleChannelCV(SingleChannel):
 
     def _more_tags(self):
         return {'multichannel': False}
-
-    def get_clone(self):
-        return super().get_clone()
 
     def get_descriptor(self, verbose=1):
         return '{' + utils.get_descriptor(self.predictor, verbose,
@@ -365,7 +364,6 @@ class Multichannel(Cloneable, Saveable):
     are not usually identical to the method attributes of the Multichannel
     class.
     """
-    state_variables = ['classes_']
 
     def __init__(self, multichannel_predictor, transform_method_name='auto'):
         self._params_to_attributes(Multichannel.__init__, locals())
@@ -439,6 +437,16 @@ class Multichannel(Cloneable, Saveable):
         return '{' + utils.get_descriptor(self.multichannel_predictor, verbose,
                                           self.get_params()) + '}tr'
 
+    def get_clone(self):
+        """
+        Get a stateful clone.
+        """
+        clone = super().get_clone()
+        if hasattr(self, 'classes_'):
+            clone.classes_ = self.classes_.copy()
+        if hasattr(self, 'model'):
+            clone.model = utils.get_clone(self.model)
+        return clone
 
 class MultichannelCV(Multichannel):
     """
@@ -511,13 +519,11 @@ class MultichannelCV(Multichannel):
     instance are usually not identical to the method attributes of the
     MultichannelCV class.
     """
-    state_variables = ['score_']
 
     def __init__(self, multichannel_predictor, transform_method_name='auto',
                  internal_cv=5, cv_processes=1, scorer=None):
         internal_cv = 5 if internal_cv is None else internal_cv
         self._params_to_attributes(MultichannelCV.__init__, locals())
-        self._inherit_state_variables(super())
         super().__init__(multichannel_predictor, transform_method_name)
 
     def fit_transform(self, Xs, y=None, groups=None, **fit_params):
@@ -564,6 +570,15 @@ class MultichannelCV(Multichannel):
     def get_descriptor(self, verbose=1):
         return '{' + utils.get_descriptor(self.multichannel_predictor, verbose,
                                           self.get_params()) + '}cvtr'
+
+    def get_clone(self):
+        """
+        Get a stateful clone.
+        """
+        clone = super().get_clone()
+        if hasattr(self, 'score_'):
+            clone.score_ = self.score_
+        return clone
 
 
 def unwrap_predictor(pipe):

@@ -69,7 +69,6 @@ class ChannelSelector(Cloneable, Saveable):
         pc.cross_val_score(clf, Xs, y)
         >>> [0.9705882352941176, 0.9117647058823529, 0.9411764705882353]
     """
-    state_variables = ['selected_indices_', 'channel_scores_']
 
     def __init__(self, channel_scorer=None, score_selector=None,
                  channel_processes=1):
@@ -162,6 +161,17 @@ class ChannelSelector(Cloneable, Saveable):
 
     def get_selection_indices(self):
         return self.selected_indices_
+
+    def get_clone(self):
+        """
+        Get a stateful clone.
+        """
+        clone = super().get_clone()
+        if hasattr(self, 'selected_indices_'):
+            clone.selected_indices_ = self.selected_indices_.copy()
+        if hasattr(self, 'channel_scores_'):
+            clone.channel_scores_ = self.channel_scores_.copy()
+        return clone
 
 
 class SelectKBestScores(ChannelSelector):

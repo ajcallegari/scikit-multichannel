@@ -129,8 +129,6 @@ class Layer(Cloneable, Saveable):
         layer[2] = LogisticRegression()
         clf.add_layer(layer)
     """
-    state_variables = ['_all_channels', '_mapped_channels', '_estimator_type',
-                       'output_mask_']
 
     def __init__(self, n_channels, pipe_processes=1):
         self._params_to_attributes(Layer.__init__, locals())
@@ -504,13 +502,18 @@ class Layer(Cloneable, Saveable):
     def get_clone(self):
         """
         Get a stateful clone of the Layer.
-
-        Uses methods inherited from utils.Cloneable to copy parameters
-        and state variables, and utils.get_clone() to copy pipes and models.
         """
         clone = super().get_clone()
+        if hasattr(self, '_all_channels'):
+            clone._all_channels = self._all_channels.copy()
+        if hasattr(self, '_mapped_channels'):
+            clone._mapped_channels = self._mapped_channels.copy()
+        if hasattr(self, '_estimator_type'):
+            clone._estimator_type = self._estimator_type
+        if hasattr(self, 'output_mask_'):
+            clone.output_mask_ = self.output_mask_.copy()
         clone.pipe_list = [(utils.get_clone(p), s, i.copy())
-                           for p, s, i in self.pipe_list]
+               for p, s, i in self.pipe_list]
         if hasattr(self, 'model_list'):
             clone.model_list = [(utils.get_clone(p), s, i.copy())
                                 for p, s, i in self.model_list]
@@ -728,8 +731,6 @@ class MultichannelPipeline(Cloneable, Saveable):
 
         # output: [0.9705882352941176, 0.9393382352941176, 0.9393382352941176]
     """
-
-    state_variables = ['classes_']
 
     def __init__(self, n_channels=1):
         self._params_to_attributes(MultichannelPipeline.__init__, locals())
@@ -1084,6 +1085,8 @@ class MultichannelPipeline(Cloneable, Saveable):
         and state variables, and utils.get_clone() to copy pipes and models.
         """
         clone = super().get_clone()
+        if hasattr(self, 'classes_'):
+            clone.classes_ = self.classes_.copy()
         clone.layers = [layer.get_clone() for layer in self.layers]
         return clone
 

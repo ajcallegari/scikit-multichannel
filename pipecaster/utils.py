@@ -295,7 +295,7 @@ def get_param_clone(pipe):
 class Cloneable:
 
     """
-    Base class that provides stateless and stateful cloning.
+    Base class that provides stateless cloning and text descriptors.
 
     Eliminates the scikit-learn estimator boilerplate code that converts
     initialization parameters to class attributes.
@@ -305,22 +305,15 @@ class Cloneable:
     Include this line in sublass __init__() to automatically store params:
         _params_to_attributes(self, callable_, locals())
 
-    To include variables that are not in the __init__ signature in the
-        cloning process, add the names of the variables to the state_variables
-        class attribute in the subclass definition.
+    To clone attributes not present in the signature of __init__, override the
+        get_clone() method in derived classes, e.g.:
+        ::
 
-    Include this line in subclass __init__ to inherit state variables from
-        the superclass:
-        _inherit_state_variables(self, super())
-
-    To write custom cloning code, override get_clone() in subclasses and
-        start with the following line if you want to first clone parameters
-        and state variables:
-        clone = super().get_clone()
-
+            def get_clone(self):
+                clone = super().get_clone()
+                clone.my_list = my_list.copy()
+                return clone
     """
-
-    state_variables = []  # override with a list of state attributes
 
     @property
     def param_names(self):
@@ -329,12 +322,6 @@ class Cloneable:
     def _params_to_attributes(self, callable_, locals_):
         for param_name in get_param_names(callable_):
             setattr(self, param_name, locals_[param_name])
-
-    def _inherit_state_variables(self, super_):
-        if (hasattr(self, 'state_variables') and
-                hasattr(super_, 'state_variables')):
-            self.state_variables = (super_.state_variables +
-                                    self.state_variables)
 
     def get_params(self, deep=False):
         return {p: getattr(self, p) for p in self.param_names}
@@ -349,10 +336,6 @@ class Cloneable:
 
     def get_clone(self):
         clone = get_param_clone(self)
-        if hasattr(self, 'state_variables'):
-            for var in self.__class__.state_variables:
-                if hasattr(self, var):
-                    setattr(clone, var, getattr(self, var))
         return clone
 
     def to_str(self, verbose=1):
