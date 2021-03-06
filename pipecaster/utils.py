@@ -19,7 +19,7 @@ __all__ = ['is_classifier', 'is_regressor', 'is_predictor', 'is_transformer',
            'is_predictor', 'FitError', 'PredictError',
            'ParallelBackendError', 'get_descriptor', 'get_param_names',
            'get_param_clone', 'Cloneable', 'Saveable', 'encode_labels',
-           'decode_labels', 'classify_sample', 'classify_samples']
+           'decode_labels', 'classify_probs', 'classify_decision_function']
 
 # set of methods recognized by pipecaster as prediction methods
 recognized_pred_methods = set(['predict', 'predict_proba',
@@ -385,7 +385,7 @@ def decode_labels(y, classes_):
     return classes_[y]
 
 
-def classify_sample(class_probs, class_names=None,
+def classify_probs(class_probs, class_names=None,
                     operating_characteristic=None):
     """
     Choose a class based on marginal probabilities.
@@ -421,17 +421,16 @@ def classify_sample(class_probs, class_names=None,
                 else:
                     return decode_labels(0, class_names)
 
-
-def classify_samples(sample_probs, class_names=None,
-                     operating_characteristic=None):
+def classify_decision_function(decision_function_value, class_names=None,
+                    operating_characteristic=0):
     """
-    Choose classes based on marginal probabilities.
+    Choose a class based on marginal probabilities.
 
     Parameters
     ----------
-    sample_probs : ndarray/list
-        List of predicted marginal probility of each class for multiple
-        samples.
+    decision_function_value : scalar
+        Decision function value for binary classifier (e.g. output from scikit-
+        learn's SVC and LogisticRegression)
     class_names : ndarray, default=None
         Ordered array of class names for decoding.
     operating_characteristic : float, default=None
@@ -440,6 +439,11 @@ def classify_samples(sample_probs, class_names=None,
         - If float : classify positive class marginal prob values of
           operating_characteristic or above as positive, else negative.
     """
-    classes = [classify_sample(ps, class_names, operating_characteristic)
-               for ps in sample_probs]
-    return np.array(classes)
+
+    if class_names is None:
+        return 1 if decision_function_value >= operating_characteristic else 0
+    else:
+        if decision_function_value >= operating_characteristic:
+            return decode_labels(1, class_names)
+        else:
+            return decode_labels(0, class_names)

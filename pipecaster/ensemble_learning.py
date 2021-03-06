@@ -750,8 +750,9 @@ class Ensemble(Cloneable, Saveable):
         Returns
         -------
         Ensemble predictions.
-            - If method_name is 'predict': ndarray(n_samples,)
-            - If method_name is 'predict_proba', 'decision_function', or
+            - If method_name is 'predict' or 'decision_function':
+              ndarray(n_samples,)
+            - If method_name is 'predict_proba', or
               'predict_log_proba': ndarray(n_samples, n_classes)
         """
         if hasattr(self, 'base_models') is False:

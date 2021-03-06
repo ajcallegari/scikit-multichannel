@@ -1,3 +1,6 @@
+from pipecaster.cross_validation import *
+
+"""
 from pipecaster.utils import *
 from pipecaster.parallel import *
 from pipecaster.cross_validation import *
@@ -8,3 +11,4 @@ from pipecaster.score_selection import *
 from pipecaster.channel_selection import *
 from pipecaster.ensemble_learning import *
 from pipecaster.testing_utils import *
+"""
