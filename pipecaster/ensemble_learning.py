@@ -361,13 +361,36 @@ class Ensemble(Cloneable, Saveable):
           KFold(n_splits=internal_cv) if regressor.
         - If None : default value of 5.
         - If callable: Assumed to be split generator like scikit-learn KFold.
-    scorer : callable or 'auto', default='auto'
-        - Performance metric used for model selection.
-        - If callable : should return a scalar figure of merit with
-          signature: score = scorer(y_true, y_pred).
-        - If 'auto' : balanced_accuracy_score if classifier,
-          explained_variance_score if regressor.
-    score_selector : callable or None, default=None
+    base_transform_methods : str or list, default='auto'
+        - Set the name of the base predictor methods to use for generating
+          meta-features.
+        - if 'auto' :
+            - If classifier : Method picked using
+              config.score_method_precedence order.
+            - If regressor : 'predict'
+        - If str other than 'auto' : Name is broadcast over all base
+          predictors.
+        - If list : List of names or 'auto', one per base predictor.
+    base_score_methods : str or list, default='auto'
+        - Name or names of prediction method used when scoring predictor.
+          performance.
+        - if 'auto' :
+            - If classifier : Method picked using
+              config.score_method_precedence order.
+            - If regressor : 'predict'
+    scorers : {callable, list of callables, or 'auto'}, default='auto'
+        - Function or functions for calculating the performance scores.
+        - If 'auto':
+            - balanced_accuracy_score for classifiers with predict()
+            - explained_variance_score for regressors with predict()
+            - roc_auc_score for classifiers with {predict_proba,
+              predict_log_proba, decision_function}
+        - If callable: A scorer that returns a scalar figure of merit score
+          with signature: score = scorer(y_true, y_pred).
+        - If list of callables: Ordered list of scorer objects that specify
+          the scoring methods to use for each prediction method specified in
+          the predict_methods parameter.
+      score_selector : callable or None, default=None
         - Method for selecting models from the ensemble.
         - If callable : Selector with signature:
           selected_indices = callable(scores).
@@ -376,13 +399,6 @@ class Ensemble(Cloneable, Saveable):
     disable_cv_train : bool, default=False
         - If False : cv predictions will be used to train the meta-predictor.
         - If True : cv predictions not used to train the meta-predictor.
-    base_predict_methods : str or list, default='auto'
-        - Set the name of the base predictor methods to use.
-        - If 'auto' : Use the precedence order specified in
-          :mod:`pipecaster.transform_wrappers` to select a predict method.
-        - If str other than 'auto' : Name is broadcast over all base
-          predictors.
-        - If list : List of names, one per base predictor.
     base_processes : int or 'max', default=1
         - The number of parallel processes to run for base predictor fitting.
         - If int : Use up to base_processes number of processes.
@@ -598,7 +614,7 @@ class Ensemble(Cloneable, Saveable):
         self._set_predictor_interface(predict_methods)
 
     def _set_predictor_interface(self, predict_method_names):
-        for method_name in utils.recognized_pred_methods:
+        for method_name in config.recognized_pred_methods:
             is_available = method_name in predict_method_names
             is_exposed = hasattr(self, method_name)
 
@@ -1043,7 +1059,7 @@ class MultichannelPredictor(Cloneable, Saveable):
         self._set_predictor_interface(predict_method_names)
 
     def _set_predictor_interface(self, predict_method_names):
-        for method_name in utils.recognized_pred_methods:
+        for method_name in config.recognized_pred_methods:
             is_available = method_name in predict_method_names
             is_exposed = hasattr(self, method_name)
             if is_available and (is_exposed is False):
@@ -1265,7 +1281,7 @@ class ChannelEnsemble(Cloneable, Saveable):
         self._set_predictor_interface(predict_methods)
 
     def _set_predictor_interface(self, predict_method_names):
-        for method_name in utils.recognized_pred_methods:
+        for method_name in config.recognized_pred_methods:
             is_available = method_name in predict_method_names
             is_exposed = hasattr(self, method_name)
 

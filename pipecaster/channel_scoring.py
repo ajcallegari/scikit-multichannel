@@ -12,7 +12,7 @@ from sklearn.feature_selection import f_classif
 from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.ensemble import GradientBoostingRegressor
 
-from pipecaster.cross_validation import cross_val_score
+from pipecaster.cross_validation import cross_val_score, score_predictions
 from pipecaster.utils import Cloneable, Saveable
 import pipecaster.utils as utils
 
@@ -78,37 +78,38 @@ class CvPerformanceScorer(Cloneable, Saveable):
         high speed, used to estimate the predictive value of a feature matrix.
     cv : None, int, or callable, default=5
         - Set the cross validation method:
-        - If 1: Internal cv training is inactivated.
+        - If 1 : Internal cv training is inactivated.
         - If int > 1: StratifiedKFold(n_splits=internal_cv) for classifiers and
           KFold(n_splits=internal_cv) for regressors.
-        - If None: The default value of 5 is used.
-        - If callable: Assumes interface like scikit-learn KFold.
-    scorer : callable or 'auto', default='auto'
-        - Figure of merit score used for estimating the predictive value of a
-          feature matrix.
-        - If callable: Object that returns a scalar figure of merit with
-          the signature: score = scorer(y_true, y_pred).
-        - If 'auto': balanced_accuracy_score is used for classifiers and
-            explained_variance_score for regressors.
+        - If None : The default value of 5 is used.
+        - If callable : Assumes interface like scikit-learn KFold.
+    score_method : str, default='auto'
+        - Name of prediction method used when scoring predictor performance.
+        - if 'auto' :
+            - If classifier : Method picked using
+              config.score_method_precedence order.
+            - If regressor : 'predict'
+    scorer : callable, default='auto'
+        Callable that computes a figure of merit score for the internal_cv run.
+        The score is exposed as score_ attribute during fit_transform().
+        - If 'auto':
+            - explained_variance_score for regressors with predict()
+            - roc_auc_score for classifiers with {predict_proba,
+              predict_log_proba, decision_function}
+            - balanced_accuracy_score for classifiers with only predict()
+        - If callable: A scorer with signature: score = scorer(y_true, y_pred).
     cv_processes : int or 'max', default=1
         - Set the number of processes used during cross validation:
-        - If 1: Run all split computations in a single process.
-        - If 'max': Run each split in a different process, using all available
+        - If 1 : Run all split computations in a single process.
+        - If 'max' : Run each split in a different process, using all available
           CPUs.
-        - If int > 1: Run each split in a different process, using up to
+        - If int > 1 : Run each split in a different process, using up to
           cv_processes number of CPUs.
     """
-    def __init__(self, predictor_probe, cv=5, scorer='auto', cv_processes=1):
+    def __init__(self, predictor_probe, cv=5,
+                 score_method='auto', scorer='auto',
+                 cv_processes=1):
         self._params_to_attributes(CvPerformanceScorer.__init__, locals())
-        if scorer == 'auto':
-            if utils.is_classifier(predictor_probe):
-                self.scorer = balanced_accuracy_score
-            elif utils.is_regressor(predictor_probe):
-                self.scorer = explained_variance_score
-            else:
-                raise AttributeError('predictor type required for automatic \
-                                     assignment of scoring metric')
-
 
     def __call__(self, X, y, **fit_params):
         """
@@ -127,7 +128,7 @@ class CvPerformanceScorer(Cloneable, Saveable):
             return None
         else:
             scores = cross_val_score(self.predictor_probe, X, y,
-                                     scorer=self.scorer, cv=self.cv,
-                                     n_processes=self.cv_processes,
+                                     self.score_method, scorers=self.scorer,
+                                     cv=self.cv, n_processes=self.cv_processes,
                                      **fit_params)
             return np.mean(scores)

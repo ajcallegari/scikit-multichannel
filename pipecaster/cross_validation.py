@@ -49,7 +49,7 @@ def _fit_predict_split(predictor, Xs, y, train_indices, test_indices,
 
 
 def cross_val_predict(predictor, Xs, y=None, groups=None,
-                      predict_methods=['predict'], cv=None,
+                      predict_method='predict', cv=None,
                       combine_splits=True, n_processes=1, fit_params=None):
     """
     Analog of the scikit-learn cross_val_predict function that supports both
@@ -67,7 +67,7 @@ def cross_val_predict(predictor, Xs, y=None, groups=None,
     groups: list/array, default=None
         Group labels for the samples used while splitting the dataset into
         train/test set. Only used if cv parameter is set to GroupKFold.
-    predict_methods : str or list, default=['predict']
+    predict_method : str or list, default=['predict']
         Name of the method or methods to use for making predictions.
     cv : int, or callable, default=5
         - Set the cross validation method:
@@ -94,7 +94,7 @@ def cross_val_predict(predictor, Xs, y=None, groups=None,
           Returns a single array for each prediction method containing
           predictions for each sample in the order that they appeared in the Xs
           parameter.  If only one prediction method is specified in the
-          predict_methods parameter, a single array is returned, otherwise a
+          predict_method parameter, a single array is returned, otherwise a
           dict indexed by the predict method name.
         - If combine_splits is False:
           Returns a dict indexed by prediction method where each value is a
@@ -122,8 +122,8 @@ def cross_val_predict(predictor, Xs, y=None, groups=None,
     if is_classifier and y is not None:
         classes_, y = np.unique(y, return_inverse=True)
 
-    if isinstance(predict_methods, (tuple, list, np.ndarray)) is False:
-        predict_methods = [predict_methods]
+    if isinstance(predict_method, (tuple, list, np.ndarray)) is False:
+        predict_method = [predict_methods]
 
     cv = int(5) if cv is None else cv
 
@@ -144,7 +144,7 @@ def cross_val_predict(predictor, Xs, y=None, groups=None,
         splits = list(cv.split(Xs, y, groups))
 
     args_list = [(predictor, Xs, y, train_indices, test_indices,
-                  predict_methods, fit_params)
+                  predict_method, fit_params)
                  for train_indices, test_indices in splits]
 
     n_jobs = len(args_list)
@@ -189,269 +189,28 @@ def cross_val_predict(predictor, Xs, y=None, groups=None,
     else:
         return split_results
 
-def score_splits(split_results, y=None, predict_methods=['predict'],
-                 scorers='auto'):
-    """
-    Analog of the scikit-learn cross_val_score function that supports both
-    single and multichannel cross validation.
 
-    Parameters
-    ----------
-    predictor : estimator/predictor instance
-        Classifier or regressor that implements the scikit-learn estimator and
-        predictor interfaces.
-    Xs : list
-        List of feature matrices and None spaceholders.
-    y : list/array, default=None
-        Optional targets for supervised ML.
-    groups: list/array, default=None
-        Group labels for the samples used while splitting the dataset into
-        train/test set. Only used if cv parameter is set to GroupKFold.
-    predict_methods : str or list, default=['predict']
-        Name of the method or methods to use for making predictions.
-    scorers : {callable, list of callables, or 'auto'}, default='auto'
-        - If 'auto':
-            - balanced_accuracy_score for classifiers with predict()
-            - explained_variance_score for regressors with predict()
-            - roc_auc_score for classifiers with {predict_proba,
-              predict_log_proba, decision_function}
-        - If callable: A scorer that returns a scalar figure of merit score
-          with signature: score = scorer(y_true, y_pred).
-        - If list of callables: Ordered list of scorer objects that specify
-          the scoring methods to use for each prediction method specified in
-          the predict_methods parameter.
-    cv : int, or callable, default=5
-        - Set the cross validation method:
-        - If int > 1: Use StratifiedKfold(n_splits=internal_cv) for
-          classifiers or Kfold(n_splits=internal_cv) for regressors.
-        - If None or 5: Use 5 splits with the default split generator.
-        - If callable: Assumes interface like Kfold scikit-learn.
-    n_processes : int or 'max', default=1
-        - If 1: Run all split computations in a single process.
-        - If 'max': Run splits in multiple processes, using all
-          available CPUs.
-        - If int > 1: Run splits in multiple processes, using up to
-          n_processes number of CPUs.
-    fit_params : dict, default={}
-        Auxiliary parameters sent to pipe fit_transform and fit methods.
-
-    Returns
-    -------
-        - If 1 predict_method is specified:
-          List of scalar figure of merit scores, one for each split.
-        - If >1 predict_method is specified:
-          Dict indexed by prediction method name where values are lists of
-          scores the splits.
-
-    Examples
-    --------
-    ::
-
-        import pipecaster as pc
-        from sklearn.ensemble import GradientBoostingClassifier
-        from sklearn.svm import SVC
-
-        Xs, y, X_types = pc.make_multi_input_classification(n_informative_Xs=3,
-                                                            n_random_Xs=7)
-        clf = pc.MultichannelPipeline(n_channels=10)
-        clf.add_layer(pc.ChannelEnsemble(GradientBoostingClassifier(), SVC()))
-
-        pc.cross_val_score(clf, Xs, y)
-        # ouput: [0.7647058823529411, 0.8455882352941176, 0.8180147058823529]
-    """
-
-    is_classifier = utils.is_classifier(predictor)
-    if is_classifier and y is not None:
-        classes_, y = np.unique(y, return_inverse=True)
-
-    if isinstance(predict_methods, (tuple, list, np.ndarray)) is False:
-        predict_methods = [predict_methods]
-
-    split_results = cross_val_predict(predictor, Xs, y, groups,
-                                          predict_methods,
-                                          cv, combine_splits=False,
-                                          n_processes=n_processes,
-                                          **fit_params)
-
-    # set scorers if 'auto' is selected
-    if type(scorers) == str and scorers == 'auto':
-        scorers = []
-        for method in predict_methods:
-            if is_classifier and method == 'predict':
-                scorers.append(balanced_accuracy_score)
-            elif (is_classifier and method in
-                  ['predict_proba', 'predict_log_proba', 'decision_function']):
-                scorers.append(roc_auc_score)
-            else:
-                scorers.append(explained_variance_score)
-
-    if (isinstance(scorers, (tuple, list, np.ndarray))) is False:
-        scorers = [scorers]
-
-    # drop redundant probs to make binary cls results compatible with sklearn
-    if is_classifier and len(classes_) == 2:
-        split_results = {m:[p[:, 1]
-                             if m in ['predict_proba', 'predict_log_proba']
-                             else p for p in split_results[m]]
-                         for m in split_results}
-
-    if len(scorers) != len(predict_methods):
-        raise ValueError('Number of scorers must match number of '
-                         'predict_methods or be set to auto.')
-
-    # apply the scorers to the predictions
-    scores = {m:[scorer(y[idx], p)
-                 for p, idx in zip(split_results[m], split_results['indices'])]
-              for m, scorer in zip(predict_methods, scorers)}
-
-    if len(predict_methods) == 1:
-        return scores[predict_methods[0]]
-    else:
-        return scores
-
-def score_predictions(y_true, y_pred, predict_method, scorer,
-                      is_classification):
-
+def score_predictions(y_true, y_pred, score_method, scorer,
+                      is_classification, is_binary):
     # set scorer if 'auto'
     if type(scorer) == str and scorer == 'auto':
-        if is_classifier and predict_method == 'predict':
+        if is_classification and score_method == 'predict':
             scorer = balanced_accuracy_score
-        elif (is_classifier and method in
+        elif (is_classification and score_method in
               ['predict_proba', 'predict_log_proba', 'decision_function']):
             scorer = roc_auc_score
         else:
             scorer = explained_variance_score
 
     # drop redundant probs to make binary cls results compatible with sklearn
-    if is_classifier and is_binary:
+    if is_classification and is_binary and len(y_pred.shape) == 2:
         y_pred = y_pred[:, 1]
 
-    return scorer(y_pred, y_pred)
-
-def score_splits(predictor, Xs, y=None, groups=None,
-                    predict_methods = ['predict'], scorers='auto',
-                    cv=3, n_processes=1, **fit_params):
-    """
-    Analog of the scikit-learn cross_val_score function that supports both
-    single and multichannel cross validation.
-
-    Parameters
-    ----------
-    predictor : estimator/predictor instance
-        Classifier or regressor that implements the scikit-learn estimator and
-        predictor interfaces.
-    Xs : list
-        List of feature matrices and None spaceholders.
-    y : list/array, default=None
-        Optional targets for supervised ML.
-    groups: list/array, default=None
-        Group labels for the samples used while splitting the dataset into
-        train/test set. Only used if cv parameter is set to GroupKFold.
-    predict_methods : str or list, default=['predict']
-        Name of the method or methods to use for making predictions.
-    scorers : {callable, list of callables, or 'auto'}, default='auto'
-        - If 'auto':
-            - balanced_accuracy_score for classifiers with predict()
-            - explained_variance_score for regressors with predict()
-            - roc_auc_score for classifiers with {predict_proba,
-              predict_log_proba, decision_function}
-        - If callable: A scorer that returns a scalar figure of merit score
-          with signature: score = scorer(y_true, y_pred).
-        - If list of callables: Ordered list of scorer objects that specify
-          the scoring methods to use for each prediction method specified in
-          the predict_methods parameter.
-    cv : int, or callable, default=5
-        - Set the cross validation method:
-        - If int > 1: Use StratifiedKfold(n_splits=internal_cv) for
-          classifiers or Kfold(n_splits=internal_cv) for regressors.
-        - If None or 5: Use 5 splits with the default split generator.
-        - If callable: Assumes interface like Kfold scikit-learn.
-    n_processes : int or 'max', default=1
-        - If 1: Run all split computations in a single process.
-        - If 'max': Run splits in multiple processes, using all
-          available CPUs.
-        - If int > 1: Run splits in multiple processes, using up to
-          n_processes number of CPUs.
-    fit_params : dict, default={}
-        Auxiliary parameters sent to pipe fit_transform and fit methods.
-
-    Returns
-    -------
-        - If 1 predict_method is specified:
-          List of scalar figure of merit scores, one for each split.
-        - If >1 predict_method is specified:
-          Dict indexed by prediction method name where values are lists of
-          scores the splits.
-
-    Examples
-    --------
-    ::
-
-        import pipecaster as pc
-        from sklearn.ensemble import GradientBoostingClassifier
-        from sklearn.svm import SVC
-
-        Xs, y, X_types = pc.make_multi_input_classification(n_informative_Xs=3,
-                                                            n_random_Xs=7)
-        clf = pc.MultichannelPipeline(n_channels=10)
-        clf.add_layer(pc.ChannelEnsemble(GradientBoostingClassifier(), SVC()))
-
-        pc.cross_val_score(clf, Xs, y)
-        # ouput: [0.7647058823529411, 0.8455882352941176, 0.8180147058823529]
-    """
-
-    is_classifier = utils.is_classifier(predictor)
-    if is_classifier and y is not None:
-        classes_, y = np.unique(y, return_inverse=True)
-
-    if isinstance(predict_methods, (tuple, list, np.ndarray)) is False:
-        predict_methods = [predict_methods]
-
-    split_results = cross_val_predict(predictor, Xs, y, groups,
-                                          predict_methods,
-                                          cv, combine_splits=False,
-                                          n_processes=n_processes,
-                                          **fit_params)
-
-    # set scorers if 'auto' is selected
-    if type(scorers) == str and scorers == 'auto':
-        scorers = []
-        for method in predict_methods:
-            if is_classifier and method == 'predict':
-                scorers.append(balanced_accuracy_score)
-            elif (is_classifier and method in
-                  ['predict_proba', 'predict_log_proba', 'decision_function']):
-                scorers.append(roc_auc_score)
-            else:
-                scorers.append(explained_variance_score)
-
-    if (isinstance(scorers, (tuple, list, np.ndarray))) is False:
-        scorers = [scorers]
-
-    # drop redundant probs to make binary cls results compatible with sklearn
-    if is_classifier and len(classes_) == 2:
-        split_results = {m:[p[:, 1]
-                             if m in ['predict_proba', 'predict_log_proba']
-                             else p for p in split_results[m]]
-                         for m in split_results}
-
-    if len(scorers) != len(predict_methods):
-        raise ValueError('Number of scorers must match number of '
-                         'predict_methods or be set to auto.')
-
-    # apply the scorers to the predictions
-    scores = {m:[scorer(y[idx], p)
-                 for p, idx in zip(split_results[m], split_results['indices'])]
-              for m, scorer in zip(predict_methods, scorers)}
-
-    if len(predict_methods) == 1:
-        return scores[predict_methods[0]]
-    else:
-        return scores
+    return scorer(y_true, y_pred)
 
 
 def cross_val_score(predictor, Xs, y=None, groups=None,
-                    predict_methods = ['predict'], scorers='auto',
+                    score_methods = 'auto', scorers='auto',
                     cv=3, n_processes=1, **fit_params):
     """
     Analog of the scikit-learn cross_val_score function that supports both
@@ -469,19 +228,25 @@ def cross_val_score(predictor, Xs, y=None, groups=None,
     groups: list/array, default=None
         Group labels for the samples used while splitting the dataset into
         train/test set. Only used if cv parameter is set to GroupKFold.
-    predict_methods : str or list, default=['predict']
-        Name of the method or methods to use for making predictions.
+    score_methods : str or list, default='auto'
+        - Name or names of prediction method used when scoring predictor.
+          performance.
+        - if 'auto' :
+            - If classifier : Method picked using
+              config.score_method_precedence order.
+            - If regressor : 'predict'
     scorers : {callable, list of callables, or 'auto'}, default='auto'
+        - Function or functions for calculating performance scores.
         - If 'auto':
-            - balanced_accuracy_score for classifiers with predict()
             - explained_variance_score for regressors with predict()
             - roc_auc_score for classifiers with {predict_proba,
               predict_log_proba, decision_function}
+            - balanced_accuracy_score for classifiers with only predict()
         - If callable: A scorer that returns a scalar figure of merit score
           with signature: score = scorer(y_true, y_pred).
         - If list of callables: Ordered list of scorer objects that specify
           the scoring methods to use for each prediction method specified in
-          the predict_methods parameter.
+          the score_methods parameter.
     cv : int, or callable, default=5
         - Set the cross validation method:
         - If int > 1: Use StratifiedKfold(n_splits=internal_cv) for
@@ -523,50 +288,42 @@ def cross_val_score(predictor, Xs, y=None, groups=None,
     """
 
     is_classifier = utils.is_classifier(predictor)
+    is_binary = False
     if is_classifier and y is not None:
         classes_, y = np.unique(y, return_inverse=True)
+        if len(classes_) == 2:
+            is_binary = True
 
-    if isinstance(predict_methods, (tuple, list, np.ndarray)) is False:
-        predict_methods = [predict_methods]
+    if isinstance(score_methods, (tuple, list, np.ndarray)) is False:
+        score_methods = [score_methods]
+
+    for i, m in enumerate(score_methods):
+        if m == 'auto':
+            score_method = utils.get_score_method(self.predictor_probe)
+            if score_method is None:
+                raise NameError('probe lacks a recognized method for '
+                                'making scorable predictions.')
+        else:
+            score_methods[i] = score_method
+
+    if isinstance(scorers, (tuple, list, np.ndarray)) is False:
+        if type(scorers) == str and scorers == 'auto':
+            scorers = ['auto' for m in score_methods]
+        else:
+            scorers = [scorers]
 
     split_results = cross_val_predict(predictor, Xs, y, groups,
-                                          predict_methods,
+                                          score_methods,
                                           cv, combine_splits=False,
                                           n_processes=n_processes,
                                           **fit_params)
 
-    # set scorers if 'auto' is selected
-    if type(scorers) == str and scorers == 'auto':
-        scorers = []
-        for method in predict_methods:
-            if is_classifier and method == 'predict':
-                scorers.append(balanced_accuracy_score)
-            elif (is_classifier and method in
-                  ['predict_proba', 'predict_log_proba', 'decision_function']):
-                scorers.append(roc_auc_score)
-            else:
-                scorers.append(explained_variance_score)
-
-    if (isinstance(scorers, (tuple, list, np.ndarray))) is False:
-        scorers = [scorers]
-
-    # drop redundant probs to make binary cls results compatible with sklearn
-    if is_classifier and len(classes_) == 2:
-        split_results = {m:[p[:, 1]
-                             if m in ['predict_proba', 'predict_log_proba']
-                             else p for p in split_results[m]]
-                         for m in split_results}
-
-    if len(scorers) != len(predict_methods):
-        raise ValueError('Number of scorers must match number of '
-                         'predict_methods or be set to auto.')
-
-    # apply the scorers to the predictions
-    scores = {m:[scorer(y[idx], p)
+    # score the predictions
+    scores = {m:[score_predictions(y[idx], p, m, s, is_classifier, is_binary)
                  for p, idx in zip(split_results[m], split_results['indices'])]
-              for m, scorer in zip(predict_methods, scorers)}
+              for m, s in zip(score_methods, scorers)}
 
     if len(predict_methods) == 1:
-        return scores[predict_methods[0]]
+        return scores[score_methods[0]]
     else:
         return scores

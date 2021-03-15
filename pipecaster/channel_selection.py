@@ -445,11 +445,20 @@ class SelectKBestProbes(ChannelSelector):
           classifiers or Kfold(n_splits=internal_cv) for regressors.
         - If None or 5: Use 5 splits with the default split generator.
         - If callable: Assumes interface like Kfold scikit-learn.
-    scorer : callable or 'auto', default='auto'
-        - If callable: probe performance metric with the signature:
-          score = scorer(y_true, y_pred).
-        - If 'auto': explained_variance_score for regressor or
-          balanced_accuracy_score for classifier.
+    score_method : str, default='auto'
+        - Name of prediction method used when scoring probe performance.
+        - if 'auto' :
+            - If classifier : Method picked using
+              config.score_method_precedence order.
+            - If regressor : 'predict'
+    scorer : callable, default='auto'
+        Callable that computes a figure of merit score for the probe.
+        - If 'auto':
+            - explained_variance_score for regressors with predict()
+            - roc_auc_score for classifiers with {predict_proba,
+              predict_log_proba, decision_function}
+            - balanced_accuracy_score for classifiers with only predict()
+        - If callable: A scorer with signature: score = scorer(y_true, y_pred).
     k : int, default=1
         Number of channels to select.  Selected channels are those with the
         highest probe performance scores.
@@ -488,7 +497,8 @@ class SelectKBestProbes(ChannelSelector):
         pc.cross_val_score(clf, Xs, y)
         # output: [0.8235294117647058, 0.9080882352941176, 0.9411764705882353]
     """
-    def __init__(self, predictor_probe=None, cv=5, scorer='auto', k=1,
+    def __init__(self, predictor_probe=None, cv=5,
+                 score_method='auto', scorer='auto', k=1,
                  channel_processes=1, cv_processes=1):
         self._params_to_attributes(SelectKBestProbes.__init__, locals())
         super().__init__(CvPerformanceScorer(predictor_probe, cv,
@@ -518,11 +528,20 @@ class SelectPercentBestProbes(ChannelSelector):
           classifiers or Kfold(n_splits=internal_cv) for regressors.
         - If None or 5: Use 5 splits with the default split generator.
         - If callable: Assumes interface like Kfold scikit-learn.
-    scorer : callable or 'auto', default='auto'
-        - If callable: probe performance metric with the signature:
-          score = scorer(y_true, y_pred).
-        - If 'auto': explained_variance_score for regressor or
-          balanced_accuracy_score for classifier.
+    score_method : str, default='auto'
+        - Name of prediction method used when scoring probe performance.
+        - if 'auto' :
+            - If classifier : Method picked using
+              config.score_method_precedence order.
+            - If regressor : 'predict'
+    scorer : callable, default='auto'
+        Callable that computes a figure of merit score for the probe.
+        - If 'auto':
+            - explained_variance_score for regressors with predict()
+            - roc_auc_score for classifiers with {predict_proba,
+              predict_log_proba, decision_function}
+            - balanced_accuracy_score for classifiers with only predict()
+        - If callable: A scorer with signature: score = scorer(y_true, y_pred).
     pct: float
         The percentage of channels to select.
     channel_processes : int or 'max', default=1
@@ -560,7 +579,8 @@ class SelectPercentBestProbes(ChannelSelector):
         pc.cross_val_score(clf, Xs, y)
         # output: [0.8823529411764706, 1.0, 0.96875]
     """
-    def __init__(self, predictor_probe=None, cv=3, scorer='auto', pct=33,
+    def __init__(self, predictor_probe=None, cv=3,
+                 score_method='auto', scorer='auto', pct=33,
                  channel_processes=1, cv_processes=1):
         self._params_to_attributes(SelectPercentBestProbes.__init__, locals())
         super().__init__(CvPerformanceScorer(predictor_probe, cv, scorer,
@@ -591,11 +611,20 @@ class SelectHighPassProbes(ChannelSelector):
           classifiers or Kfold(n_splits=internal_cv) for regressors.
         - If None or 5: Use 5 splits with the default split generator.
         - If callable: Assumes interface like Kfold scikit-learn.
-    scorer : callable or 'auto', default='auto'
-        - If callable: probe performance metric with the signature:
-          score = scorer(y_true, y_pred).
-        - If 'auto': explained_variance_score for regressor or
-          balanced_accuracy_score for classifier.
+    score_method : str, default='auto'
+        - Name of prediction method used when scoring probe performance.
+        - if 'auto' :
+            - If classifier : Method picked using
+              config.score_method_precedence order.
+            - If regressor : 'predict'
+    scorer : callable, default='auto'
+        Callable that computes a figure of merit score for the probe.
+        - If 'auto':
+            - explained_variance_score for regressors with predict()
+            - roc_auc_score for classifiers with {predict_proba,
+              predict_log_proba, decision_function}
+            - balanced_accuracy_score for classifiers with only predict()
+        - If callable: A scorer with signature: score = scorer(y_true, y_pred).
     cutoff: float, default=0.0
         Channels with probe performance scores above this value are selected.
     n_min: int, default=1
@@ -670,11 +699,20 @@ class SelectVarianceHighPassProbes(ChannelSelector):
           classifiers or Kfold(n_splits=internal_cv) for regressors.
         - If None or 5 : Use 5 splits with the default split generator.
         - If callable : Assumes interface like Kfold scikit-learn.
-    scorer : callable or 'auto', default='auto'
-        - If callable : accuracy metric for measuring probe performance with
-          the signature : score = scorer(y_true, y_pred).
-        - If 'auto' : explained_variance_score for regressor or
-          balanced_accuracy_score for classifier.
+    score_method : str, default='auto'
+        - Name of prediction method used when scoring probe performance.
+        - if 'auto' :
+            - If classifier : Method picked using
+              config.score_method_precedence order.
+            - If regressor : 'predict'
+    scorer : callable, default='auto'
+        Callable that computes a figure of merit score for the probe.
+        - If 'auto':
+            - explained_variance_score for regressors with predict()
+            - roc_auc_score for classifiers with {predict_proba,
+              predict_log_proba, decision_function}
+            - balanced_accuracy_score for classifiers with only predict()
+        - If callable: A scorer with signature: score = scorer(y_true, y_pred).
     variance_cutoff : float, default=2.0
         The number of units of performance variance used to define the cutoff.
     get_variance : callable, default=np.nanstd
@@ -726,7 +764,8 @@ class SelectVarianceHighPassProbes(ChannelSelector):
         pc.cross_val_score(clf, Xs, y)
         # output: [0.85294, 0.9393, 0.90808]
     """
-    def __init__(self, predictor_probe=None, cv=3, scorer='auto',
+    def __init__(self, predictor_probe=None, cv=3,
+                 score_method='auto', scorer='auto',
                  variance_cutoff=2.0,
                  get_variance=np.nanstd, get_baseline=np.nanmean, n_min=1,
                  channel_processes=1, cv_processes=1):

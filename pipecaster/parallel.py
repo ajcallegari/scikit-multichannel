@@ -78,13 +78,14 @@ import ray
 import multiprocessing
 import time
 
+import pipecaster.config as config
 import pipecaster.utils as utils
-from pipecaster.ray_backend import RayDistributor
+
 
 __all__ = ['set_distributor', 'starmap_jobs', 'map_jobs', 'count_local_cpus',
            'count_cpus', 'count_gpus']
 
-default_distributor_type = RayDistributor
+default_distributor_type = config.default_distributor_type
 distributor_type = default_distributor_type
 distributor = None
 

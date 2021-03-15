@@ -12,8 +12,10 @@ import sklearn.base
 import joblib
 import ray
 
-__all__ = ['is_classifier', 'is_regressor', 'is_predictor', 'is_transformer',
-           'detect_predictor_type', 'is_multichannel',
+import pipcaster.config as config
+
+__all__ = ['get_score_method', 'is_classifier', 'is_regressor', 'is_predictor',
+           'is_transformer', 'detect_predictor_type', 'is_multichannel',
            'get_clone', 'get_sklearn_clone', 'get_clones',
            'save_pipe', 'load_pipe', 'get_predict_methods',
            'is_predictor', 'FitError', 'PredictError',
@@ -21,9 +23,23 @@ __all__ = ['is_classifier', 'is_regressor', 'is_predictor', 'is_transformer',
            'get_param_clone', 'Cloneable', 'Saveable', 'encode_labels',
            'decode_labels', 'classify_probs', 'classify_decision_function']
 
-# set of methods recognized by pipecaster as prediction methods
-recognized_pred_methods = set(['predict', 'predict_proba',
-                               'decision_function', 'predict_log_proba'])
+def get_score_method(pipe):
+    """
+    Get prediction method name using score_method_precedence.
+
+    Parameters
+    ----------
+    pipe: pipe instance
+
+    Returns
+    -------
+    Name (str) of a pipe method that can be used for making predictons for
+    performance estimation.
+    """
+    for method_name in utils.score_method_precedence:
+        if hasattr(pipe, method_name):
+            return method_name
+    return None
 
 
 def get_clone(pipe, stateless=False):
