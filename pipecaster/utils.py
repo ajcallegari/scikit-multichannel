@@ -12,9 +12,10 @@ import sklearn.base
 import joblib
 import ray
 
-import pipcaster.config as config
+import pipecaster.config as config
 
-__all__ = ['get_score_method', 'is_classifier', 'is_regressor', 'is_predictor',
+__all__ = ['get_transform_method', 'get_score_method', 'is_classifier',
+           'is_regressor', 'is_predictor',
            'is_transformer', 'detect_predictor_type', 'is_multichannel',
            'get_clone', 'get_sklearn_clone', 'get_clones',
            'save_pipe', 'load_pipe', 'get_predict_methods',
@@ -22,6 +23,24 @@ __all__ = ['get_score_method', 'is_classifier', 'is_regressor', 'is_predictor',
            'ParallelBackendError', 'get_descriptor', 'get_param_names',
            'get_param_clone', 'Cloneable', 'Saveable', 'encode_labels',
            'decode_labels', 'classify_probs', 'classify_decision_function']
+
+def get_transform_method(pipe):
+    """
+    Get a predictor method for transforming using
+    config.transform_method_precedence.
+
+    Parameters
+    ----------
+    pipe: pipe instance
+
+    Returns
+    -------
+    Name (str) of a pipe method that can be used for transforming.
+    """
+    for method_name in config.transform_method_precedence:
+        if hasattr(pipe, method_name):
+            return method_name
+    return None
 
 def get_score_method(pipe):
     """
@@ -36,11 +55,12 @@ def get_score_method(pipe):
     Name (str) of a pipe method that can be used for making predictons for
     performance estimation.
     """
-    for method_name in utils.score_method_precedence:
-        if hasattr(pipe, method_name):
-            return method_name
-    return None
-
+    if is_classifier(pipe):
+        for method_name in config.score_method_precedence:
+            if hasattr(pipe, method_name):
+                return method_name
+    else:
+        return 'predict'
 
 def get_clone(pipe, stateless=False):
     """
@@ -117,7 +137,7 @@ def is_predictor(pipe):
     """
     Determine if a pipe is a predictor.
     """
-    for method in recognized_pred_methods:
+    for method in config.recognized_pred_methods:
         if hasattr(pipe, method):
             return True
     return False
@@ -176,7 +196,7 @@ def enforce_output(pipe):
     if is_predictor(pipe) or is_transformer(pipe):
         return
     else:
-        raise TypeError('{} lacks a required tranform or prediction method'
+        raise TypeError('{} lacks a required transform or prediction method'
                         .format(pipe.__class__.__name__))
 
 
@@ -202,7 +222,7 @@ def get_predict_methods(pipe):
     """
     Return a list of the pipe's recongized prediction methods or None.
     """
-    return [m for m in recognized_pred_methods if hasattr(pipe, m)]
+    return [m for m in config.recognized_pred_methods if hasattr(pipe, m)]
 
 
 def save_pipe(pipe, filepath):

@@ -34,7 +34,15 @@ def _fit_predict_split(predictor, Xs, y, train_indices, test_indices,
 
         split_results = {}
         for predict_method_name in predict_method_names:
-            predict_method = getattr(model, predict_method_name)
+            try:
+                predict_method = getattr(model, predict_method_name)
+            except:
+                raise AttributeError('Predict method {} not found on {} .'
+                         'This can happen if auto method detection picked a '
+                         'method that was on the object before fitting and '
+                         'lost during fitting due to counterselection. Try '
+                         'manually setting method instead of using auto.'
+                         .format(predict_method_name, predictor))
             if utils.is_multichannel(model):
                 X_tests = [X[test_indices] if X is not None else None
                            for X in Xs]
@@ -49,7 +57,7 @@ def _fit_predict_split(predictor, Xs, y, train_indices, test_indices,
 
 
 def cross_val_predict(predictor, Xs, y=None, groups=None,
-                      predict_method='predict', cv=None,
+                      predict_methods='predict', cv=None,
                       combine_splits=True, n_processes=1, fit_params=None):
     """
     Analog of the scikit-learn cross_val_predict function that supports both
@@ -67,7 +75,7 @@ def cross_val_predict(predictor, Xs, y=None, groups=None,
     groups: list/array, default=None
         Group labels for the samples used while splitting the dataset into
         train/test set. Only used if cv parameter is set to GroupKFold.
-    predict_method : str or list, default=['predict']
+    predict_methods : str or list, default=['predict']
         Name of the method or methods to use for making predictions.
     cv : int, or callable, default=5
         - Set the cross validation method:
@@ -117,13 +125,18 @@ def cross_val_predict(predictor, Xs, y=None, groups=None,
         clf.add_layer(pc.ChannelEnsemble(GradientBoostingClassifier(), SVC()))
 
         predictions = pc.cross_val_predict(clf, Xs, y)
+        predictions
+        # output: [0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1...]
+        y
+        # output: [0, 0, 0, 0, 1, 0, 1, 1, 0, 0, 1...]
     """
     is_classifier = utils.is_classifier(predictor)
     if is_classifier and y is not None:
         classes_, y = np.unique(y, return_inverse=True)
 
-    if isinstance(predict_method, (tuple, list, np.ndarray)) is False:
-        predict_method = [predict_methods]
+    if isinstance(predict_methods, (tuple, list, np.ndarray)) is False:
+        predict_methods = [predict_methods]
+    predict_methods = list(set(predict_methods))
 
     cv = int(5) if cv is None else cv
 
@@ -144,7 +157,7 @@ def cross_val_predict(predictor, Xs, y=None, groups=None,
         splits = list(cv.split(Xs, y, groups))
 
     args_list = [(predictor, Xs, y, train_indices, test_indices,
-                  predict_method, fit_params)
+                  predict_methods, fit_params)
                  for train_indices, test_indices in splits]
 
     n_jobs = len(args_list)
@@ -192,6 +205,7 @@ def cross_val_predict(predictor, Xs, y=None, groups=None,
 
 def score_predictions(y_true, y_pred, score_method, scorer,
                       is_classification, is_binary):
+    y_true, y_pred = np.array(y_true), np.array(y_pred)
     # set scorer if 'auto'
     if type(scorer) == str and scorer == 'auto':
         if is_classification and score_method == 'predict':
@@ -233,7 +247,8 @@ def cross_val_score(predictor, Xs, y=None, groups=None,
           performance.
         - if 'auto' :
             - If classifier : Method picked using
-              config.score_method_precedence order.
+              config.score_method_precedence order (default =
+              predict_proba->predict_log_proba->decision_function->predict)
             - If regressor : 'predict'
     scorers : {callable, list of callables, or 'auto'}, default='auto'
         - Function or functions for calculating performance scores.
@@ -264,11 +279,10 @@ def cross_val_score(predictor, Xs, y=None, groups=None,
 
     Returns
     -------
-        - If 1 predict_method is specified:
-          List of scalar figure of merit scores, one for each split.
-        - If >1 predict_method is specified:
-          Dict indexed by prediction method name where values are lists of
-          scores the splits.
+        - If 1 predict_method is specified: List of scalar figure of merit
+          scores, one for each split.
+        - If >1 predict_method is specified:  Dict indexed by prediction method
+          name where values are lists of scores the splits.
 
     Examples
     --------
@@ -299,12 +313,12 @@ def cross_val_score(predictor, Xs, y=None, groups=None,
 
     for i, m in enumerate(score_methods):
         if m == 'auto':
-            score_method = utils.get_score_method(self.predictor_probe)
+            score_method = utils.get_score_method(predictor)
             if score_method is None:
                 raise NameError('probe lacks a recognized method for '
                                 'making scorable predictions.')
-        else:
-            score_methods[i] = score_method
+            else:
+                score_methods[i] = score_method
 
     if isinstance(scorers, (tuple, list, np.ndarray)) is False:
         if type(scorers) == str and scorers == 'auto':
@@ -323,7 +337,7 @@ def cross_val_score(predictor, Xs, y=None, groups=None,
                  for p, idx in zip(split_results[m], split_results['indices'])]
               for m, s in zip(score_methods, scorers)}
 
-    if len(predict_methods) == 1:
+    if len(score_methods) == 1:
         return scores[score_methods[0]]
     else:
         return scores

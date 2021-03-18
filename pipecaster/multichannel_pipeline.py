@@ -7,6 +7,7 @@ import pandas as pd
 import functools
 
 import pipecaster.utils as utils
+import pipecaster.config as config
 import pipecaster.parallel as parallel
 from pipecaster.utils import Cloneable, Saveable, FitError
 
@@ -142,6 +143,28 @@ class Layer(Cloneable, Saveable):
         else:
             return list(range(self.n_channels)[slice_])
 
+    def _set_estimator_type(self, pipe):
+        if hasattr(pipe, '_estimator_type') is True:
+            estimator_type = pipe._estimator_type
+            if hasattr(self, '_estimator_type') is False:
+                self._estimator_type = estimator_type
+            else:
+                if self._estimator_type != estimator_type:
+                    raise ValueError('All predictors in a layer must have the \
+                                     same type (e.g. classifier or regressor)')
+
+    def _add_predictor_interface(self, predictor):
+        for method_name in config.recognized_pred_methods:
+            if hasattr(predictor, method_name):
+                prediction_method = functools.partial(self.predict_with_method,
+                                                      method_name=method_name)
+                setattr(self, method_name, prediction_method)
+
+    def _remove_predictor_interface(self):
+        for method_name in config.recognized_pred_methods:
+            if hasattr(self, method_name):
+                delattr(self, method_name)
+
     def __setitem__(self, slice_, val):
 
         is_listlike = isinstance(val, (list, tuple, np.ndarray))
@@ -150,10 +173,12 @@ class Layer(Cloneable, Saveable):
         if is_listlike:
             for pipe in val:
                 utils.check_pipe_interface(pipe)
-                self._expose_predictor_type(pipe)
+                self._set_estimator_type(pipe)
+                self._add_predictor_interface(pipe)
         else:
             utils.check_pipe_interface(val)
-            self._expose_predictor_type(val)
+            self._set_estimator_type(val)
+            self._add_predictor_interface(val)
 
         # get channel indices
         if type(slice_) == slice:
@@ -195,16 +220,6 @@ class Layer(Cloneable, Saveable):
         self._mapped_channels = self._mapped_channels.union(channel_indices)
 
         return self
-
-    def _expose_predictor_type(self, pipe):
-        if hasattr(pipe, '_estimator_type') is True:
-            predictor_type = pipe._estimator_type
-            if hasattr(self, '_estimator_type') is False:
-                self._estimator_type = predictor_type
-            else:
-                if self._estimator_type != predictor_type:
-                    raise ValueError('All predictors in a layer must have the \
-                                     same type (e.g. classifier or regressor)')
 
     def get_pipe(self, index):
         """
@@ -340,6 +355,10 @@ class Layer(Cloneable, Saveable):
         self.output_mask_ = [True if X_t is not None else False
                              for X_t in Xs_t]
 
+        self._remove_predictor_interface()
+        for model, _, _  in self.model_list:
+            self._add_predictor_interface(model)
+
         return Xs_t
 
     def fit_last(self, Xs, y=None, **fit_params):
@@ -388,6 +407,7 @@ class Layer(Cloneable, Saveable):
                     estimator_types.append(estimator_type)
 
                 self.model_list.append((model, slice_, channel_indices))
+                self._set_estimator_type(model)
 
                 if utils.is_predictor(model):
                     output_mask[channel_indices[0]] = True
@@ -413,8 +433,12 @@ class Layer(Cloneable, Saveable):
             raise TypeError('more than 1 predictor type found')
         elif len(estimator_types) == 1:
             self._estimator_type = list(estimator_types)[0]
-
         self.output_mask_ = output_mask
+
+        self._remove_predictor_interface()
+        for model, _, _  in self.model_list:
+            self._add_predictor_interface(model)
+
         return self
 
     def transform(self, Xs):
@@ -514,9 +538,16 @@ class Layer(Cloneable, Saveable):
             clone.output_mask_ = self.output_mask_.copy()
         clone.pipe_list = [(utils.get_clone(p), s, i.copy())
                for p, s, i in self.pipe_list]
+        for pipe in clone.pipe_list:
+            clone._set_estimator_type(pipe)
+            clone._add_predictor_interface(pipe)
         if hasattr(self, 'model_list'):
             clone.model_list = [(utils.get_clone(p), s, i.copy())
                                 for p, s, i in self.model_list]
+            clone._remove_predictor_interface()
+            for model in clone.model_list:
+                clone._set_estimator_type(model)
+                clone._add_predictor_interface(model)
         return clone
 
 
@@ -736,6 +767,22 @@ class MultichannelPipeline(Cloneable, Saveable):
         self._params_to_attributes(MultichannelPipeline.__init__, locals())
         self.layers = []
 
+    def _set_estimator_type(self, layer):
+        if hasattr(layer, '_estimator_type'):
+            self._estimator_type = layer._estimator_type
+
+    def _add_predictor_interface(self, layer):
+        for method_name in config.recognized_pred_methods:
+            if hasattr(layer, method_name):
+                prediction_method = functools.partial(self.predict_with_method,
+                                                      method_name=method_name)
+                setattr(self, method_name, prediction_method)
+
+    def _remove_predictor_interface(self):
+        for method_name in config.recognized_pred_methods:
+            if hasattr(self, method_name):
+                delattr(self, method_name)
+
     def add_layer(self, *pipe_mapping, pipe_processes=1):
         """
         Add a new stage to the pipeline.
@@ -830,9 +877,12 @@ class MultichannelPipeline(Cloneable, Saveable):
             new_layer[first_index:last_index] = pipe
             first_index = last_index
 
-        if hasattr(new_layer, '_estimator_type'):
-            self._estimator_type = new_layer._estimator_type
         self.layers.append(new_layer)
+
+        self._set_estimator_type(new_layer)
+        self._remove_predictor_interface()
+        self._add_predictor_interface(new_layer)
+
         return self
 
     def set_pipe_processes(self, pipe_processes):
@@ -898,23 +948,18 @@ class MultichannelPipeline(Cloneable, Saveable):
         -------
         self
         """
-        if hasattr(self.layers[-1], '_estimator_type'):
-            self._estimator_type = self.layers[-1]._estimator_type
-            # encode labels as integers
-            if self._estimator_type == 'classifier':
-                if y is not None:
-                    self.classes_, y = np.unique(y, return_inverse=True)
+
+        if y is not None and utils.is_classifier(self):
+            self.classes_, y = np.unique(y, return_inverse=True)
 
         for layer in self.layers[:-1]:
             Xs = layer.fit_transform(Xs, y, **fit_params)
         # fit the last layer without transforming:
         self.layers[-1].fit_last(Xs, y, **fit_params)
+        self._set_estimator_type(self.layers[-1])
+        self._remove_predictor_interface()
+        self._add_predictor_interface(self.layers[-1])
 
-        # expose the prediction methods found in the last layer
-        for method_name in utils.get_predict_methods(self.layers[-1]):
-            prediction_method = functools.partial(self.predict_with_method,
-                                                  method_name=method_name)
-            setattr(self, method_name, prediction_method)
         return self
 
     def transform(self, Xs):
@@ -957,9 +1002,16 @@ class MultichannelPipeline(Cloneable, Saveable):
             Value can be either a transformed matrix, a passthrough from the
             input matrix, or None.
         """
+        if y is not None and utils.is_classifier(self):
+            self.classes_, y = np.unique(y, return_inverse=True)
+
         for layer in self.layers[:-1]:
             Xs = layer.fit_transform(Xs, y,  **fit_params)
         self.layers[-1].fit_last(Xs, y, **fit_params)
+        self._set_estimator_type(self.layers[-1])
+        self._remove_predictor_interface()
+        self._add_predictor_interface(self.layers[-1])
+
         return self.layers[-1].transform(Xs)
 
     def predict_with_method(self, Xs, method_name):
@@ -1088,6 +1140,9 @@ class MultichannelPipeline(Cloneable, Saveable):
         if hasattr(self, 'classes_'):
             clone.classes_ = self.classes_.copy()
         clone.layers = [layer.get_clone() for layer in self.layers]
+        clone._set_estimator_type(self.layers[-1])
+        clone._add_predictor_interface(self.layers[-1])
+
         return clone
 
     def get_dataframe(self, verbose=0, show_fit=True):

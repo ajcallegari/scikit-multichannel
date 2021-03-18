@@ -86,8 +86,9 @@ class CvPerformanceScorer(Cloneable, Saveable):
     score_method : str, default='auto'
         - Name of prediction method used when scoring predictor performance.
         - if 'auto' :
-            - If classifier : Method picked using
-              config.score_method_precedence order.
+            - If classifier : method picked using
+              config.score_method_precedence order (default =
+              predict_proba->predict_log_proba->decision_function->predict)
             - If regressor : 'predict'
     scorer : callable, default='auto'
         Callable that computes a figure of merit score for the internal_cv run.
@@ -128,7 +129,8 @@ class CvPerformanceScorer(Cloneable, Saveable):
             return None
         else:
             scores = cross_val_score(self.predictor_probe, X, y,
-                                     self.score_method, scorers=self.scorer,
+                                     score_methods=self.score_method,
+                                     scorers=self.scorer,
                                      cv=self.cv, n_processes=self.cv_processes,
                                      **fit_params)
             return np.mean(scores)

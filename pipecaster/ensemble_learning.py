@@ -12,35 +12,39 @@ from sklearn.metrics import explained_variance_score, balanced_accuracy_score
 from sklearn.model_selection import ParameterGrid
 
 import pipecaster.utils as utils
+import pipecaster.config as config
 from pipecaster.utils import Cloneable, Saveable
 import pipecaster.transform_wrappers as transform_wrappers
 from pipecaster.score_selection import RankScoreSelector
 import pipecaster.parallel as parallel
 
-__all__ = ['SoftVotingClassifier', 'HardVotingClassifier',
-           'AggregatingRegressor', 'Ensemble', 'GridSearchEnsemble',
-           'MultichannelPredictor', 'ChannelEnsemble']
+__all__ = ['SoftVotingClassifier', 'SoftVotingDecision',
+           'HardVotingClassifier', 'AggregatingRegressor', 'Ensemble',
+           'GridSearchEnsemble', 'MultichannelPredictor', 'ChannelEnsemble']
 
 
 class SoftVotingClassifier(Cloneable, Saveable):
     """
-    Predict using mean predictions of a classifier ensemble.
+    Meta-predictor for classifier ensemble predic_proba outputs.
 
-    This pipeline component takes marginal probabilities from a prior pipeline
-    stage and averages them to make an ensemble prediction.  Can be used alone
-    or as a meta-predictor within MultichannelPredictor, Ensemble, and
-    ChannelEnsemble pipeline components.
+    This pipeline component takes scalar predictions from a prior pipeline
+    stage and averages them to make an ensemble prediction.  These predictions
+    should be outputs from predict_proba.  To vote with decision_function
+    outputs use the SoftVotingDecision class. To mix classifiers with different
+    scalar output methods, use the HardVotingClassifier which uses the
+    categorical 'predict' method common to both types of classifiers.
+
+    SoftVotingClassifier can be used as a standalone pipeline component or be
+    passed as the the meta_predictor paramter to MultichannelPredictor,
+    Ensemble, and ChannelEnsemble components.
 
     The inputs, which must be concatenated into a single meta-feature matrix in
     a prior stage, are decatenated and predicted classes inferred from the
     order of the meta-feature matrix columns.
 
-    For binary classifiers, the predicted probabilies must sum to 1.0 over the
-    classes for each sample so the dropped negative class probabilites can be
-    inferred from the positive class.
-
     Examples
     --------
+    SoftVotingClassifier as a meta-predictor for ChannelEnsemble.
     ::
 
         from sklearn.ensemble import GradientBoostingClassifier
@@ -49,7 +53,6 @@ class SoftVotingClassifier(Cloneable, Saveable):
         Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
                                                       n_random_Xs=7)
 
-        # use style 1:
         clf = pc.MultichannelPipeline(n_channels=10)
         base_clf = GradientBoostingClassifier()
         meta_clf = pc.SoftVotingClassifier()
@@ -57,7 +60,14 @@ class SoftVotingClassifier(Cloneable, Saveable):
         pc.cross_val_score(clf, Xs, y, cv=3)
         # output: [0.9117647058823529, 0.8180147058823529, 0.9117647058823529]
 
-        # alternative use style 1:
+    SoftVotingClassifier as a predictor for MultichannelPredictor.
+    ::
+
+        from sklearn.ensemble import GradientBoostingClassifier
+        import pipecaster as pc
+
+        Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
+                                                      n_random_Xs=7)
         clf = pc.MultichannelPipeline(n_channels=10)
         base_clf = pc.transform_wrappers.SingleChannel(
             GradientBoostingClassifier())
@@ -67,14 +77,21 @@ class SoftVotingClassifier(Cloneable, Saveable):
         pc.cross_val_score(clf, Xs, y, cv=3)
         # output: [0.9117647058823529, 0.8180147058823529, 0.9117647058823529]
 
-        # alternative use style 2:
+    SoftVotingClassifier as a standalone pipeline component.
+    ::
+
+        from sklearn.ensemble import GradientBoostingClassifier
+        import pipecaster as pc
+
+        Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
+                                                      n_random_Xs=7)
+
         clf = pc.MultichannelPipeline(n_channels=10)
         base_clf = pc.transform_wrappers.SingleChannel(
             GradientBoostingClassifier())
-        meta_clf = pc.SoftVotingClassifier()
         clf.add_layer(base_clf)
         clf.add_layer(pc.ChannelConcatenator())
-        clf.add_layer(1, meta_clf)
+        clf.add_layer(1, pc.SoftVotingClassifier())
         pc.cross_val_score(clf, Xs, y, cv=3)
         # output: [0.9117647058823529, 0.8180147058823529, 0.9117647058823529]
     """
@@ -131,62 +148,49 @@ class SoftVotingClassifier(Cloneable, Saveable):
         return clone
 
 
-class HardVotingClassifier(Cloneable, Saveable):
+class SoftVotingDecision(Cloneable, Saveable):
     """
-    Predict using most frequently predicted class in an ensemble.
+    Take average of an ensemble of decision_function outputs.
 
-    This pipeline component takes marginal probabilities from a prior pipeline
-    stage and uses them them to make an ensemble prediction.  Predictions are
-    made for each classifier in the ensemble by taking the class with the
-    highest probability, then an ensemble prediction is made by taking the
-    modal prediction.  Can be used alone or as a meta-predictor within
-    MultichannelPredictor, Ensemble, and ChannelEnsemble pipeline components.
+    This pipeline component takes scalar decision_function outputs from a prior
+    pipeline classifier stage and averages them.  Averaged decision_function
+    outputs can be used as meta-features for model stacking (see example
+    below).
 
-    The inputs, which must be concatenated into a single meta-feature matrix in
-    a prior stage, are decatenated and predicted classes inferred from the
-    order of the meta-feature matrix columns.
+    Notes
+    -----
+        - The ensemble of inputs must be concatenated into a single
+          meta-feature matrix in a prior stage.
 
-    For binary classifiers, the predicted probabilies must sum to 1.0 over the
-    classes for each sample so the dropped negative class probabilites can be
-    inferred from the positive class.
+        - This class implements estimator and tranformer interfaces but
+          lacks a complete predictor interface (i.e. 'predict' method) because
+          there is not a standard method for generating a categorical
+          predictions from an ensemble of decision_function outputs.
 
     Examples
     --------
     ::
 
+        from sklearn.preprocessing import StandardScaler
         from sklearn.ensemble import GradientBoostingClassifier
+        from sklearn.svm import SVC
         import pipecaster as pc
 
         Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
                                                       n_random_Xs=7)
 
-        # use style 1:
         clf = pc.MultichannelPipeline(n_channels=10)
-        base_clf = GradientBoostingClassifier()
-        meta_clf = pc.HardVotingClassifier()
-        clf.add_layer(pc.ChannelEnsemble(base_clf, meta_clf))
-        pc.cross_val_score(clf, Xs, y, cv=3)
-        # output: [0.8235294117647058, 0.7849264705882353, 0.6911764705882353]
-
-        # alternative use style:
-        clf = pc.MultichannelPipeline(n_channels=10)
-        base_clf = pc.transform_wrappers.SingleChannel(
-            GradientBoostingClassifier())
-        meta_clf = pc.HardVotingClassifier()
+        clf.add_layer(StandardScaler())
+        base_clf = pc.transform_wrappers.SingleChannel(SVC(),
+                                        transform_method='decision_function')
         clf.add_layer(base_clf)
-        clf.add_layer(pc.MultichannelPredictor(meta_clf))
+        meta_clf1 = pc.SoftVotingDecision()
+        clf.add_layer(2, meta_clf1, 2, meta_clf1, 2, meta_clf1, 2,
+                      meta_clf1, 2, meta_clf1)
+        meta_clf2 = pc.MultichannelPredictor(GradientBoostingClassifier())
+        clf.add_layer(meta_clf2)
         pc.cross_val_score(clf, Xs, y, cv=3)
-        # output: [0.8235294117647058, 0.7849264705882353, 0.6911764705882353]
-
-        clf = pc.MultichannelPipeline(n_channels=10)
-        base_clf = pc.transform_wrappers.SingleChannel(
-            GradientBoostingClassifier())
-        meta_clf = pc.HardVotingClassifier()
-        clf.add_layer(base_clf)
-        clf.add_layer(pc.ChannelConcatenator())
-        clf.add_layer(1, meta_clf)
-        pc.cross_val_score(clf, Xs, y, cv=3)
-        # output: [0.8235294117647058, 0.8161764705882353, 0.6911764705882353]
+        # output: [0.85294117, 0.88051470, 0.8786764705]
     """
 
     def __init__(self):
@@ -201,35 +205,118 @@ class HardVotingClassifier(Cloneable, Saveable):
 
     def _decatenate(self, meta_X):
         n_classes = len(self.classes_)
-        if n_classes == 2:
-            # expand binary classification probs to 2 columns
-            n_rows, n_cols = meta_X.shape[0], 2 * meta_X.shape[1]
-            Xs_expanded = np.empty((n_rows, n_cols))
-            Xs_expanded[:, range(0, n_cols, 2)] =  1.0 - meta_X
-            Xs_expanded[:, range(1, n_cols + 1, 2)] = meta_X
-            meta_X = Xs_expanded
-
-        if meta_X.shape[1] % n_classes != 0:
-            raise ValueError(
-                '''Number of meta-features not divisible by number of classes.
-                This can happen if base classifiers were trained on different
-                subsamples with different number of classes.  Pipecaster uses
-                StratifiedKFold to prevent this, but GroupKFold can lead to
-                violations.  Someone need to make StratifiedGroupKFold''')
-
-        Xs = [meta_X[:, i:i+n_classes]
-              for i in range(0, meta_X.shape[1], n_classes)]
+        if n_classes > 2:
+            raise NotImplementedError('Only binary classification is '
+                                      'supported but {} classes found.'
+                                      .format(n_classes))
+        Xs = [meta_X[:, i:i+1] for i in range(0, meta_X.shape[1])]
         return Xs
+
+    def decision_function(self, X):
+        Xs = self._decatenate(X)
+        return np.mean(Xs, axis=0)
+
+    def transform(self, X):
+        return self.decision_function(X).reshape(-1, 1)
+
+    def fit_transform(self, X, y, **fit_params):
+        self.fit(X, y, **fit_params)
+        return self.transform(X)
+
+    def get_clone(self):
+        """
+        Get a stateful clone.
+        """
+        clone = super().get_clone()
+        if hasattr(self, 'classes_'):
+            clone.classes_ = self.classes_.copy()
+        return clone
+
+
+class HardVotingClassifier(Cloneable, Saveable):
+    """
+    Predict using the modal prediction of an ensemble.
+
+    This pipeline component takes categorical predictions from a prior pipeline
+    stage and uses them to make an ensemble prediction.  The prediction
+    is made by taking the modal prediction (i.e. most frequently predicted
+    class) of the classifiers in the ensemble.
+
+    The ensemble of inputs for HardVotingClassifier must be concatenated into a
+    single matrix in a prior stage.
+
+
+    Examples
+    --------
+    HardVotingClassifier as a meta-predictor for ChannelEnsemble.
+    ::
+
+        from sklearn.ensemble import GradientBoostingClassifier
+        import pipecaster as pc
+
+        Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
+                                                      n_random_Xs=7)
+
+        clf = pc.MultichannelPipeline(n_channels=10)
+        base_clf = GradientBoostingClassifier()
+        meta_clf = pc.HardVotingClassifier()
+        clf.add_layer(pc.ChannelEnsemble(base_clf, meta_clf,
+                                         base_transform_methods='predict'))
+        pc.cross_val_score(clf, Xs, y, cv=3)
+        # output: [0.7647058823529411, 0.6985294117647058, 0.9080882352941176]
+
+    HardVotingClassifier as a predictor for MultichannelPredictor.
+    ::
+
+        from sklearn.ensemble import GradientBoostingClassifier
+        import pipecaster as pc
+
+        Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
+                                                      n_random_Xs=7)
+        clf = pc.MultichannelPipeline(n_channels=10)
+        base_clf = pc.transform_wrappers.SingleChannel(
+            GradientBoostingClassifier(), transform_method='predict')
+        meta_clf = pc.HardVotingClassifier()
+        clf.add_layer(base_clf)
+        clf.add_layer(pc.MultichannelPredictor(meta_clf))
+        pc.cross_val_score(clf, Xs, y, cv=3)
+        # output: [0.7352941176470589, 0.7849264705882353, 0.7536764705882353]
+
+    HardVotingClassifier as a standalone pipeline component.
+    ::
+
+        from sklearn.ensemble import GradientBoostingClassifier
+        import pipecaster as pc
+
+        Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
+                                                      n_random_Xs=7)
+
+        clf = pc.MultichannelPipeline(n_channels=10)
+        base_clf = pc.transform_wrappers.SingleChannel(
+            GradientBoostingClassifier(), transform_method='predict')
+        clf.add_layer(base_clf)
+        clf.add_layer(pc.ChannelConcatenator())
+        clf.add_layer(1, pc.HardVotingClassifier())
+        pc.cross_val_score(clf, Xs, y, cv=3)
+        # output: [0.7352941176470589, 0.6654411764705883, 0.78125]
+    """
+
+    def __init__(self):
+        self._estimator_type = 'classifier'
+
+    def fit(self, X, y, **fit_params):
+        if isinstance(y, np.ndarray) and len(y.shape) > 1 and y.shape[1] > 1:
+            raise NotImplementedError('Multilabel and multi-output '
+                                      'meta-classification not supported')
+        self.classes_, y = np.unique(y, return_inverse=True)
+        return self
 
     def predict(self, X):
         """
         Return the modal class predicted by the base classifiers.
         """
-        Xs = self._decatenate(X)
-        input_decisions = np.stack([np.argmax(X, axis=1) for X in Xs])
-        decisions = scipy.stats.mode(input_decisions, axis=0)[0][0]
-        predictions = self.classes_[decisions]
-        return predictions
+        predictions = scipy.stats.mode(X, axis=1)[0].reshape(-1)
+        return self.classes_[predictions]
 
     def get_clone(self):
         """
@@ -352,44 +439,46 @@ class Ensemble(Cloneable, Saveable):
         the internal_cv and score_selector parameters are set, in which case
         predictions from the top performing model will be used in the absence
         of a meta-predictor.
-    internal_cv : int, None, or callable, default=None
-        - Function for train/test subdivision of the training data.  Used to
-          estimate performance of base classifiers and ensure they do not
-          generate predictions from their training samples during
-          meta-predictor training.
-        - If int : StratifiedKfold(n_splits=internal_cv) if classifier or
-          KFold(n_splits=internal_cv) if regressor.
-        - If None : default value of 5.
-        - If callable: Assumed to be split generator like scikit-learn KFold.
     base_transform_methods : str or list, default='auto'
         - Set the name of the base predictor methods to use for generating
           meta-features.
         - if 'auto' :
             - If classifier : Method picked using
-              config.score_method_precedence order.
+              config.transform_method_precedence order (default:
+              predict_proba->predict_log_proba->decision_function->predict)
             - If regressor : 'predict'
         - If str other than 'auto' : Name is broadcast over all base
           predictors.
         - If list : List of names or 'auto', one per base predictor.
-    base_score_methods : str or list, default='auto'
-        - Name or names of prediction method used when scoring predictor.
+    internal_cv : int, None, or callable, default=None
+        - Function for train/test subdivision of the training data.  Used to
+          estimate performance of base classifiers and ensure they do not
+          generate predictions from their training samples during
+          meta-predictor training.
+        - If int > 1: StratifiedKfold(n_splits=internal_cv) if classifier or
+          KFold(n_splits=internal_cv) if regressor.
+        - If {None, 1}: disable internal cv.
+        - If callable: Assumed to be split generator like scikit-learn KFold.
+    base_score_methods : {str, list}, default='auto'
+        - Name or names of prediction method(s) used when scoring predictor
           performance.
         - if 'auto' :
             - If classifier : Method picked using
-              config.score_method_precedence order.
+              config.score_method_precedence order (default:
+              predict_proba->predict_log_proba->decision_function->predict)
             - If regressor : 'predict'
-    scorers : {callable, list of callables, or 'auto'}, default='auto'
-        - Function or functions for calculating the performance scores.
+        - If str other than 'auto' : Name is broadcast over all base
+          predictors.
+        - If list : List of names or 'auto', one per base predictor.
+    scorer : {callable, 'auto'}, default='auto'
+        - Method for calculating performance scores.
         - If 'auto':
-            - balanced_accuracy_score for classifiers with predict()
             - explained_variance_score for regressors with predict()
             - roc_auc_score for classifiers with {predict_proba,
               predict_log_proba, decision_function}
+            - balanced_accuracy_score for classifiers with only predict()
         - If callable: A scorer that returns a scalar figure of merit score
           with signature: score = scorer(y_true, y_pred).
-        - If list of callables: Ordered list of scorer objects that specify
-          the scoring methods to use for each prediction method specified in
-          the predict_methods parameter.
       score_selector : callable or None, default=None
         - Method for selecting models from the ensemble.
         - If callable : Selector with signature:
@@ -411,7 +500,7 @@ class Ensemble(Cloneable, Saveable):
 
     Examples
     --------
-    Voting ensemble:
+    Ensemble voting:
     ::
 
         from sklearn.datasets import make_classification
@@ -516,7 +605,7 @@ class Ensemble(Cloneable, Saveable):
         clf = Pipeline([('scaler', StandardScaler()),
                         ('ensemble_clf', ensemble_clf)])
 
-        pc.cross_val_score(clf, X, y)
+        pc.cross_val_score(clf, X, y, score_methods=['predict'])
         # output: [0.7541594951233506, 0.7360154905335627, 0.7289156626506024]
 
     Model selection (no meta-prediction):
@@ -563,84 +652,84 @@ class Ensemble(Cloneable, Saveable):
     """
 
     def __init__(self, base_predictors, meta_predictor=None,
-                 internal_cv=None, scorer='auto',
+                 base_transform_methods='auto',
+                 internal_cv=None,
+                 base_score_methods='auto',
+                 scorer='auto',
                  score_selector=None,
                  disable_cv_train=False,
-                 base_predict_methods='auto',
                  base_processes=1, cv_processes=1):
         self._params_to_attributes(Ensemble.__init__, locals())
+
+        if isinstance(base_predictors, (tuple, list, np.ndarray)):
+            for predictor in base_predictors:
+                utils.enforce_fit(predictor)
+                utils.enforce_predict(predictor)
+                self._set_estimator_type(predictor)
+        else:
+            utils.enforce_fit(predictors)
+            utils.enforce_predict(predictors)
+            self._set_estimator_type(predictors)
 
         if internal_cv is None and score_selector is not None:
             raise ValueError('Must choose an internal cv method when channel '
                              'selection is activated')
-
-        # set the estimator type
-        if isinstance(base_predictors, (tuple, list, np.ndarray)):
-            estimator_types = [p._estimator_type for p in base_predictors]
-            if len(set(estimator_types)) != 1:
-                raise TypeError('base_predictors must be of uniform type '
-                                '(e.g. all classifiers or all regressors)')
-            self._estimator_type = estimator_types[0]
-        else:
-            self._estimator_type = base_predictors._estimator_type
-
-        if scorer == 'auto':
-            if utils.is_classifier(self):
-                self.scorer = balanced_accuracy_score
-            elif utils.is_regressor(self):
-                self.scorer = explained_variance_score
-            else:
-                raise AttributeError('predictor type required for automatic '
-                                     'assignment of scoring metric')
 
         if meta_predictor is None and score_selector is None:
             self.score_selector = RankScoreSelector(k=1)
 
         # expose availbable predictor interface (may change after fit)
         if meta_predictor is not None:
-            if meta_predictor._estimator_type != self._estimator_type:
-                raise ValueError('Base- and meta- predictors must be the same '
-                                 'type (e.g. classifier or regressor).')
-            predict_methods = utils.get_predict_methods(meta_predictor)
+            utils.enforce_fit(meta_predictor)
+            utils.enforce_predict(meta_predictor)
+            self._set_estimator_type(meta_predictor)
+            self._add_predictor_interface(meta_predictor)
         else:
             if isinstance(base_predictors, (tuple, list, np.ndarray)):
-                predict_methods = [utils.get_predict_methods(p)
-                                        for p in base_predictors]
-                predict_methods = set.intersection(
-                    *[set(pms) for pms in predict_methods])
-                predict_methods = list(predict_methods)
+                for predictor in base_predictors:
+                    utils.enforce_fit(predictor)
+                    utils.enforce_predict(predictor)
+                    self._add_predictor_interface(predictor)
             else:
-                predict_methods = utils.get_predict_methods(base_predictors)
-        self._set_predictor_interface(predict_methods)
+                utils.enforce_fit(predictors)
+                utils.enforce_predict(predictors)
+                self._add_predictor_interface(predictors)
 
-    def _set_predictor_interface(self, predict_method_names):
+    def _set_estimator_type(self, predictor):
+        if hasattr(predictor, '_estimator_type') is True:
+            self._estimator_type = predictor._estimator_type
+        else:
+            if predictor._estimator_type != self._estimator_type:
+                print('All estimators in ensumble must of same type.')
+
+    def _add_predictor_interface(self, predictor):
         for method_name in config.recognized_pred_methods:
-            is_available = method_name in predict_method_names
-            is_exposed = hasattr(self, method_name)
-
-            if is_available and is_exposed is False:
+            if hasattr(predictor, method_name):
                 prediction_method = functools.partial(self.predict_with_method,
                                                       method_name=method_name)
                 setattr(self, method_name, prediction_method)
-            elif is_exposed and is_available is False:
+
+    def _remove_predictor_interface(self):
+        for method_name in config.recognized_pred_methods:
+            if hasattr(self, method_name):
                 delattr(self, method_name)
-        return self
 
     @staticmethod
-    def _fit_job(predictor, X, y, internal_cv, base_predict_method,
-                 cv_processes, scorer, fit_params):
-        model = transform_wrappers.SingleChannel(predictor,
-                                                 base_predict_method)
-        model = utils.get_clone(model)
+    def _fit_job(predictor, X, y, internal_cv, transform_method,
+                 cv_processes, score_method, scorer, fit_params):
+        model = utils.get_clone(predictor)
+        model = transform_wrappers.SingleChannel(model,
+                                                 transform_method)
         predictions = model.fit_transform(X, y, **fit_params)
 
         cv_predictions, score = None, None
         if internal_cv is not None:
+            predict_methods = list(set([transform_method, score_method]))
             model_cv = utils.get_clone(predictor)
             model_cv = transform_wrappers.SingleChannelCV(
-                                                model_cv, base_predict_method,
-                                                internal_cv, cv_processes,
-                                                scorer)
+                                                model_cv, transform_method,
+                                                internal_cv, score_method,
+                                                scorer, cv_processes)
             cv_predictions = model_cv.fit_transform(X, y, **fit_params)
             score = model_cv.score_
 
@@ -651,18 +740,29 @@ class Ensemble(Cloneable, Saveable):
         if self._estimator_type == 'classifier' and y is not None:
             self.classes_, y = np.unique(y, return_inverse=True)
 
-        if isinstance(self.base_predict_methods, (tuple, list, np.ndarray)):
-            if len(self.base_predict_methods) != len(self.base_predictors):
+        if isinstance(self.base_transform_methods, (tuple, list, np.ndarray)):
+            if len(self.base_transform_methods) != len(self.base_predictors):
                 raise utils.FitError('Number of base predict methods did not '
                                      'match number of base predictors.')
-            methods = self.base_predict_methods
+            transform_methods = self.base_transform_methods
         else:
-            methods = [self.base_predict_methods for p in self.base_predictors]
+            transform_methods = [self.base_transform_methods
+                                 for p in self.base_predictors]
 
-        args_list = [(p, X, y, self.internal_cv, m, self.cv_processes,
-                      self.scorer, fit_params)
-                     for p, m in zip(self.base_predictors, methods)]
+        if isinstance(self.base_score_methods, (tuple, list, np.ndarray)):
+            if len(self.base_score_methods) != len(self.base_predictors):
+                raise utils.FitError('Number of base predict methods did not '
+                                     'match number of base predictors.')
+            score_methods = self.base_score_methods
+        else:
+            score_methods = [self.base_score_methods
+                             for p in self.base_predictors]
 
+        args_list = [(p, X, y, self.internal_cv, tm, self.cv_processes,
+                      sm, self.scorer, fit_params)
+                     for p, tm, sm in zip(self.base_predictors,
+                                          transform_methods,
+                                          score_methods)]
         n_jobs = len(args_list)
         n_processes = 1 if self.base_processes is None else self.base_processes
         n_processes = (n_jobs
@@ -711,16 +811,21 @@ class Ensemble(Cloneable, Saveable):
         elif self.meta_predictor is None and len(self.selected_indices_) == 1:
             if hasattr(self.base_models[0], 'classes_'):
                self.classes_ = self.base_models[0].classes_
-            predict_methods = utils.get_predict_methods(self.base_models[0])
         elif self.meta_predictor is not None:
             meta_X = np.concatenate(predictions, axis=1)
             self.meta_model = utils.get_clone(self.meta_predictor)
             self.meta_model.fit(meta_X, y, **fit_params)
             if hasattr(self.meta_model, 'classes_'):
                 self.classes_ = self.meta_model.classes_
-            predict_methods = utils.get_predict_methods(self.meta_model)
 
-        self._set_predictor_interface(predict_methods)
+        self._remove_predictor_interface()
+        if hasattr(self, 'meta_model'):
+            self._set_estimator_type(self.meta_model)
+            self._add_predictor_interface(self.meta_model)
+        else:
+            self._set_estimator_type(self.base_models[0])
+            self._add_predictor_interface(self.base_models[0])
+
         return self
 
     def get_model_scores(self):
@@ -1052,23 +1157,27 @@ class MultichannelPredictor(Cloneable, Saveable):
         self._params_to_attributes(MultichannelPredictor.__init__, locals())
         utils.enforce_fit(predictor)
         utils.enforce_predict(predictor)
-        self._estimator_type = utils.detect_predictor_type(predictor)
-        if self._estimator_type is None:
-            raise TypeError('could not detect predictor type')
-        predict_method_names = utils.get_predict_methods(predictor)
-        self._set_predictor_interface(predict_method_names)
+        self._set_estimator_type(predictor)
+        self._add_predictor_interface(predictor)
 
-    def _set_predictor_interface(self, predict_method_names):
+    def _set_estimator_type(self, predictor):
+        if hasattr(predictor, '_estimator_type') is True:
+            self._estimator_type = predictor._estimator_type
+        else:
+            if predictor._estimator_type != self._estimator_type:
+                print('All estimators in ensumble must of same type.')
+
+    def _add_predictor_interface(self, predictor):
         for method_name in config.recognized_pred_methods:
-            is_available = method_name in predict_method_names
-            is_exposed = hasattr(self, method_name)
-            if is_available and (is_exposed is False):
+            if hasattr(predictor, method_name):
                 prediction_method = functools.partial(self.predict_with_method,
                                                       method_name=method_name)
                 setattr(self, method_name, prediction_method)
-            elif is_exposed and (is_available is False):
+
+    def _remove_predictor_interface(self):
+        for method_name in config.recognized_pred_methods:
+            if hasattr(self, method_name):
                 delattr(self, method_name)
-        return self
 
     def fit(self, Xs, y=None, **fit_params):
         self.model = utils.get_clone(self.predictor)
@@ -1082,8 +1191,10 @@ class MultichannelPredictor(Cloneable, Saveable):
                 self.model.fit(X, y, **fit_params)
             if hasattr(self.model, 'classes_'):
                 self.classes_ = self.model.classes_
-        predict_method_names = utils.get_predict_methods(self.model)
-        self._set_predictor_interface(predict_method_names)
+
+        self._set_estimator_type(self.model)
+        self._remove_predictor_interface()
+        self._add_predictor_interface(self.model)
         return self
 
     def predict_with_method(self, Xs, method_name):
@@ -1145,31 +1256,59 @@ class ChannelEnsemble(Cloneable, Saveable):
 
     Parameters
     ----------
-    base_predictors : predictor instance or list of predictor instances
-        Ensemble of scikit-learn conformant base predictors (either all
-        classifiers or all regressors).
+    base_predictors : {predictor instance, list}
+        - Ensemble of scikit-learn conformant base predictors (either all
+          classifiers or all regressors).
+        - If predictor instance: Instance to be cloned and broadcast across
+          all inputs.
+        - If list: List with one predictor instance per channel.
     meta_predictor : predictor instance, default=None
         Scikit-learn conformant classifier or regressor that makes predictions
-        from the base predictor inferences.  This parameter is optional when
-        the internal_cv and score_selector parameters are set, in which case
+        from base predictor inferences.  This parameter is optional when
+        internal_cv and score_selector parameters are set, in which case
         predictions from the top performing model will be used in the absence
         of a meta-predictor.
+    base_transform_methods : str or list, default='auto'
+        - Set the name of the base predictor methods to use for generating
+          meta-features.
+        - if 'auto' :
+            - If classifier : Method picked using
+              config.transform_method_precedence order (default:
+              predict_proba->predict_log_proba->decision_function->predict)
+            - If regressor : 'predict'
+        - If str other than 'auto' : Name is broadcast over all base
+          predictors.
+        - If list : List of names or 'auto', one per base predictor.
     internal_cv : int, None, or callable, default=None
         - Function for train/test subdivision of the training data.  Used to
           estimate performance of base classifiers and ensure they do not
           generate predictions from their training samples during
           meta-predictor training.
-        - If int : StratifiedKfold(n_splits=internal_cv) if classifier or
+        - If int > 1: StratifiedKfold(n_splits=internal_cv) if classifier or
           KFold(n_splits=internal_cv) if regressor.
-        - If None : default value of 5.
+        - If {None, 1}: disable internal cv.
         - If callable: Assumed to be split generator like scikit-learn KFold.
-    scorer : callable or 'auto', default='auto'
-        - Performance metric used for model selection.
-        - If callable : should return a scalar figure of merit with
-          signature: score = scorer(y_true, y_pred).
-        - If 'auto' : balanced_accuracy_score if classifier,
-          explained_variance_score if regressor.
-    score_selector : callable or None, default=None
+    base_score_methods : {str, list}, default='auto'
+        - Name or names of prediction method(s) used when scoring predictor
+          performance.
+        - if 'auto' :
+            - If classifier : Method picked using
+              config.score_method_precedence order (default:
+              predict_proba->predict_log_proba->decision_function->predict)
+            - If regressor : 'predict'
+        - If str other than 'auto' : Name is broadcast over all base
+          predictors.
+        - If list : List of names or 'auto', one per base predictor.
+    scorer : {callable, 'auto'}, default='auto'
+        - Method for calculating performance scores.
+        - If 'auto':
+            - explained_variance_score for regressors with predict()
+            - roc_auc_score for classifiers with {predict_proba,
+              predict_log_proba, decision_function}
+            - balanced_accuracy_score for classifiers with only predict()
+        - If callable: A scorer that returns a scalar figure of merit score
+          with signature: score = scorer(y_true, y_pred).
+      score_selector : callable or None, default=None
         - Method for selecting models from the ensemble.
         - If callable : Selector with signature:
           selected_indices = callable(scores).
@@ -1178,12 +1317,6 @@ class ChannelEnsemble(Cloneable, Saveable):
     disable_cv_train : bool, default=False
         - If False : cv predictions will be used to train the meta-predictor.
         - If True : cv predictions not used to train the meta-predictor.
-    base_predict_methods : str or list, default='auto'
-        - Set the name of the base predictor methods to use.
-        - If 'auto' : Use the precedence order specified in
-          :mod:`pipecaster.transform_wrappers` to select a predict method.
-        - If str other than 'auto' : Name is broadcast over all channels.
-        - If list : List of names, one per channel.
     base_processes : int or 'max', default=1
         - The number of parallel processes to run for base predictor fitting.
         - If int : Use up to base_processes number of processes.
@@ -1218,7 +1351,7 @@ class ChannelEnsemble(Cloneable, Saveable):
                         score_selector=pc.RankScoreSelector(3)),
                       pipe_processes='max')
 
-        pc.cross_val_score(clf, Xs, y)
+        pc.cross_val_score(clf, Xs, y, score_methods=['predict'])
         # output=> [0.794116, 0.8805, 0.8768]
 
         import pandas as pd
@@ -1230,86 +1363,81 @@ class ChannelEnsemble(Cloneable, Saveable):
     """
 
     def __init__(self, base_predictors, meta_predictor=None,
-                 internal_cv=None, scorer='auto',
+                 base_transform_methods='auto',
+                 internal_cv=None,
+                 base_score_methods='auto',
+                 scorer='auto',
                  score_selector=None,
                  disable_cv_train=False,
-                 base_predict_methods='auto',
                  base_processes=1, cv_processes=1):
         self._params_to_attributes(ChannelEnsemble.__init__, locals())
+
+        if isinstance(base_predictors, (tuple, list, np.ndarray)):
+            for predictor in base_predictors:
+                utils.enforce_fit(predictor)
+                utils.enforce_predict(predictor)
+                self._set_estimator_type(predictor)
+        else:
+            utils.enforce_fit(base_predictors)
+            utils.enforce_predict(base_predictors)
+            self._set_estimator_type(base_predictors)
 
         if internal_cv is None and score_selector is not None:
             raise ValueError('Must choose an internal cv method when channel '
                              'selection is activated')
 
-        # set the estimator type
-        if isinstance(base_predictors, (tuple, list, np.ndarray)):
-            estimator_types = [p._estimator_type for p in base_predictors]
-            if len(set(estimator_types)) != 1:
-                raise TypeError('base_predictors must be of uniform type '
-                                '(e.g. all classifiers or all regressors)')
-            self._estimator_type = estimator_types[0]
-        else:
-            self._estimator_type = base_predictors._estimator_type
-
-        if scorer == 'auto':
-            if utils.is_classifier(self):
-                self.scorer = balanced_accuracy_score
-            elif utils.is_regressor(self):
-                self.scorer = explained_variance_score
-            else:
-                raise AttributeError('predictor type required for automatic '
-                                     'assignment of scoring metric')
-
         if meta_predictor is None and score_selector is None:
             self.score_selector = RankScoreSelector(k=1)
 
-        # expose availbable predictor interface (may change after fit)
+        # expose available predictor interface (may change after fit)
         if meta_predictor is not None:
-            if meta_predictor._estimator_type != self._estimator_type:
-                raise ValueError('Base- and meta- predictors must be the same '
-                                 'type (e.g. classifier or regressor).')
-            predict_methods = utils.get_predict_methods(meta_predictor)
+            utils.enforce_fit(meta_predictor)
+            utils.enforce_predict(meta_predictor)
+            self._set_estimator_type(meta_predictor)
+            self._add_predictor_interface(meta_predictor)
         else:
             if isinstance(base_predictors, (tuple, list, np.ndarray)):
-                predict_methods = [utils.get_predict_methods(p)
-                                        for p in base_predictors]
-                predict_methods = set.intersection(
-                    *[set(pms) for pms in predict_methods])
-                predict_methods = list(predict_methods)
+                for predictor in base_predictors:
+                    self._add_predictor_interface(base_predictors)
             else:
-                predict_methods = utils.get_predict_methods(base_predictors)
-        self._set_predictor_interface(predict_methods)
+                self._add_predictor_interface(base_predictors)
 
-    def _set_predictor_interface(self, predict_method_names):
+    def _set_estimator_type(self, predictor):
+        if hasattr(predictor, '_estimator_type') is True:
+            self._estimator_type = predictor._estimator_type
+        else:
+            if predictor._estimator_type != self._estimator_type:
+                print('All estimators in ensumble must of same type.')
+
+    def _add_predictor_interface(self, predictor):
         for method_name in config.recognized_pred_methods:
-            is_available = method_name in predict_method_names
-            is_exposed = hasattr(self, method_name)
-
-            if is_available and is_exposed is False:
+            if hasattr(predictor, method_name):
                 prediction_method = functools.partial(self.predict_with_method,
                                                       method_name=method_name)
                 setattr(self, method_name, prediction_method)
-            elif is_exposed and is_available is False:
+
+    def _remove_predictor_interface(self):
+        for method_name in config.recognized_pred_methods:
+            if hasattr(self, method_name):
                 delattr(self, method_name)
-        return self
 
     @staticmethod
-    def _fit_job(predictor, X, y, internal_cv, base_predict_method,
-                 cv_processes, scorer, fit_params):
+    def _fit_job(predictor, X, y, transform_method, internal_cv,
+                 score_method, scorer, cv_processes, fit_params):
         if X is None:
             return None, None, None, None
-        model = transform_wrappers.SingleChannel(predictor,
-                                                 base_predict_method)
-        model = utils.get_clone(model)
+        model = utils.get_clone(predictor)
+        model = transform_wrappers.SingleChannel(model,
+                                                 transform_method)
         predictions = model.fit_transform(X, y, **fit_params)
 
         cv_predictions, score = None, None
         if internal_cv is not None:
             model_cv = utils.get_clone(predictor)
             model_cv = transform_wrappers.SingleChannelCV(
-                                                model_cv, base_predict_method,
-                                                internal_cv, cv_processes,
-                                                scorer)
+                                                model_cv, transform_method,
+                                                internal_cv, score_method,
+                                                scorer, cv_processes)
             cv_predictions = model_cv.fit_transform(X, y, **fit_params)
             score = model_cv.score_
 
@@ -1322,23 +1450,33 @@ class ChannelEnsemble(Cloneable, Saveable):
 
         if isinstance(self.base_predictors, (tuple, list, np.ndarray)):
             if len(self.base_predictors) != len(Xs):
-                raise utils.FitError('Number of base predictor did not match '
+                raise utils.FitError('Number of base predictors did not match '
                                      'number of input channels')
             predictors = self.base_predictors
         else:
             predictors = [self.base_predictors for X in Xs]
 
-        if isinstance(self.base_predict_methods, (tuple, list, np.ndarray)):
-            if len(self.base_predict_methods) != len(Xs):
+        if isinstance(self.base_transform_methods, (tuple, list, np.ndarray)):
+            if len(self.base_transform_methods) != len(Xs):
                 raise utils.FitError('Number of base predict methods did not '
                                      'match number of input channels')
-            methods = self.base_predict_methods
+            transform_methods = self.base_transform_methods
         else:
-            methods = [self.base_predict_methods for X in Xs]
+            transform_methods = [self.base_transform_methods for X in Xs]
 
-        args_list = [(p, X, y, self.internal_cv, m, self.cv_processes,
-                      self.scorer, fit_params)
-                     for p, X, m in zip(predictors, Xs, methods)]
+        if isinstance(self.base_score_methods, (tuple, list, np.ndarray)):
+            if len(self.base_score_methods) != len(Xs):
+                raise utils.FitError('Number of base score methods did not '
+                                     'match number of input channels')
+            score_methods = self.base_score_methods
+        else:
+            score_methods = [self.base_score_methods for X in Xs]
+
+        args_list = [(p, X, y, tm, self.internal_cv, sm, self.scorer,
+                      self.cv_processes, fit_params)
+                     for p, X, tm, sm in zip(predictors, Xs,
+                                             transform_methods,
+                                             score_methods)]
 
         n_jobs = len(args_list)
         n_processes = 1 if self.base_processes is None else self.base_processes
@@ -1389,16 +1527,21 @@ class ChannelEnsemble(Cloneable, Saveable):
             model = self.base_models[self.selected_indices_[0]]
             if hasattr(model, 'classes_'):
                self.classes_ = model.classes_
-            predict_methods = utils.get_predict_methods(model)
         elif self.meta_predictor is not None:
             meta_X = np.concatenate(predictions, axis=1)
             self.meta_model = utils.get_clone(self.meta_predictor)
             self.meta_model.fit(meta_X, y, **fit_params)
             if hasattr(self.meta_model, 'classes_'):
                 self.classes_ = self.meta_model.classes_
-            predict_methods = utils.get_predict_methods(self.meta_model)
 
-        self._set_predictor_interface(predict_methods)
+        self._remove_predictor_interface()
+        if hasattr(self, 'meta_model'):
+            self._set_estimator_type(self.meta_model)
+            self._add_predictor_interface(self.meta_model)
+        else:
+            self._set_estimator_type(self.base_models[0])
+            self._add_predictor_interface(self.base_models[0])
+
         return self
 
     def get_model_scores(self):

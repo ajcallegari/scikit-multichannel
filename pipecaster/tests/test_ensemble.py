@@ -221,7 +221,7 @@ class TestEnsembleSelection(unittest.TestCase):
 
         self.assertTrue(acc > 0.70, 'Accuracy tolerance failure.')
 
-    def test_discrimination_rgr(self, verbose=1, seed=42):
+    def test_discrimination_rgr(self, verbose=0, seed=42):
         """
         Determine if Ensemble can pick real regressor over dummy and
         test performance.
@@ -239,10 +239,14 @@ class TestEnsembleSelection(unittest.TestCase):
                                 score_selector=RankScoreSelector(k=1)))
         mclf.fit([X], y)
 
-        c = mclf.get_model(1, 0).get_base_models()[0]
-        c = transform_wrappers.unwrap_model(c)
+        ensemble = mclf.get_model(1, 0)
+        selected_model = ensemble.get_base_models()[0]
+        selected_model = transform_wrappers.unwrap_model(selected_model)
 
-        self.assertTrue(type(c) == LinearRegression,
+        if verbose > 0:
+            print(ensemble.get_screen_results())
+
+        self.assertTrue(type(selected_model) == LinearRegression,
                         'Ensemble failed to pick LinearRegression '
                         'over dummies')
 

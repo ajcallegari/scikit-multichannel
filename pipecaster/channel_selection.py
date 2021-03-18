@@ -411,6 +411,8 @@ class SelectVarianceHighPassScores(ChannelSelector):
         pc.cross_val_score(clf, Xs, y)
         # output: [0.9411764705882353, 0.9375, 0.9393382352941176]
     """
+
+
     def __init__(self, feature_scorer=None, aggregator=np.sum,
                  variance_cutoff=2.0, get_variance=np.nanstd,
                  get_baseline=np.nanmean, n_min=1,
@@ -502,7 +504,8 @@ class SelectKBestProbes(ChannelSelector):
                  channel_processes=1, cv_processes=1):
         self._params_to_attributes(SelectKBestProbes.__init__, locals())
         super().__init__(CvPerformanceScorer(predictor_probe, cv,
-                                             scorer, cv_processes),
+                                             score_method, scorer,
+                                             cv_processes),
                          RankScoreSelector(k), channel_processes)
 
 
@@ -583,7 +586,8 @@ class SelectPercentBestProbes(ChannelSelector):
                  score_method='auto', scorer='auto', pct=33,
                  channel_processes=1, cv_processes=1):
         self._params_to_attributes(SelectPercentBestProbes.__init__, locals())
-        super().__init__(CvPerformanceScorer(predictor_probe, cv, scorer,
+        super().__init__(CvPerformanceScorer(predictor_probe, cv,
+                                             score_method, scorer,
                                              cv_processes),
                          PctRankScoreSelector(pct),
                          channel_processes)
@@ -669,7 +673,8 @@ class SelectHighPassProbes(ChannelSelector):
                  n_min=1, channel_processes=1, cv_processes=1):
         self._params_to_attributes(SelectHighPassProbes.__init__, locals())
         super().__init__(CvPerformanceScorer(predictor_probe, cv,
-                                             scorer, cv_processes),
+                                             score_method, scorer,
+                                             cv_processes),
                          HighPassScoreSelector(cutoff, n_min),
                          channel_processes)
 
@@ -772,7 +777,8 @@ class SelectVarianceHighPassProbes(ChannelSelector):
         self._params_to_attributes(SelectVarianceHighPassProbes.__init__,
                                    locals())
         super().__init__(CvPerformanceScorer(predictor_probe, cv,
-                                             scorer, cv_processes),
+                                             score_method, scorer,
+                                             cv_processes),
                          VarianceHighPassScoreSelector(variance_cutoff,
                                                        get_variance,
                                                        get_baseline, n_min),

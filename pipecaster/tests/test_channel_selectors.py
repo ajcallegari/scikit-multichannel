@@ -29,20 +29,24 @@ class TestChannelSelectors(unittest.TestCase):
         warnings.resetwarnings()
 
     @staticmethod
-    def _select_synthetic_classification(channel_selector, n_informative_Xs=3, n_weak_Xs=0, n_random_Xs=0,
-                                         weak_noise_sd=1.0, verbose = 0, seed=None, **sklearn_params):
+    def _select_synthetic_classification(channel_selector, n_informative_Xs=3,
+                                         n_weak_Xs=0, n_random_Xs=0,
+                                         weak_noise_sd=1.0, verbose = 0,
+                                         seed=None, **sklearn_params):
 
         n_Xs = n_informative_Xs + n_weak_Xs + n_random_Xs
 
-        Xs, y, X_types = make_multi_input_classification(n_informative_Xs, n_weak_Xs,
-                                                         n_random_Xs, weak_noise_sd, seed, **sklearn_params)
+        Xs, y, X_types = make_multi_input_classification(
+                                    n_informative_Xs, n_weak_Xs, n_random_Xs,
+                                    weak_noise_sd, seed, **sklearn_params)
 
         clf = MultichannelPipeline(n_channels=n_Xs)
         clf.add_layer(StandardScaler())
         clf.add_layer(channel_selector)
         clf.fit(Xs, y)
         Xs_t = clf.transform(Xs)
-        Xs_selected = ['selected' if X is not None else 'not selected' for X in Xs_t]
+        Xs_selected = ['selected' if X is not None
+                       else 'not selected' for X in Xs_t]
 
         n_informative_hits, n_random_hits, n_weak_hits = 0, 0, 0
         for X, t in zip(Xs_selected, X_types):
@@ -133,7 +137,9 @@ class TestChannelSelectors(unittest.TestCase):
                                                                verbose=verbose, seed=seed, **sklearn_params)
         self.assertTrue(passed, 'SelectKBestScores failed to detect all weak clasification input matrices')
 
-    def test_SelectKBestProbes_weak_strong_cls_input_discrimination(self, verbose=0, seed=42):
+    def test_SelectKBestProbes_weak_strong_cls_input_discrimination(self,
+                                                                    verbose=0,
+                                                                    seed=42):
         k = 5
         sklearn_params = {'n_classes':2,
                   'n_samples':2000,
@@ -142,8 +148,12 @@ class TestChannelSelectors(unittest.TestCase):
                   'n_redundant':0,
                   'n_repeated':0,
                   'class_sep':2.0}
-        channel_selector = SelectKBestProbes(predictor_probe=KNeighborsClassifier(n_neighbors=5, weights='uniform'),
-                                                 cv=3, scorer=accuracy_score, k=k, channel_processes=n_cpus, cv_processes=1)
+        probe = KNeighborsClassifier(
+            n_neighbors=5, weights='uniform')
+        channel_selector = SelectKBestProbes(predictor_probe=probe, cv=3,
+             score_method='predict', scorer=accuracy_score, k=k,
+             channel_processes=n_cpus, cv_processes=1)
+
         passed = TestChannelSelectors._test_weak_strong_cls_input_discrimination(channel_selector, n_weak=k,
                                                                            n_strong=k, weak_noise_sd=50,
                                                                            verbose=verbose, seed=seed, **sklearn_params)
@@ -158,12 +168,16 @@ class TestChannelSelectors(unittest.TestCase):
                   'n_redundant':0,
                   'n_repeated':0,
                   'class_sep':2.0}
-        channel_selector = SelectKBestProbes(predictor_probe=KNeighborsClassifier(n_neighbors=5, weights='uniform'),
-                                                 cv=3, scorer=accuracy_score, k=k, channel_processes=n_cpus, cv_processes=1)
-        passed = TestChannelSelectors._test_weak_cls_input_detection(channel_selector, n_weak = int(k/2),
-                                                               n_strong = k - int(k/2), weak_noise_sd = 1,
-                                                               verbose=verbose, seed=seed, **sklearn_params)
-        self.assertTrue(passed, 'KBestPerformers failed to detect all weak clasification input matrices')
+        probe = KNeighborsClassifier(n_neighbors=5, weights='uniform')
+        channel_selector = SelectKBestProbes(
+            predictor_probe=probe, cv=3, score_method='predict',
+            scorer=accuracy_score, k=k, channel_processes=n_cpus,
+            cv_processes=1)
+        passed = TestChannelSelectors._test_weak_cls_input_detection(
+            channel_selector, n_weak = int(k/2), n_strong = k - int(k/2),
+            weak_noise_sd = 1, verbose=verbose, seed=seed, **sklearn_params)
+        self.assertTrue(passed, 'KBestPerformers failed to detect all weak '
+                        'clasification input matrices')
 
     ### TEST CHANNEL SELECTORS USING SYNTHETIC REGRESSION DATA ###
 

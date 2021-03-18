@@ -30,9 +30,9 @@ class TestCrossValScore(unittest.TestCase):
         self.clf = clf
         self.X_cls, self.y_cls = make_classification(n_classes=2, n_samples=500, n_features=40,
                                                      n_informative=20, random_state=test_seed)
-        self.cls_scores = sk_model_selection.cross_val_score(clf, self.X_cls, self.y_cls,
-                                                             scoring=make_scorer(roc_auc_score),
-                                                             cv=self.cv, n_jobs=1)
+        self.cls_scores = sk_model_selection.cross_val_score(
+            clf, self.X_cls, self.y_cls, scoring=make_scorer(roc_auc_score, needs_proba=True),
+            cv=self.cv, n_jobs=1)
 
         rgr = KNeighborsRegressor(n_neighbors=5, weights='uniform')
         self.rgr = rgr
@@ -67,7 +67,7 @@ class TestCrossValScore(unittest.TestCase):
 
     def test_single_input_regression(self):
         pc_scores = pc_cross_validation.cross_val_score(self.rgr, self.X_rgr, self.y_rgr, scorers=explained_variance_score,
-                                                       cv=self.cv, n_processes=1)
+                                                        cv=self.cv, n_processes=1)
         self.assertTrue(np.array_equal(self.rgr_scores, pc_scores), 'regressor scores from pipecaster.cross_validation.cross_val_score did not match sklearn control (single input predictor)')
 
     def test_multi_input_regression(self):

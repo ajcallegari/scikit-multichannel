@@ -32,22 +32,6 @@ import pipecaster.config as config
 from pipecaster.utils import Cloneable, Saveable
 from pipecaster.cross_validation import cross_val_predict, score_predictions
 
-def get_transform_method(pipe):
-    """
-    Get prediction method name using config.transform_method_precedence.
-
-    Parameters
-    ----------
-    pipe: pipe instance
-
-    Returns
-    -------
-    Name (str) of a pipe method that can be used for transforming.
-    """
-    for method_name in config.transform_method_precedence:
-        if hasattr(pipe, method_name):
-            return method_name
-    return None
 
 class SingleChannel(Cloneable, Saveable):
     """
@@ -59,15 +43,17 @@ class SingleChannel(Cloneable, Saveable):
     Parameters
     ----------
     predictor : predictor instance
-        The scikit-learn conformant predictor to wrap.
+        The scikit-learn conformant estimator/predictor to wrap.
     transform_method : str, default='auto'
-        Name of the prediction method to used for generating outputs on call to
-        transform or fit_transform. If 'auto', the method is automatically
-        chosen using the order specified in config.transform_method_precedence.
+        Name of predictor method used for generating outputs on call to
+        transform or fit_transform. If 'auto', 'predict' is used for regressors
+        and the method for classifiers is set using the order defined in
+        config.transform_method_precedence (default:
+        predict_proba->predict_log_proba->decision_function->predict).
 
     Examples
     --------
-    Model stacking:
+    Model stacking, classification:
     ::
 
         from sklearn.ensemble import GradientBoostingClassifier
@@ -77,12 +63,28 @@ class SingleChannel(Cloneable, Saveable):
         Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
                                                       n_random_Xs=7)
         clf = pc.MultichannelPipeline(n_channels=10)
-        base_clf = pc.transform_wrappers.SingleChannel(
-                                                GradientBoostingClassifier())
+        base_clf = GradientBoostingClassifier()
+        base_clf = pc.transform_wrappers.SingleChannel(base_clf)
         clf.add_layer(base_clf, pipe_processes='max')
         clf.add_layer(pc.MultichannelPredictor(SVC()))
         pc.cross_val_score(clf, Xs, y, cv=3)
         # output: [0.8529411764705882, 0.8216911764705883, 0.9099264705882353]
+
+    Model stacking, regression:
+    ::
+        from sklearn.ensemble import GradientBoostingRegressor
+        from sklearn.svm import SVR
+        import pipecaster as pc
+
+        Xs, y, _ = pc.make_multi_input_regression(n_informative_Xs=7,
+                                                  n_random_Xs=3)
+        clf = pc.MultichannelPipeline(n_channels=10)
+        base_clf = GradientBoostingRegressor()
+        base_clf = pc.transform_wrappers.SingleChannel(base_clf)
+        clf.add_layer(base_clf, pipe_processes=1)
+        clf.add_layer(pc.MultichannelPredictor(SVR()))
+        pc.cross_val_score(clf, Xs, y, cv=3)
+        # output: [0.077183453, 0.067682880449, 0.07849665]
 
     Notes
     -----
@@ -95,24 +97,24 @@ class SingleChannel(Cloneable, Saveable):
     def __init__(self, predictor, transform_method='auto'):
         self._params_to_attributes(SingleChannel.__init__, locals())
         utils.enforce_fit(predictor)
+        utils.enforce_predict(predictor)
+        self._add_predictor_interface(predictor)
+        self._set_estimator_type(predictor)
 
-        predict_methods = utils.get_predict_methods(predictor)
-        self._set_predictor_interface(predict_methods)
-        self._estimator_type = utils.detect_predictor_type(predictor)
-        if self._estimator_type is None:
-            raise TypeError('could not detect predictor type for {}'
-                            .format(predictor))
+    def _set_estimator_type(self, predictor):
+        if hasattr(predictor, '_estimator_type') is True:
+            self._estimator_type = predictor._estimator_type
 
-    def _set_predictor_interface(self, predict_method_names):
+    def _add_predictor_interface(self, predictor):
         for method_name in config.recognized_pred_methods:
-            is_available = method_name in predict_method_names
-            is_exposed = hasattr(self, method_name)
-
-            if is_available and is_exposed is False:
+            if hasattr(predictor, method_name):
                 prediction_method = functools.partial(self.predict_with_method,
                                                       method_name=method_name)
                 setattr(self, method_name, prediction_method)
-            elif is_exposed and is_available is False:
+
+    def _remove_predictor_interface(self):
+        for method_name in config.recognized_pred_methods:
+            if hasattr(self, method_name):
                 delattr(self, method_name)
 
     def set_transform_method(self, method_name):
@@ -122,9 +124,9 @@ class SingleChannel(Cloneable, Saveable):
     def get_transform_method(self):
         if self.transform_method == 'auto':
             if hasattr(self, 'model'):
-                method_name = get_transform_method(self.model)
+                method_name = utils.get_transform_method(self.model)
             else:
-                method_name = get_transform_method(self.predictor)
+                method_name = utils.get_transform_method(self.predictor)
             if method_name is None:
                 raise NameError('model lacks a recognized method for '
                                 'conversion to transformer')
@@ -135,15 +137,17 @@ class SingleChannel(Cloneable, Saveable):
 
     def fit(self, X, y=None, **fit_params):
         self.model = utils.get_clone(self.predictor)
+        is_classifier = utils.is_classifier(self.predictor)
         if y is None:
             self.model.fit(X, **fit_params)
         else:
+            if is_classifier:
+                self.classes_, y = np.unique(y, return_inverse=True)
             self.model.fit(X, y, **fit_params)
-        if self._estimator_type == 'classifier':
-            self.classes_ = self.model.classes_
+        self._set_estimator_type(self.model)
+        self._remove_predictor_interface()
+        self._add_predictor_interface(self.model)
 
-        predict_methods = utils.get_predict_methods(self.model)
-        self._set_predictor_interface(predict_methods)
         return self
 
     def predict_with_method(self, X, method_name):
@@ -151,10 +155,14 @@ class SingleChannel(Cloneable, Saveable):
             raise utils.FitError('prediction attempted before model fitting')
         if hasattr(self.model, method_name):
             predict_method = getattr(self.model, method_name)
-            return predict_method(X)
+            predictions = predict_method(X)
         else:
             raise NameError('prediction method {} not found in {} attributes'
                             .format(method_name, self.model))
+        if utils.is_classifier(self) and method_name == 'predict':
+            predictions = self.classes_[predictions]
+
+        return predictions
 
     def transform(self, X):
         if hasattr(self, 'model'):
@@ -206,30 +214,27 @@ class SingleChannelCV(SingleChannel):
     ----------
     predictor : predictor instance
         The scikit-learn conformant predictor to wrap.
-    transform_method: string, default='auto'
-        Name of the prediction method to used for transforming. If 'auto',
-        method chosen using the config.transform_method_precedence order.
-        Note: if 'predict' is chosen for classifier, output will be integer
-        encodings of labels not the labels themselves.
+    transform_method : str, default='auto'
+        Name of predictor method used for generating outputs on call to
+        transform or fit_transform. If 'auto', 'predict' is used for regressors
+        and the method for classifiers is set using the order defined in
+        config.transform_method_precedence (default:
+        predict_proba->predict_log_proba->decision_function->predict).
     internal_cv : int, None, or callable, default=5
         - Function for train/test subdivision of the training data.  Used to
           estimate performance of base classifiers and ensure they do not
           generate predictions from their training samples during
           meta-predictor training.
-        - If int : StratifiedKfold(n_splits=internal_cv) if classifier or
+        - If int > 1: StratifiedKfold(n_splits=internal_cv) if classifier or
           KFold(n_splits=internal_cv) if regressor.
-        - If None : default value of 5.
+        - If {None, 1}: disable internal cv.
         - If callable: Assumed to be split generator like scikit-learn KFold.
-    cv_processes : int or 'max', default=1
-        - The number of parallel processes to run for internal cross
-          validation.
-        - If int : Use up to cv_processes number of processes.
-        - If 'max' : Use all available CPUs.
     score_method : str, default='auto'
         - Name of prediction method used when scoring predictor performance.
         - if 'auto' :
             - If classifier : method picked using
-              config.score_method_precedence order.
+              config.score_method_precedence order (default =
+              predict_proba->predict_log_proba->decision_function->predict)
             - If regressor : 'predict'
     scorer : callable, default='auto'
         Callable that computes a figure of merit score for the internal_cv run.
@@ -240,6 +245,11 @@ class SingleChannelCV(SingleChannel):
               predict_log_proba, decision_function}
             - balanced_accuracy_score for classifiers with only predict()
         - If callable: A scorer with signature: score = scorer(y_true, y_pred).
+    cv_processes : int or 'max', default=1
+        - The number of parallel processes to run for internal cross
+          validation.
+        - If int : Use up to cv_processes number of processes.
+        - If 'max' : Use all available CPUs.
 
     Examples
     --------
@@ -253,12 +263,12 @@ class SingleChannelCV(SingleChannel):
         Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
                                                       n_random_Xs=7)
         clf = pc.MultichannelPipeline(n_channels=10)
-        base_clf = pc.transform_wrappers.SingleChannelCV(
-                                                GradientBoostingClassifier())
+        base_clf = GradientBoostingClassifier()
+        base_clf = pc.transform_wrappers.SingleChannelCV(base_clf)
         clf.add_layer(base_clf, pipe_processes='max')
         clf.add_layer(pc.MultichannelPredictor(SVC()))
         pc.cross_val_score(clf, Xs, y, cv=3)
-        # output: [0.9411764705882353, 0.9411764705882353, 0.9375]
+        # output: [0.9411764705882353, 0.8897058823529411, 0.9963235294117647]
 
     Notes
     -----
@@ -276,7 +286,7 @@ class SingleChannelCV(SingleChannel):
     """
 
     def __init__(self, predictor, transform_method='auto', internal_cv=5,
-                 cv_processes=1, score_method='auto', scorer='auto'):
+                 score_method='auto', scorer='auto', cv_processes=1):
         self._params_to_attributes(SingleChannelCV.__init__, locals())
         super().__init__(predictor, transform_method)
 
@@ -296,15 +306,10 @@ class SingleChannelCV(SingleChannel):
         else:
             if self.score_method == 'auto':
                 score_method = utils.get_score_method(self.model)
-                if score_method is None:
-                    raise NameError('model lacks a recognized method for '
-                                    'making scorable predictions.')
             else:
                 score_method = self.score_method
 
-            predict_methods = [transform_method]
-            if score_method != transform_method:
-                predict_methods.append(score_method)
+            predict_methods = list(set([transform_method, score_method]))
 
             split_results = cross_val_predict(self.predictor, X, y,
                                     groups=groups,
@@ -355,12 +360,14 @@ class Multichannel(Cloneable, Saveable):
 
     Parameters
     ----------
-    multichannel_predictor : multichannel_predictor instance
+    multichannel_predictor : multichannel predictor instance
         The predictor to wrap.
-    transform_method : string, default='auto'
-        Name of the prediction method to used for generating outputs on call to
-        transform or fit_transform. If 'auto', the method is automatically
-        chosen using the order specified in config.transform_method_precedence.
+    transform_method : str, default='auto'
+        Name of predictor method used for generating outputs on call to
+        transform or fit_transform. If 'auto', 'predict' is used for regressors
+        and the method for classifiers is set using the order defined in
+        config.transform_method_precedence (default:
+        predict_proba->predict_log_proba->decision_function->predict).
 
     Examples
     --------
@@ -374,8 +381,8 @@ class Multichannel(Cloneable, Saveable):
         Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
                                                       n_random_Xs=7)
         clf = pc.MultichannelPipeline(n_channels=10)
-        base_clf = pc.transform_wrappers.Multichannel(
-            pc.MultichannelPredictor(GradientBoostingClassifier()))
+        base_clf = pc.MultichannelPredictor(GradientBoostingClassifier())
+        base_clf = pc.transform_wrappers.Multichannel(base_clf)
         clf.add_layer(5, base_clf, 5, base_clf, pipe_processes=1)
         clf.add_layer(pc.MultichannelPredictor(SVC()))
         pc.cross_val_score(clf, Xs, y, cv=3)
@@ -393,32 +400,33 @@ class Multichannel(Cloneable, Saveable):
         self._params_to_attributes(Multichannel.__init__, locals())
         utils.enforce_fit(multichannel_predictor)
         utils.enforce_predict(multichannel_predictor)
-        self._estimator_type = utils.detect_predictor_type(
-                                     multichannel_predictor)
-        if self._estimator_type is None:
-            raise AttributeError('could not detect predictor type')
+        utils.enforce_predict(multichannel_predictor)
+        self._add_predictor_interface(multichannel_predictor)
+        self._set_estimator_type(multichannel_predictor)
 
-        predict_methods = utils.get_predict_methods(multichannel_predictor)
-        self._set_predictor_interface(predict_methods)
+    def _set_estimator_type(self, predictor):
+        if hasattr(predictor, '_estimator_type') is True:
+            self._estimator_type = predictor._estimator_type
 
-    def _set_predictor_interface(self, predict_method_names):
+    def _add_predictor_interface(self, predictor):
         for method_name in config.recognized_pred_methods:
-            is_available = method_name in predict_method_names
-            is_exposed = hasattr(self, method_name)
-
-            if is_available and is_exposed is False:
+            if hasattr(predictor, method_name):
                 prediction_method = functools.partial(self.predict_with_method,
                                                       method_name=method_name)
                 setattr(self, method_name, prediction_method)
-            elif is_exposed and is_available is False:
+
+    def _remove_predictor_interface(self):
+        for method_name in config.recognized_pred_methods:
+            if hasattr(self, method_name):
                 delattr(self, method_name)
 
     def get_transform_method(self):
         if self.transform_method == 'auto':
             if hasattr(self, 'model'):
-                method_name = get_transform_method(self.model)
+                method_name = utils.get_transform_method(self.model)
             else:
-                method_name = get_transform_method(self.multichannel_predictor)
+                method_name = utils.get_transform_method(
+                                                self.multichannel_predictor)
             if method_name is None:
                 raise NameError('model lacks a recognized method for '
                                 'conversion to transformer')
@@ -435,15 +443,21 @@ class Multichannel(Cloneable, Saveable):
             if utils.is_classifier(self.model):
                 self.classes_, y = np.unique(y, return_inverse=True)
             self.model.fit(Xs, y, **fit_params)
-        predict_methods = utils.get_predict_methods(self.model)
-        self._set_predictor_interface(predict_methods)
+
+        self._set_estimator_type(self.model)
+        self._remove_predictor_interface()
+        self._add_predictor_interface(self.model)
+
         return self
 
     def predict_with_method(self, Xs, method_name):
         if hasattr(self, 'model') is False:
             raise FitError('prediction attempted before call to fit()')
         prediction_method = getattr(self.model, method_name)
-        return prediction_method(Xs)
+        predictions = prediction_method(Xs)
+        if utils.is_classifier(self) and method_name == 'predict':
+            predictions = self.classes_[predictions]
+        return predictions
 
     def transform(self, Xs):
         if hasattr(self, 'model') is False:
@@ -495,30 +509,27 @@ class MultichannelCV(Multichannel):
     ----------
     multichannel_predictor : multichannel_predictor instance
         The pipecaster predictor to wrap.
-    transform_method: string, default='auto'
-        Name of the prediction method to used for transforming. If 'auto',
-        method chosen using the config.transform_method_precedence order.
-        Note: if 'predict' is chosen for classifier, output will be integer
-        encodings of labels not the labels themselves.
+    transform_method : str, default='auto'
+        Name of predictor method used for generating outputs on call to
+        transform or fit_transform. If 'auto', 'predict' is used for regressors
+        and the method for classifiers is set using the order defined in
+        config.transform_method_precedence (default:
+        predict_proba->predict_log_proba->decision_function->predict).
     internal_cv : int, None, or callable, default=5
         - Function for train/test subdivision of the training data.  Used to
           estimate performance of base classifiers and ensure they do not
           generate predictions from their training samples during
           meta-predictor training.
-        - If int : StratifiedKfold(n_splits=internal_cv) if classifier or
+        - If int > 1: StratifiedKfold(n_splits=internal_cv) if classifier or
           KFold(n_splits=internal_cv) if regressor.
-        - If None : default value of 5.
+        - If {None, 1}: disable internal cv.
         - If callable: Assumed to be split generator like scikit-learn KFold.
-    cv_processes : int or 'max', default=1
-        - The number of parallel processes to run for internal cross
-          validation.
-        - If int : Use up to cv_processes number of processes.
-        - If 'max' : Use all available CPUs.
     score_method : str, default='auto'
         - Name of prediction method used when scoring predictor performance.
         - if 'auto' :
             - If classifier : method picked using
-              config.score_method_precedence order.
+              config.score_method_precedence order (default =
+              predict_proba->predict_log_proba->decision_function->predict)
             - If regressor : 'predict'
     scorer : callable, default='auto'
         Callable that computes a figure of merit score for the internal_cv run.
@@ -527,8 +538,13 @@ class MultichannelCV(Multichannel):
             - explained_variance_score for regressors with predict()
             - roc_auc_score for classifiers with {predict_proba,
               predict_log_proba, decision_function}
-            - balanced_accuracy_score for classifiers withonly  predict()
+            - balanced_accuracy_score for classifiers with only predict()
         - If callable: A scorer with signature: score = scorer(y_true, y_pred).
+    cv_processes : int or 'max', default=1
+        - The number of parallel processes to run for internal cross
+          validation.
+        - If int : Use up to cv_processes number of processes.
+        - If 'max' : Use all available CPUs.
 
     Examples
     --------
@@ -542,8 +558,8 @@ class MultichannelCV(Multichannel):
         Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
                                                       n_random_Xs=7)
         clf = pc.MultichannelPipeline(n_channels=10)
-        base_clf = pc.transform_wrappers.MultichannelCV(
-            pc.MultichannelPredictor(GradientBoostingClassifier()))
+        base_clf = pc.MultichannelPredictor(GradientBoostingClassifier())
+        base_clf = pc.transform_wrappers.MultichannelCV(base_clf)
         clf.add_layer(5, base_clf, 5, base_clf, pipe_processes=1)
         clf.add_layer(pc.MultichannelPredictor(SVC()))
         pc.cross_val_score(clf, Xs, y, cv=3)
@@ -565,9 +581,8 @@ class MultichannelCV(Multichannel):
     """
 
     def __init__(self, multichannel_predictor, transform_method='auto',
-                 internal_cv=5, cv_processes=1, score_method='auto',
-                 scorer='auto'):
-        internal_cv = 5 if internal_cv is None else internal_cv
+                 internal_cv=5, score_method='auto',
+                 scorer='auto', cv_processes=1):
         self._params_to_attributes(MultichannelCV.__init__, locals())
         super().__init__(multichannel_predictor, transform_method)
 
@@ -587,15 +602,10 @@ class MultichannelCV(Multichannel):
         else:
             if self.score_method == 'auto':
                 score_method = utils.get_score_method(self.model)
-                if score_method is None:
-                    raise NameError('model lacks a recognized method for '
-                                    'making scorable predictions.')
             else:
                 score_method = self.score_method
 
-            predict_methods = [transform_method]
-            if score_method != transform_method:
-                predict_methods.append(score_method)
+            predict_methods = list(set([transform_method, score_method]))
 
             split_results = cross_val_predict(self.multichannel_predictor,
                                     Xs, y,
