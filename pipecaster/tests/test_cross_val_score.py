@@ -43,15 +43,20 @@ class TestCrossValScore(unittest.TestCase):
                                                              cv=self.cv, n_jobs=1)
 
     def test_single_input_classification(self):
-        pc_scores = pc_cross_validation.cross_val_score(self.clf, self.X_cls, self.y_cls, scorers=roc_auc_score,
-                                                       cv=self.cv, n_processes=1)
-        self.assertTrue(np.array_equal(self.cls_scores, pc_scores), 'classifier scores from pipecaster.cross_validation.cross_val_score did not match sklearn control (single input predictor)')
+        pc_scores = pc_cross_validation.cross_val_score(
+            self.clf, self.X_cls, self.y_cls, score_method='predict_proba',
+            scorer=roc_auc_score,
+            cv=self.cv, n_processes=1)
+        self.assertTrue(np.array_equal(self.cls_scores, pc_scores),
+            'classifier scores from cross_val_score did not match sklearn '
+            'control')
 
     def test_multi_input_classification(self):
         mclf = MultichannelPipeline(n_channels=1)
         mclf.add_layer(self.clf)
-        pc_scores = pc_cross_validation.cross_val_score(mclf, [self.X_cls], self.y_cls, scorers=roc_auc_score,
-                                                       cv=self.cv, n_processes=1)
+        pc_scores = pc_cross_validation.cross_val_score(
+            mclf, [self.X_cls], self.y_cls,  score_method='predict_proba', 
+            scorer=roc_auc_score, cv=self.cv, n_processes=1)
         self.assertTrue(np.array_equal(self.cls_scores, pc_scores), 'classifier scores from pipecaster.cross_validation.cross_val_score did not match sklearn control (multi input predictor)')
 
     def test_multi_input_classification_parallel(self):
@@ -60,20 +65,21 @@ class TestCrossValScore(unittest.TestCase):
             parallel.start_if_needed()
             mclf = MultichannelPipeline(n_channels=1)
             mclf.add_layer(self.clf)
-            pc_scores = pc_cross_validation.cross_val_score(mclf, [self.X_cls], self.y_cls, scorers=roc_auc_score,
-                                                           cv=self.cv, n_processes=n_cpus)
+            pc_scores = pc_cross_validation.cross_val_score(
+                mclf, [self.X_cls], self.y_cls, score_method='predict_proba',
+                scorer=roc_auc_score, cv=self.cv, n_processes=n_cpus)
             self.assertTrue(np.array_equal(self.cls_scores, pc_scores), 'classifier scores from pipecaster.cross_validation.cross_val_score did not match sklearn control (multi input predictor)')
             warnings.resetwarnings()
 
     def test_single_input_regression(self):
-        pc_scores = pc_cross_validation.cross_val_score(self.rgr, self.X_rgr, self.y_rgr, scorers=explained_variance_score,
+        pc_scores = pc_cross_validation.cross_val_score(self.rgr, self.X_rgr, self.y_rgr, scorer=explained_variance_score,
                                                         cv=self.cv, n_processes=1)
         self.assertTrue(np.array_equal(self.rgr_scores, pc_scores), 'regressor scores from pipecaster.cross_validation.cross_val_score did not match sklearn control (single input predictor)')
 
     def test_multi_input_regression(self):
         mrgr = MultichannelPipeline(n_channels=1)
         mrgr.add_layer(self.rgr)
-        pc_scores = pc_cross_validation.cross_val_score(mrgr, [self.X_rgr], self.y_rgr, scorers=explained_variance_score,
+        pc_scores = pc_cross_validation.cross_val_score(mrgr, [self.X_rgr], self.y_rgr, scorer=explained_variance_score,
                                                        cv=self.cv, n_processes=1)
         self.assertTrue(np.array_equal(self.rgr_scores, pc_scores), 'regressor scores from pipecaster.cross_validation.cross_val_score did not match sklearn control (multi input predictor)')
 
@@ -83,7 +89,7 @@ class TestCrossValScore(unittest.TestCase):
             parallel.start_if_needed(n_cpus=n_cpus)
             mrgr = MultichannelPipeline(n_channels=1)
             mrgr.add_layer(self.rgr)
-            pc_scores = pc_cross_validation.cross_val_score(mrgr, [self.X_rgr], self.y_rgr, scorers=explained_variance_score,
+            pc_scores = pc_cross_validation.cross_val_score(mrgr, [self.X_rgr], self.y_rgr, scorer=explained_variance_score,
                                                            cv=self.cv, n_processes=n_cpus)
             self.assertTrue(np.array_equal(self.rgr_scores, pc_scores), 'regressor scores from pipecaster.cross_validation.cross_val_score did not match sklearn control (multi input predictor)')
             warnings.resetwarnings()

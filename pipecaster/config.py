@@ -2,6 +2,10 @@
 recognized_pred_methods = set(['predict', 'predict_proba',
                                'decision_function', 'predict_log_proba'])
 
+# Set the order in which methods are automatically selected for
+# inferring.
+predict_method_precedence = ['predict', 'predict_proba',
+                             'predict_log_proba', 'decision_function']
 
 # Set the order in which methods are automatically selected for
 # performance scoring.

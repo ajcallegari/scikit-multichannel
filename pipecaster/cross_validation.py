@@ -12,15 +12,26 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import KFold, StratifiedKFold, GroupKFold
 
 import pipecaster.utils as utils
+import pipecaster.config as config
 import pipecaster.parallel as parallel
 
 __all__ = ['cross_val_score', 'cross_val_predict']
 
+def _predict(model, Xs, test_indices, method_name):
+    predict_method = getattr(model, method_name)
+    if utils.is_multichannel(model):
+        X_tests = [X[test_indices] if X is not None else None
+                   for X in Xs]
+        return predict_method(X_tests)
+    else:
+        return predict_method(Xs[test_indices])
 
 def _fit_predict_split(predictor, Xs, y, train_indices, test_indices,
-                    predict_method_names, fit_params):
+                    predict_method='predict', transform_method=None,
+                    score_method=None, fit_params=None):
         """
-        Clone, fit, and predict a single channel or multichannel pipe.
+        Clone, fit, transform, and predict a single channel or multichannel
+        predictor.
         """
         model = utils.get_clone(predictor)
         fit_params = {} if fit_params is None else fit_params
@@ -32,32 +43,83 @@ def _fit_predict_split(predictor, Xs, y, train_indices, test_indices,
         else:
             model.fit(Xs[train_indices], y[train_indices], **fit_params)
 
-        split_results = {}
-        for predict_method_name in predict_method_names:
-            try:
-                predict_method = getattr(model, predict_method_name)
-            except:
-                raise AttributeError('Predict method {} not found on {} .'
-                         'This can happen if auto method detection picked a '
-                         'method that was on the object before fitting and '
-                         'lost during fitting due to counterselection. Try '
-                         'manually setting method instead of using auto.'
-                         .format(predict_method_name, predictor))
-            if utils.is_multichannel(model):
-                X_tests = [X[test_indices] if X is not None else None
-                           for X in Xs]
-                split_results[predict_method_name] = predict_method(X_tests)
+        split_predictions = {}
+
+        if predict_method is not None:
+            split_predictions['predict'] = {}
+            if predict_method == 'auto':
+                prediction_made = False
+                for m in config.predict_method_precedence:
+                    try:
+                        y_pred = _predict(model, Xs, test_indices, m)
+                        if y_pred is not None:
+                            prediction_made = True
+                    except:
+                        pass
+                    if prediction_made is True:
+                        split_predictions['predict']['method'] = m
+                        break
+                if prediction_made == False:
+                    raise AttributeError('failed to auto-detect prediction '
+                                         'method')
             else:
-                split_results[predict_method_name] = predict_method(
-                                                        Xs[test_indices])
+                y_pred = _predict(model, Xs, test_indices, predict_method)
+                split_predictions['predict']['method'] = predict_method
 
-        split_results['indices'] = test_indices
+            split_predictions['predict']['y_pred'] = y_pred
 
-        return split_results
+        if transform_method is not None:
+            split_predictions['transform'] = {}
+            if transform_method == 'auto':
+                prediction_made = False
+                for m in config.transform_method_precedence:
+                    try:
+                        y_pred = _predict(model, Xs, test_indices, m)
+                        if y_pred is not None:
+                            prediction_made = True
+                    except:
+                        pass
+                    if prediction_made is True:
+                        split_predictions['transform']['method'] = m
+                        break
+                if prediction_made == False:
+                    raise AttributeError('failed to auto-detect transform '
+                                         'method')
+            else:
+                y_pred = _predict(model, Xs, test_indices, transform_method)
+                split_predictions['transform']['method'] = transform_method
+
+            split_predictions['transform']['y_pred'] = y_pred
+
+        if score_method is not None:
+            split_predictions['score'] = {}
+            if score_method == 'auto':
+                prediction_made = False
+                for m in config.score_method_precedence:
+                    try:
+                        y_pred = _predict(model, Xs, test_indices, m)
+                        if y_pred is not None:
+                            prediction_made = True
+                    except:
+                        pass
+                    if prediction_made is True:
+                        split_predictions['score']['method'] = m
+                        break
+                if prediction_made == False:
+                    raise AttributeError('failed to auto-detect score '
+                                         'method')
+            else:
+                y_pred = _predict(model, Xs, test_indices, score_method)
+                split_predictions['score']['method'] = score_method
+
+            split_predictions['score']['y_pred'] = y_pred
+
+        return split_predictions, test_indices
 
 
 def cross_val_predict(predictor, Xs, y=None, groups=None,
-                      predict_methods='predict', cv=None,
+                      predict_method='predict', transform_method=None,
+                      score_method=None, cv=None,
                       combine_splits=True, n_processes=1, fit_params=None):
     """
     Analog of the scikit-learn cross_val_predict function that supports both
@@ -75,8 +137,20 @@ def cross_val_predict(predictor, Xs, y=None, groups=None,
     groups: list/array, default=None
         Group labels for the samples used while splitting the dataset into
         train/test set. Only used if cv parameter is set to GroupKFold.
-    predict_methods : str or list, default=['predict']
-        Name of the method or methods to use for making predictions.
+    predict_method : str, default='predict'
+        Name of the method called for predicting. If 'auto', methods will be
+        attempted in the order defined in config.predict_method_precedence.
+        Default: predict->predict_proba->predict_log_proba->decision_function.
+    transform_method : str, default='predict'
+        Name of the method called transforming (e.g. for outputting
+        meta-features). If 'auto', methods are attempted in the order defined
+        in config.transform_method_precedence.
+        Default: predict_proba->predict_log_proba->decision_function->predict.
+    score_method : str, default='predict'
+        Name of method called to make predictions for performance scoring. If
+        'auto', methods are attempted in the order defined in
+        config.score_method_precedence.
+        Default: predict_proba->predict_log_proba->decision_function->predict.
     cv : int, or callable, default=5
         - Set the cross validation method:
         - If int > 1: Use StratifiedKfold(n_splits=internal_cv) for
@@ -97,19 +171,20 @@ def cross_val_predict(predictor, Xs, y=None, groups=None,
 
     Returns
     -------
-    Predictions
-        - If combine_splits it True:
-          Returns a single array for each prediction method containing
-          predictions for each sample in the order that they appeared in the Xs
-          parameter.  If only one prediction method is specified in the
-          predict_method parameter, a single array is returned, otherwise a
-          dict indexed by the predict method name.
+    dict
+        - If combine_splits is True:
+          {'predict':y_pred, 'transform':y_pred, 'score':y_pred)}
+          Where y_pred = np.array(n_samples) or None if the type of prediction
+          was not requested.  There will not be dict entries for prediction
+          method parameters set to None (e.g. transform_method=None).
         - If combine_splits is False:
-          Returns a dict indexed by prediction method where each value is a
-          list of predictions, one for each split.  The dict also contains an
-          'indices' entry containing a list of the sample indices for each
-          split relative to the order in which they were provided in the Xs
-          parameter.
+          {'predict':[], 'transform':[],
+          'score':[], 'indices':[])}
+          Where empty brackets indicate identically ordered lists with one list
+          item per split.  List items are either prediction arrays or sample
+          indices for the splits.  There will not be dict entries for
+          prediction  method parameters set to None (e.g.
+          transform_method=None).
 
     Examples
     --------
@@ -125,18 +200,16 @@ def cross_val_predict(predictor, Xs, y=None, groups=None,
         clf.add_layer(pc.ChannelEnsemble(GradientBoostingClassifier(), SVC()))
 
         predictions = pc.cross_val_predict(clf, Xs, y)
-        predictions
-        # output: [0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 1...]
+        predictions['predict']['y_pred']
+        # output: [1, 1, 0, 1, 0, 1, 1, 1, 1, 0, 1, 1, ...]
         y
-        # output: [0, 0, 0, 0, 1, 0, 1, 1, 0, 0, 1...]
+        # output: [1, 1, 0, 1, 0, 1, 1, 1, 1, 1, 1, 1, ...]
     """
+
+
     is_classifier = utils.is_classifier(predictor)
     if is_classifier and y is not None:
         classes_, y = np.unique(y, return_inverse=True)
-
-    if isinstance(predict_methods, (tuple, list, np.ndarray)) is False:
-        predict_methods = [predict_methods]
-    predict_methods = list(set(predict_methods))
 
     cv = int(5) if cv is None else cv
 
@@ -157,7 +230,7 @@ def cross_val_predict(predictor, Xs, y=None, groups=None,
         splits = list(cv.split(Xs, y, groups))
 
     args_list = [(predictor, Xs, y, train_indices, test_indices,
-                  predict_methods, fit_params)
+                  predict_method, transform_method, score_method, fit_params)
                  for train_indices, test_indices in splits]
 
     n_jobs = len(args_list)
@@ -168,7 +241,7 @@ def cross_val_predict(predictor, Xs, y=None, groups=None,
     if n_processes == 'max' or n_processes > 1:
         try:
             shared_mem_objects = [Xs, y, fit_params]
-            split_results = parallel.starmap_jobs(
+            job_results = parallel.starmap_jobs(
                                 _fit_predict_split, args_list,
                                 n_cpus=n_processes,
                                 shared_mem_objects=shared_mem_objects)
@@ -179,29 +252,31 @@ def cross_val_predict(predictor, Xs, y=None, groups=None,
             n_processes = 1
     if n_processes == 1:
         # print('running a single process with {} jobs'.format(len(args_list)))
-        split_results = [_fit_predict_split(*args) for args in args_list]
+        job_results = [_fit_predict_split(*args) for args in args_list]
+
+    split_predictions, split_indices = zip(*job_results)
 
     # reorganize so splits are in lists
-    split_results = {k:[res[k] for res in split_results]
-                     for k in predict_methods + ['indices']}
+    results = {k:{'y_pred':[sp[k]['y_pred'] for sp in split_predictions],
+                  'method':split_predictions[0][k]['method']}
+               for k in split_predictions[0]}
 
     # decode classes where necessary
-    if is_classifier and 'predict' in predict_methods:
-        split_results['predict'] = [classes_[p]
-                                    for p in split_results['predict']]
+    if is_classifier:
+        for predict_method in results:
+            if results[predict_method]['method'] == 'predict':
+                results[predict_method]['y_pred'] = [
+                    classes_[p] for p in results[predict_method]['y_pred']]
 
     if combine_splits is True:
-        predictions = []
-        sample_indices = np.concatenate(split_results['indices'])
-        predictions = [np.concatenate(split_results[m])[sample_indices]
-                       for m in  predict_methods]
-        if len(predictions) == 1:
-            return predictions[0]
-        else:
-            return {m:p for m, p in zip(predict_methods, predictions)}
+        sample_indices = np.concatenate(split_indices)
+        for predict_method in results:
+            y_concat = np.concatenate(results[predict_method]['y_pred'])
+            results[predict_method]['y_pred'] = y_concat[sample_indices]
     else:
-        return split_results
+        results['indices'] = split_indices
 
+    return results
 
 def score_predictions(y_true, y_pred, score_method, scorer,
                       is_classification, is_binary):
@@ -224,7 +299,7 @@ def score_predictions(y_true, y_pred, score_method, scorer,
 
 
 def cross_val_score(predictor, Xs, y=None, groups=None,
-                    score_methods = 'auto', scorers='auto',
+                    score_method = 'predict', scorer='auto',
                     cv=3, n_processes=1, **fit_params):
     """
     Analog of the scikit-learn cross_val_score function that supports both
@@ -242,16 +317,13 @@ def cross_val_score(predictor, Xs, y=None, groups=None,
     groups: list/array, default=None
         Group labels for the samples used while splitting the dataset into
         train/test set. Only used if cv parameter is set to GroupKFold.
-    score_methods : str or list, default='auto'
-        - Name or names of prediction method used when scoring predictor.
-          performance.
-        - if 'auto' :
-            - If classifier : Method picked using
-              config.score_method_precedence order (default =
-              predict_proba->predict_log_proba->decision_function->predict)
-            - If regressor : 'predict'
-    scorers : {callable, list of callables, or 'auto'}, default='auto'
-        - Function or functions for calculating performance scores.
+    score_method : str, default='predict'
+        Name of method called to make predictions for performance scoring. If
+        'auto', methods are attempted in the order defined in
+        config.score_method_precedence.
+        Default: predict_proba->predict_log_proba->decision_function->predict.
+    scorer : {callable, 'auto'}, default='auto'
+        - Function calculating performance scores.
         - If 'auto':
             - explained_variance_score for regressors with predict()
             - roc_auc_score for classifiers with {predict_proba,
@@ -259,9 +331,6 @@ def cross_val_score(predictor, Xs, y=None, groups=None,
             - balanced_accuracy_score for classifiers with only predict()
         - If callable: A scorer that returns a scalar figure of merit score
           with signature: score = scorer(y_true, y_pred).
-        - If list of callables: Ordered list of scorer objects that specify
-          the scoring methods to use for each prediction method specified in
-          the score_methods parameter.
     cv : int, or callable, default=5
         - Set the cross validation method:
         - If int > 1: Use StratifiedKfold(n_splits=internal_cv) for
@@ -308,36 +377,18 @@ def cross_val_score(predictor, Xs, y=None, groups=None,
         if len(classes_) == 2:
             is_binary = True
 
-    if isinstance(score_methods, (tuple, list, np.ndarray)) is False:
-        score_methods = [score_methods]
-
-    for i, m in enumerate(score_methods):
-        if m == 'auto':
-            score_method = utils.get_score_method(predictor)
-            if score_method is None:
-                raise NameError('probe lacks a recognized method for '
-                                'making scorable predictions.')
-            else:
-                score_methods[i] = score_method
-
-    if isinstance(scorers, (tuple, list, np.ndarray)) is False:
-        if type(scorers) == str and scorers == 'auto':
-            scorers = ['auto' for m in score_methods]
-        else:
-            scorers = [scorers]
-
     split_results = cross_val_predict(predictor, Xs, y, groups,
-                                          score_methods,
-                                          cv, combine_splits=False,
-                                          n_processes=n_processes,
-                                          **fit_params)
+                                      predict_method=None,
+                                      transform_method=None,
+                                      score_method=score_method,
+                                      cv=cv, combine_splits=False,
+                                      n_processes=n_processes,
+                                      **fit_params)
 
     # score the predictions
-    scores = {m:[score_predictions(y[idx], p, m, s, is_classifier, is_binary)
-                 for p, idx in zip(split_results[m], split_results['indices'])]
-              for m, s in zip(score_methods, scorers)}
+    scores = [score_predictions(y[idx], yp, score_method, scorer,
+                                is_classifier, is_binary)
+              for yp, idx in zip(split_results['score']['y_pred'],
+                                 split_results['indices'])]
 
-    if len(score_methods) == 1:
-        return scores[score_methods[0]]
-    else:
-        return scores
+    return scores
