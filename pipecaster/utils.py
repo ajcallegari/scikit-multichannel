@@ -10,6 +10,8 @@ import numpy as np
 from inspect import signature, getfullargspec
 import sklearn.base
 import joblib
+import tempfile
+import os
 import ray
 
 import pipecaster.config as config
@@ -228,17 +230,20 @@ def get_predict_methods(pipe):
 
 def save_pipe(pipe, filepath):
     """
-    Save a pipe to disk.
+    Save a pipe to disk (atomic).
     """
-    joblib.dump(pipe, filepath)
-
+    tf = tempfile.NamedTemporaryFile('wb', dir=os.path.dirname(filepath),
+                                     delete=False)
+    joblib.dump(pipe, tf)
+    tempname = tf.name
+    tf.close()
+    os.rename(tempname, filepath)
 
 def load_pipe(filepath):
     """
     Load a pipe from disk.
     """
     return joblib.load(filepath)
-
 
 class FitError(Exception):
     """
