@@ -83,8 +83,9 @@ class TestMultichannelClassification(unittest.TestCase):
 
         # implementation 1
         mclf = MultichannelPipeline(n_channels=1)
-        base_clf = transform_wrappers.SingleChannel(KNeighborsClassifier(
-                                            n_neighbors=5, weights='uniform'))
+        base_clf = KNeighborsClassifier(n_neighbors=5, weights='uniform')
+        base_clf = transform_wrappers.SingleChannel(base_clf,
+                                                    transform_method='predict')
         mclf.add_layer(base_clf)
         mclf.add_layer(MultichannelPredictor(HardVotingClassifier()))
         mclf.fit([X], y)
@@ -96,7 +97,9 @@ class TestMultichannelClassification(unittest.TestCase):
         # implementation 2
         mclf = MultichannelPipeline(n_channels=1)
         base_clf = KNeighborsClassifier(n_neighbors=5, weights='uniform')
-        mclf.add_layer(ChannelEnsemble(base_clf, HardVotingClassifier()))
+        mclf.add_layer(ChannelEnsemble(base_clf,
+                                       HardVotingClassifier(),
+                                       base_transform_methods='predict'))
         mclf.fit([X], y)
         mclf_predictions = mclf.predict([X])
         self.assertTrue(np.array_equal(clf_predictions, mclf_predictions),
@@ -151,8 +154,9 @@ class TestMultichannelClassification(unittest.TestCase):
 
             mclf = MultichannelPipeline(n_channels)
             mclf.add_layer(StandardScaler(), pipe_processes=n_cpus)
-            clf = transform_wrappers.SingleChannel(
-                        KNeighborsClassifier(n_neighbors=5, weights='uniform'))
+            clf = KNeighborsClassifier(n_neighbors=5, weights='uniform')
+            clf = transform_wrappers.SingleChannel(clf,
+                                                   transform_method='predict')
             mclf.add_layer(clf, pipe_processes=n_cpus)
             mclf.add_layer(MultichannelPredictor(HardVotingClassifier()))
 
@@ -215,8 +219,9 @@ class TestMultichannelClassification(unittest.TestCase):
 
             mclf = MultichannelPipeline(n_channels)
             mclf.add_layer(StandardScaler(), pipe_processes='max')
-            clf = transform_wrappers.SingleChannel(
-                        KNeighborsClassifier(n_neighbors=5, weights='uniform'))
+            clf = KNeighborsClassifier(n_neighbors=5, weights='uniform')
+            clf = transform_wrappers.SingleChannel(clf,
+                                                   transform_method='predict')
             mclf.add_layer(clf, pipe_processes='max')
             mclf.add_layer(MultichannelPredictor(HardVotingClassifier()))
 

@@ -30,9 +30,10 @@ def _fit_predict_split(predictor, Xs, y, train_indices, test_indices,
                     predict_method='predict', transform_method=None,
                     score_method=None, fit_params=None):
         """
-        Clone, fit, transform, and predict a single channel or multichannel
+        Clone, fit, and predict with a single channel or multichannel
         predictor.
         """
+        is_classifier = utils.is_classifier(predictor)
         model = utils.get_clone(predictor)
         fit_params = {} if fit_params is None else fit_params
 
@@ -47,7 +48,7 @@ def _fit_predict_split(predictor, Xs, y, train_indices, test_indices,
 
         if predict_method is not None:
             split_predictions['predict'] = {}
-            if predict_method == 'auto':
+            if predict_method == 'auto' and is_classifier:
                 prediction_made = False
                 for m in config.predict_method_precedence:
                     try:
@@ -62,6 +63,9 @@ def _fit_predict_split(predictor, Xs, y, train_indices, test_indices,
                 if prediction_made == False:
                     raise AttributeError('failed to auto-detect prediction '
                                          'method')
+            elif predict_method == 'auto' and is_classifier == False:
+                y_pred = _predict(model, Xs, test_indices, 'predict')
+                split_predictions['predict']['method'] = 'predict'
             else:
                 y_pred = _predict(model, Xs, test_indices, predict_method)
                 split_predictions['predict']['method'] = predict_method
@@ -85,6 +89,9 @@ def _fit_predict_split(predictor, Xs, y, train_indices, test_indices,
                 if prediction_made == False:
                     raise AttributeError('failed to auto-detect transform '
                                          'method')
+            elif transform_method == 'auto' and is_classifier == False:
+                y_pred = _predict(model, Xs, test_indices, 'predict')
+                split_predictions['transform']['method'] = 'predict'
             else:
                 y_pred = _predict(model, Xs, test_indices, transform_method)
                 split_predictions['transform']['method'] = transform_method
@@ -108,6 +115,9 @@ def _fit_predict_split(predictor, Xs, y, train_indices, test_indices,
                 if prediction_made == False:
                     raise AttributeError('failed to auto-detect score '
                                          'method')
+            elif score_method == 'auto' and is_classifier == False:
+                y_pred = _predict(model, Xs, test_indices, 'predict')
+                split_predictions['score']['method'] = 'predict'
             else:
                 y_pred = _predict(model, Xs, test_indices, score_method)
                 split_predictions['score']['method'] = score_method
@@ -138,19 +148,27 @@ def cross_val_predict(predictor, Xs, y=None, groups=None,
         Group labels for the samples used while splitting the dataset into
         train/test set. Only used if cv parameter is set to GroupKFold.
     predict_method : str, default='predict'
-        Name of the method called for predicting. If 'auto', methods will be
-        attempted in the order defined in config.predict_method_precedence.
-        Default: predict->predict_proba->predict_log_proba->decision_function.
-    transform_method : str, default='predict'
-        Name of the method called transforming (e.g. for outputting
-        meta-features). If 'auto', methods are attempted in the order defined
-        in config.transform_method_precedence.
-        Default: predict_proba->predict_log_proba->decision_function->predict.
-    score_method : str, default='predict'
-        Name of method called to make predictions for performance scoring. If
-        'auto', methods are attempted in the order defined in
-        config.score_method_precedence.
-        Default: predict_proba->predict_log_proba->decision_function->predict.
+        - Name of the method used for predicting.
+        - If 'auto' :
+            - If classifier : method picked using
+              config.predict_method_precedence order (default:
+              predict->predict_proba->predict_log_proba->decision_function).
+            - If regressor : 'predict'
+    transform_method : str, default=None
+        - Name of the prediction method to call when transforming (e.g. when
+          outputting meta-features).
+        - If 'auto' :
+            - If classifier : method picked using
+              config.transform_method_precedence order (default:
+              predict_proba->predict_log_proba->decision_function->predict).
+            - If regressor : 'predict'
+    score_method : str, default=None
+        - Name of prediction method used when scoring predictor performance.
+        - If 'auto' :
+            - If classifier : method picked using
+              config.score_method_precedence order (default:
+              ppredict_proba->predict_log_proba->decision_function->predict).
+            - If regressor : 'predict'
     cv : int, or callable, default=5
         - Set the cross validation method:
         - If int > 1: Use StratifiedKfold(n_splits=internal_cv) for
@@ -176,15 +194,16 @@ def cross_val_predict(predictor, Xs, y=None, groups=None,
           {'predict':y_pred, 'transform':y_pred, 'score':y_pred)}
           Where y_pred = np.array(n_samples) or None if the type of prediction
           was not requested.  There will not be dict entries for prediction
-          method parameters set to None (e.g. transform_method=None).
+          method parameters set to None (e.g. no 'transform' key when
+          transform_method=None).
         - If combine_splits is False:
           {'predict':[], 'transform':[],
           'score':[], 'indices':[])}
           Where empty brackets indicate identically ordered lists with one list
           item per split.  List items are either prediction arrays or sample
           indices for the splits.  There will not be dict entries for
-          prediction  method parameters set to None (e.g.
-          transform_method=None).
+          prediction method parameters set to None (e.g. no 'transform' key
+          when transform_method=None).
 
     Examples
     --------
@@ -277,6 +296,7 @@ def cross_val_predict(predictor, Xs, y=None, groups=None,
         results['indices'] = split_indices
 
     return results
+
 
 def score_predictions(y_true, y_pred, score_method, scorer,
                       is_classification, is_binary):

@@ -316,7 +316,11 @@ class HardVotingClassifier(Cloneable, Saveable):
         Return the modal class predicted by the base classifiers.
         """
         predictions = scipy.stats.mode(X, axis=1)[0].reshape(-1)
-        return self.classes_[predictions]
+        try:
+            return self.classes_[predictions]
+        except IndexError:
+            raise IndexError('Could not decoding category labels.  Try setting'
+                             ' the base predictor transform_method to predict')
 
     def get_clone(self):
         """
@@ -665,11 +669,9 @@ class Ensemble(Cloneable, Saveable):
             for predictor in base_predictors:
                 utils.enforce_fit(predictor)
                 utils.enforce_predict(predictor)
-                self._set_estimator_type(predictor)
         else:
-            utils.enforce_fit(predictors)
-            utils.enforce_predict(predictors)
-            self._set_estimator_type(predictors)
+            utils.enforce_fit(base_predictors)
+            utils.enforce_predict(base_predictors)
 
         if internal_cv is None and score_selector is not None:
             raise ValueError('Must choose an internal cv method when channel '
@@ -687,13 +689,11 @@ class Ensemble(Cloneable, Saveable):
         else:
             if isinstance(base_predictors, (tuple, list, np.ndarray)):
                 for predictor in base_predictors:
-                    utils.enforce_fit(predictor)
-                    utils.enforce_predict(predictor)
+                    self._set_estimator_type(predictor)
                     self._add_predictor_interface(predictor)
             else:
-                utils.enforce_fit(predictors)
-                utils.enforce_predict(predictors)
-                self._add_predictor_interface(predictors)
+                self._set_estimator_type(base_predictors)
+                self._add_predictor_interface(base_predictors)
 
     def _set_estimator_type(self, predictor):
         if hasattr(predictor, '_estimator_type') is True:
@@ -708,6 +708,13 @@ class Ensemble(Cloneable, Saveable):
                 prediction_method = functools.partial(self.predict_with_method,
                                                       method_name=method_name)
                 setattr(self, method_name, prediction_method)
+
+    def _add_model_interface(self, model, X):
+        detected_methods = utils.detect_predict_methods(model, X)
+        for method_name in detected_methods:
+            prediction_method = functools.partial(self.predict_with_method,
+                                                  method_name=method_name)
+            setattr(self, method_name, prediction_method)
 
     def _remove_predictor_interface(self):
         for method_name in config.recognized_pred_methods:
@@ -821,10 +828,10 @@ class Ensemble(Cloneable, Saveable):
         self._remove_predictor_interface()
         if hasattr(self, 'meta_model'):
             self._set_estimator_type(self.meta_model)
-            self._add_predictor_interface(self.meta_model)
+            self._add_model_interface(self.meta_model, meta_X)
         else:
             self._set_estimator_type(self.base_models[0])
-            self._add_predictor_interface(self.base_models[0])
+            self._add_model_interface(self.base_models[0], X)
 
         return self
 
@@ -919,6 +926,7 @@ class Ensemble(Cloneable, Saveable):
                                  for m in self.base_models]
         if hasattr(self, 'meta_model'):
             clone.meta_model = utils.get_clone(self.meta_model)
+        clone._add_predictor_interface(self)
         return clone
 
 
@@ -1174,6 +1182,13 @@ class MultichannelPredictor(Cloneable, Saveable):
                                                       method_name=method_name)
                 setattr(self, method_name, prediction_method)
 
+    def _add_model_interface(self, model, X):
+        detected_methods = utils.detect_predict_methods(model, X)
+        for method_name in detected_methods:
+            prediction_method = functools.partial(self.predict_with_method,
+                                                  method_name=method_name)
+            setattr(self, method_name, prediction_method)
+
     def _remove_predictor_interface(self):
         for method_name in config.recognized_pred_methods:
             if hasattr(self, method_name):
@@ -1194,7 +1209,7 @@ class MultichannelPredictor(Cloneable, Saveable):
 
         self._set_estimator_type(self.model)
         self._remove_predictor_interface()
-        self._add_predictor_interface(self.model)
+        self._add_model_interface(self.model, X)
         return self
 
     def predict_with_method(self, Xs, method_name):
@@ -1221,6 +1236,7 @@ class MultichannelPredictor(Cloneable, Saveable):
             clone.classes_ = self.classes_.copy()
         if hasattr(self, 'model'):
             clone.model = utils.get_clone(self.model)
+        clone._add_predictor_interface(self)
         return clone
 
     def get_descriptor(self, verbose=0, params=None):
@@ -1376,11 +1392,9 @@ class ChannelEnsemble(Cloneable, Saveable):
             for predictor in base_predictors:
                 utils.enforce_fit(predictor)
                 utils.enforce_predict(predictor)
-                self._set_estimator_type(predictor)
         else:
             utils.enforce_fit(base_predictors)
             utils.enforce_predict(base_predictors)
-            self._set_estimator_type(base_predictors)
 
         if internal_cv is None and score_selector is not None:
             raise ValueError('Must choose an internal cv method when channel '
@@ -1398,8 +1412,10 @@ class ChannelEnsemble(Cloneable, Saveable):
         else:
             if isinstance(base_predictors, (tuple, list, np.ndarray)):
                 for predictor in base_predictors:
-                    self._add_predictor_interface(base_predictors)
+                    self._set_estimator_type(predictor)
+                    self._add_predictor_interface(predictor)
             else:
+                self._set_estimator_type(base_predictors)
                 self._add_predictor_interface(base_predictors)
 
     def _set_estimator_type(self, predictor):
@@ -1415,6 +1431,13 @@ class ChannelEnsemble(Cloneable, Saveable):
                 prediction_method = functools.partial(self.predict_with_method,
                                                       method_name=method_name)
                 setattr(self, method_name, prediction_method)
+
+    def _add_model_interface(self, model, X):
+        detected_methods = utils.detect_predict_methods(model, X)
+        for method_name in detected_methods:
+            prediction_method = functools.partial(self.predict_with_method,
+                                                  method_name=method_name)
+            setattr(self, method_name, prediction_method)
 
     def _remove_predictor_interface(self):
         for method_name in config.recognized_pred_methods:
@@ -1537,10 +1560,12 @@ class ChannelEnsemble(Cloneable, Saveable):
         self._remove_predictor_interface()
         if hasattr(self, 'meta_model'):
             self._set_estimator_type(self.meta_model)
-            self._add_predictor_interface(self.meta_model)
+            self._add_model_interface(self.meta_model, meta_X)
         else:
-            self._set_estimator_type(self.base_models[0])
-            self._add_predictor_interface(self.base_models[0])
+            model = self.base_models[self.selected_indices_[0]]
+            X = Xs[self.selected_indices_[0]]
+            self._set_estimator_type(model)
+            self._add_model_interface(model, X)
 
         return self
 
@@ -1637,4 +1662,5 @@ class ChannelEnsemble(Cloneable, Saveable):
                                  for m in self.base_models]
         if hasattr(self, 'meta_model'):
             clone.meta_model = utils.get_clone(self.meta_model)
+        clone._add_predictor_interface(self)
         return clone

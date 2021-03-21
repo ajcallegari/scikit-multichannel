@@ -22,7 +22,8 @@ __all__ = ['get_transform_method', 'get_score_method', 'is_classifier',
            'is_predictor', 'FitError', 'PredictError',
            'ParallelBackendError', 'get_descriptor', 'get_param_names',
            'get_param_clone', 'Cloneable', 'Saveable', 'encode_labels',
-           'decode_labels', 'classify_probs', 'classify_decision_function']
+           'decode_labels', 'classify_probs', 'classify_decision_function',
+           'detect_predict_methods']
 
 def get_transform_method(pipe):
     """
@@ -483,3 +484,34 @@ def classify_decision_function(decision_function_value, class_names=None,
             return decode_labels(1, class_names)
         else:
             return decode_labels(0, class_names)
+
+
+def detect_predict_methods(model, Xs):
+        """
+        Detect functional prediction methods on a fitted model using a forward
+        pass.
+
+        This method allows you to detect prediction methods are active on a
+        scikit-learn predictor.  Some scikit-learn predictors, like Pipeline,
+        have prection method attributes that are non-functional so you can't
+        simply read the object's attributes to determine its prediction
+        interface.
+        """
+
+        if is_multichannel(model):
+            Xs_test = [X[0:1,:] if X is not None else None for X in Xs]
+        else:
+            Xs_test = Xs[0:1,:]
+
+        active_methods = []
+
+        for predict_method in config.recognized_pred_methods:
+            if hasattr(model, predict_method):
+                try:
+                    y_pred = getattr(model, predict_method)(Xs_test)
+                    if y_pred is not None:
+                        active_methods.append(predict_method)
+                except:
+                    pass
+
+        return active_methods
