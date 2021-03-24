@@ -37,6 +37,27 @@ __all__ = ['make_transformer', 'make_cv_transformer', 'unwrap_predictor',
            'unwrap_model']
 
 def make_transformer(predictor, transform_method='auto'):
+    """
+    Add transform methods to a predictor.
+
+    Parameters
+    ----------
+    predictor : scikit-learn predictor or multichannel predictor
+        Predictor to wrap.
+    transform_method : str, default='auto'
+        - Name of the prediction method to call when transforming (e.g. when
+          outputting meta-features).
+        - If 'auto' :
+            - If classifier : method picked using
+              config.transform_method_precedence order (default:
+              predict_proba->predict_log_proba->decision_function->predict).
+            - If regressor : 'predict'
+
+    Returns
+    -------
+    Predictor/transformer
+        A wrapped predictor with both predictor and transformer interfaces.
+    """
     if utils.is_multichannel(predictor):
         return Multichannel(predictor, transform_method)
     else:
@@ -45,6 +66,60 @@ def make_transformer(predictor, transform_method='auto'):
 
 def make_cv_transformer(predictor, transform_method='auto', internal_cv=5,
              score_method='auto', scorer='auto', cv_processes=1):
+    """
+    Add internal cross validation training and transform methods to a
+    predictor.
+
+    Parameters
+    ----------
+    predictor : scikit-learn predictor or multichannel predictor
+        Predictor to wrap.
+    transform_method : str, default='auto'
+        - Name of the prediction method to call when transforming (e.g. when
+          outputting meta-features).
+        - If 'auto' :
+            - If classifier : method picked using
+              config.transform_method_precedence order (default:
+              predict_proba->predict_log_proba->decision_function->predict).
+            - If regressor : 'predict'
+    internal_cv : int, None, or callable, default=5
+        - Function for train/test subdivision of the training data.  Used to
+          estimate performance of base classifiers and ensure they do not
+          generate predictions from their training samples during
+          meta-predictor training.
+        - If int > 1: StratifiedKfold(n_splits=internal_cv) if classifier or
+          KFold(n_splits=internal_cv) if regressor.
+        - If {None, 1}: disable internal cv.
+        - If callable: Assumed to be split generator like scikit-learn KFold.
+    score_method : str, default='auto'
+        - Name of prediction method used when scoring predictor performance.
+        - If 'auto' :
+            - If classifier : method picked using
+              config.score_method_precedence order (default:
+              ppredict_proba->predict_log_proba->decision_function->predict).
+            - If regressor : 'predict'
+    scorer : callable, default='auto'
+        Callable that computes a figure of merit score for the internal_cv run.
+        The score is exposed as score_ attribute during fit_transform().
+        - If 'auto':
+            - explained_variance_score for regressors with predict()
+            - roc_auc_score for classifiers with {predict_proba,
+              predict_log_proba, decision_function}
+            - balanced_accuracy_score for classifiers with only predict()
+        - If callable: A scorer with signature: score = scorer(y_true, y_pred).
+    cv_processes : int or 'max', default=1
+        - The number of parallel processes to run for internal cross
+          validation.
+        - If int : Use up to cv_processes number of processes.
+        - If 'max' : Use all available CPUs.
+
+    Returns
+    -------
+    Predictor/transformer
+        A wrapped predictor with both predictor and transformer interfaces.
+        Internal cross_validation training occurs during calls to
+        fit_transform().
+    """
     if utils.is_multichannel(predictor):
         return MultichannelCV(predictor, transform_method, internal_cv,
                               score_method, scorer, cv_processes)

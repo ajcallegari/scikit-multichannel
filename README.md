@@ -9,9 +9,6 @@ tutorials: https://github.com/ajcallegari/pipecaster/tree/master/tutorials
 
 ML pipelines often combine multiple input feature vectors derived from different data sources or feature extraction/engineering methods.  In these instances, the best performance is not always obtained by concatenating feature vectors into a single input vector.  Better accuracy can sometimes be obtained by **(1)** selecting the highest quality vectors or **(2)** training different ML models on each vector and making ensemble predictions (fig. 1).  In both cases, the different inputs are kept in separate channels for one or more data processing steps before the channels converge to make a single prediction.  Pipeline architectures with multiple I/O channels, which form the basis of pipecaster, are referred to as **"multichannnel pipelines"**.
 
-![figure 1.](/images/performance_comparison.png)  
-**figure 1**. Performance results from example 1.1 in [tutorial.ipynb](https://github.com/ajcallegari/pipecaster/blob/master/tutorial.ipynb).  
-
 The **MultichannelPipeline** class simplifies the construction of multichannel architectures, making it easy to create wide pipelines (many inputs) by broadcasting construction operations across multiple input channels, and deep pipelines (many layers and model stacks) with a layer-by-layer construction workflow and support for automatic internal cross validation training (1).  
 (1) Wolpert, David H. "Stacked generalization." Neural networks 5.2 (1992): 241-259.
 
@@ -67,4 +64,4 @@ pandas==0.24.2
 scikit-learn==0.23.2
 ```
 
-**Acknowledgments** Most of the ML concepts that motivated the development of pipecaster came up in fascinating conversations with [Ilya Goldberg](https://github.com/igg) and [Josiah Johnston](https://github.com/josiahjohnston).
+**Thanks** to [Ilya Goldberg](https://github.com/igg) and [Josiah Johnston](https://github.com/josiahjohnston) for the fascinating conversations that inspired pipecaster.

@@ -1,3 +1,7 @@
+"""
+Configuration options for pipecaser.
+"""
+
 # Set of methods recognized by pipecaster as prediction methods.
 recognized_pred_methods = set(['predict', 'predict_proba',
                                'decision_function', 'predict_log_proba'])

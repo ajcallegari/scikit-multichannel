@@ -6,5 +6,5 @@ Welcome to pipecaster's documentation
     :maxdepth: 2
 
     Intro <intro.rst>
-    Tutorial <https://github.com/ajcallegari/pipecaster/blob/master/tutorial.ipynb>
+    Tutorial <tutorial.rst>
     API Reference <_autosummary/pipecaster.rst>

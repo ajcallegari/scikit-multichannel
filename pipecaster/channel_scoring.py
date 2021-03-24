@@ -21,7 +21,7 @@ __all__ = ['AggregateFeatureScorer', 'CvPerformanceScorer']
 
 class AggregateFeatureScorer(Cloneable, Saveable):
     """
-    Channel scorer that aggregates feature scores.
+    Channel scorer that computes an aggregate feature score.
 
     Callable class that computes features scores using a feature_scorer object
     then computes an aggregate matrix score from the set of feature scores

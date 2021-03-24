@@ -14,7 +14,7 @@ from pipecaster.utils import Cloneable, Saveable, FitError
 __all__ = ['Layer', 'MultichannelPipeline', 'ChannelConcatenator']
 
 
-def get_live_channels(Xs, channel_indices=None):
+def _get_live_channels(Xs, channel_indices=None):
     """
     Determine which channels are not None.
 
@@ -43,7 +43,7 @@ def get_live_channels(Xs, channel_indices=None):
     return live_channels
 
 
-def has_live_channels(Xs, channel_indices=None):
+def _has_live_channels(Xs, channel_indices=None):
     """
     Determine if channels contain a value other than None.
 
@@ -59,12 +59,12 @@ def has_live_channels(Xs, channel_indices=None):
     bool
         True if a value other than None is found, otherwise False.
     """
-    return True if len(get_live_channels(Xs, channel_indices)) > 0 else False
+    return True if len(_get_live_channels(Xs, channel_indices)) > 0 else False
 
 
 class Layer(Cloneable, Saveable):
     """
-    Stage in a pipeline (pipe instances w I/O channel mappings).
+    Stage in a pipeline.
 
     Layers objects are generally instantiated and handled internally by the
     MultichannelPipeline class.  In special cases, the user may want to create
@@ -318,7 +318,7 @@ class Layer(Cloneable, Saveable):
         args_list = []
         live_pipes = []
         for i, (pipe, slice_, channel_indices) in enumerate(self.pipe_list):
-            if has_live_channels(Xs, channel_indices):
+            if _has_live_channels(Xs, channel_indices):
                 args_list.append((pipe, Xs, y, fit_params, slice_,
                                   channel_indices))
                 live_pipes.append(i)
@@ -390,7 +390,7 @@ class Layer(Cloneable, Saveable):
         estimator_types = []
         output_mask = [False for X in Xs]
         for pipe, slice_, channel_indices in self.pipe_list:
-            if has_live_channels(Xs, channel_indices):
+            if _has_live_channels(Xs, channel_indices):
                 model = utils.get_clone(pipe)
                 input_ = (Xs[slice_] if utils.is_multichannel(model)
                           else Xs[slice_][0])
@@ -1245,7 +1245,7 @@ class MultichannelPipeline(Cloneable, Saveable):
 
 class ChannelConcatenator(Cloneable, Saveable):
     """
-    Concatenate channel outputs into a single matrix.
+    Concatenate multiple channel outputs into a single matrix.
 
     Concatenate a block of contiguous channel outputs into a single matrix and
     output the concatemer in the first ouptut channel and None into the
