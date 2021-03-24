@@ -351,7 +351,8 @@ class SingleChannelCV(SingleChannel):
             is_binary = (True if is_classifier and len(self.classes_) == 2
                          else False)
 
-            self.score_ = score_predictions(y, y_score, self.score_method,
+            score_method = split_results['score']['method']
+            self.score_ = score_predictions(y, y_score, score_method,
                                             self.scorer, is_classifier,
                                             is_binary)
 
@@ -658,8 +659,8 @@ class MultichannelCV(Multichannel):
             y_score = split_results['score']['y_pred']
             is_binary = (True if is_classifier and len(self.classes_) == 2
                          else False)
-
-            self.score_ = score_predictions(y, y_score, self.score_method,
+            score_method = split_results['score']['method']
+            self.score_ = score_predictions(y, y_score, score_method,
                                             self.scorer, is_classifier,
                                             is_binary)
 
