@@ -284,8 +284,8 @@ def cross_val_predict(predictor, Xs, y=None, groups=None,
     if is_classifier:
         for predict_method in results:
             if results[predict_method]['method'] == 'predict':
-                results[predict_method]['y_pred'] = [
-                    classes_[p] for p in results[predict_method]['y_pred']]
+                results[predict_method]['y_pred'] = [classes_[p]
+                    for p in results[predict_method]['y_pred']]
 
     if combine_splits is True:
         sample_indices = np.concatenate(split_indices)

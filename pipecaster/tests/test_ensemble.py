@@ -9,17 +9,105 @@ from sklearn.model_selection import KFold, StratifiedKFold
 from sklearn.preprocessing import StandardScaler
 from sklearn.linear_model import LinearRegression, LogisticRegression
 from sklearn.neighbors import KNeighborsClassifier, KNeighborsRegressor
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor, StackingClassifier, StackingRegressor
+from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor, \
+    StackingClassifier, StackingRegressor, GradientBoostingClassifier, \
+    GradientBoostingRegressor
 from sklearn.dummy import DummyRegressor, DummyClassifier
 from sklearn.svm import SVC, SVR
-from sklearn.metrics import roc_auc_score, explained_variance_score
+from sklearn.metrics import roc_auc_score, explained_variance_score, \
+    balanced_accuracy_score
 
 import pipecaster.utils as utils
+from pipecaster.testing_utils import make_multi_input_classification, \
+    make_multi_input_regression
 import pipecaster.transform_wrappers as transform_wrappers
+from pipecaster.transform_wrappers import make_transformer
 from pipecaster.score_selection import RankScoreSelector
 from pipecaster.multichannel_pipeline import MultichannelPipeline
-from pipecaster.ensemble_learning import Ensemble
+from pipecaster.ensemble_learning import Ensemble, SoftVotingClassifier, \
+    SoftVotingDecision, MultichannelPredictor, HardVotingClassifier, \
+    AggregatingRegressor
 from pipecaster.cross_validation import cross_val_score
+
+class TestVoting(unittest.TestCase):
+
+    def test_soft_voting(self, verbose=0, seed=42):
+        Xs, y, _ = make_multi_input_classification(n_informative_Xs=5,
+                                              n_random_Xs=2, random_state=seed)
+        clf = MultichannelPipeline(n_channels=7)
+        clf.add_layer(StandardScaler())
+        base_clf = KNeighborsClassifier()
+        base_clf = transform_wrappers.SingleChannel(base_clf)
+        clf.add_layer(base_clf)
+        clf.add_layer(SoftVotingClassifier())
+        scores = cross_val_score(clf, Xs, y, score_method='predict',
+                                scorer=balanced_accuracy_score)
+        score = np.mean(scores)
+        if verbose > 0:
+            print('accuracy = {}'.format(score))
+
+        self.assertTrue(score > 0.80)
+
+    def test_soft_voting_decision(self, verbose=0, seed=42):
+
+        Xs, y, _ = make_multi_input_classification(n_informative_Xs=6,
+                                                   n_random_Xs=3,
+                                                   random_state=seed)
+
+        clf = MultichannelPipeline(n_channels=9)
+        clf.add_layer(StandardScaler())
+        base_clf = make_transformer(SVC(),
+                                    transform_method='decision_function')
+        clf.add_layer(base_clf)
+        meta_clf1 = SoftVotingDecision()
+        clf.add_layer(3, meta_clf1, 3, meta_clf1, 3, meta_clf1)
+        meta_clf2 = MultichannelPredictor(GradientBoostingClassifier())
+        clf.add_layer(meta_clf2)
+        scores = cross_val_score(clf, Xs, y, score_method='predict',
+                                scorer=balanced_accuracy_score)
+        score = np.mean(scores)
+        if verbose > 0:
+            print('accuracy = {}'.format(score))
+
+        self.assertTrue(score > 0.85)
+
+    def test_hard_voting(self, verbose=0, seed=42):
+        Xs, y, _ = make_multi_input_classification(
+                        n_informative_Xs=10, n_random_Xs=0,
+                        class_sep=2, random_state=seed)
+        clf = MultichannelPipeline(n_channels=10)
+        clf.add_layer(StandardScaler())
+        base_clf = KNeighborsClassifier()
+        base_clf = make_transformer(base_clf, transform_method='predict')
+        clf.add_layer(base_clf)
+        clf.add_layer(HardVotingClassifier())
+        scores = cross_val_score(clf, Xs, y, score_method='predict',
+                                scorer=balanced_accuracy_score)
+        score = np.mean(scores)
+        if verbose > 0:
+            print('accuracy = {}'.format(score))
+
+        self.assertTrue(score > 0.90)
+
+
+class TestAggragation(unittest.TestCase):
+
+    def test_aggregating_regressor(self, verbose=0, seed=42):
+        Xs, y, _ = make_multi_input_regression(n_informative_Xs=3,
+                                               random_state=seed)
+
+        clf = MultichannelPipeline(n_channels=3)
+        base_clf = GradientBoostingRegressor(n_estimators=50)
+        clf.add_layer(make_transformer(base_clf))
+        clf.add_layer(AggregatingRegressor(np.mean))
+        cross_val_score(clf, Xs, y, cv=3)
+        scores = cross_val_score(clf, Xs, y, score_method='predict',
+                                scorer=explained_variance_score)
+        score = np.mean(scores)
+        if verbose > 0:
+            print('accuracy = {}'.format(score))
+
+        self.assertTrue(score > 0.3)
 
 class TestEnsembleMetaprediction(unittest.TestCase):
 

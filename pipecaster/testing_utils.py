@@ -116,6 +116,7 @@ def make_multi_input_classification(n_informative_Xs=5,
 
     return list(Xs), y, list(X_types)
 
+
 def make_regression(n_samples=500, n_features=100, n_informative=5,
                     offset=0, noise_sd=0, return_slopes=False,
                     random_state=None):
@@ -158,27 +159,29 @@ def make_regression(n_samples=500, n_features=100, n_informative=5,
 
     if random_state is not None:
         np.random.seed(random_state)
+
     n_random = n_features - n_informative
 
-    slopes = np.array([2 * np.random.rand() - 1 for i in range(n_informative)])
-    X_inf = np.stack([slopes * np.random.rand(n_informative)
-                      for i in range(n_samples)])
-    y = np.sum(slopes * X_inf, axis=1) + offset
-    X_rand = np.stack([np.random.rand(n_random) for i in range(n_samples)])
-    X = np.concatenate([X_inf, X_rand], axis=1)
-    slopes = np.concatenate([slopes, np.zeros(n_random)])
-    permutation_idx = np.random.permutation(n_features)
-    X = X[: , permutation_idx].copy()
-    X += np.random.normal(loc=0, scale=noise_sd, size=X.shape)
-    slopes = slopes[permutation_idx].copy()
+    slopes = np.random.rand(n_informative) * 2 - 1
+    X = np.random.rand(n_samples, n_features)
+    inf_mask = np.random.permutation(n_features)[:n_informative]
+    y = np.sum(X[:, inf_mask] * slopes, axis=1) + offset
+    if noise_sd is not None and noise_sd > 0:
+        X += np.random.normal(loc=0, scale=noise_sd, size=X.shape)
 
-    return (X, y, slopes) if return_slopes else (X, y)
+    if return_slopes is True:
+        all_slopes = np.zeros(n_features)
+        all_slopes[inf_mask] = slopes
+
+    # X[:, inf_mask] = 222
+
+    return (X, y, all_slopes) if return_slopes else (X, y)
 
 
 def make_multi_input_regression(n_informative_Xs=10,
                                 n_weak_Xs=0,
                                 n_random_Xs=0,
-                                weak_noise_sd=0.2,
+                                weak_noise_sd=0,
                                 seed=None, **rgr_params):
     """
     Get a synthetic regression dataset with multiple input matrices.
@@ -245,9 +248,8 @@ def make_multi_input_regression(n_informative_Xs=10,
     rgr_params['n_features'] *= n_Xs
     rgr_params['n_informative'] *= n_Xs
     rgr_params['return_slopes'] = True
-
-    X_pool, y, coef = make_regression(**rgr_params)
-    informative_mask = coef != 0
+    X_pool, y, slopes = make_regression(**rgr_params)
+    informative_mask = slopes != 0
     X_pool_inf = X_pool[:, informative_mask]
     X_pool_rand = X_pool[:, ~informative_mask]
 
@@ -261,7 +263,7 @@ def make_multi_input_regression(n_informative_Xs=10,
             X += np.random.normal(loc=0, scale=weak_noise_sd, size=X.shape)
         elif X_type == 'random':
             np.random.shuffle(X)
-        Xs.append(X)
+        Xs.append(X.copy())
 
     tuples = list(zip(Xs, X_types))
     random.shuffle(tuples)

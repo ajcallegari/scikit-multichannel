@@ -33,6 +33,25 @@ import pipecaster.config as config
 from pipecaster.utils import Cloneable, Saveable
 from pipecaster.cross_validation import cross_val_predict, score_predictions
 
+__all__ = ['make_transformer', 'make_cv_transformer', 'unwrap_predictor',
+           'unwrap_model']
+
+def make_transformer(predictor, transform_method='auto'):
+    if utils.is_multichannel(predictor):
+        return Multichannel(predictor, transform_method)
+    else:
+        return SingleChannel(predictor, transform_method)
+
+
+def make_cv_transformer(predictor, transform_method='auto', internal_cv=5,
+             score_method='auto', scorer='auto', cv_processes=1):
+    if utils.is_multichannel(predictor):
+        return MultichannelCV(predictor, transform_method, internal_cv,
+                              score_method, scorer, cv_processes)
+    else:
+        return SingleChannelCV(predictor, transform_method, internal_cv,
+                              score_method, scorer, cv_processes)
+
 
 class SingleChannel(Cloneable, Saveable):
     """

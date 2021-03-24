@@ -19,32 +19,308 @@ from pipecaster.score_selection import RankScoreSelector
 import pipecaster.parallel as parallel
 
 __all__ = ['SoftVotingClassifier', 'SoftVotingDecision',
-           'HardVotingClassifier', 'AggregatingRegressor', 'Ensemble',
+           'HardVotingClassifier', 'AggregatingRegressor',
+           'SoftVotingMetaClassifier',
+           'SoftVotingMetaDecision',
+           'HardVotingMetaClassifier', 'AggregatingMetaRegressor', 'Ensemble',
            'GridSearchEnsemble', 'MultichannelPredictor', 'ChannelEnsemble']
 
 
 class SoftVotingClassifier(Cloneable, Saveable):
     """
-    Meta-predictor for classifier ensemble predic_proba outputs.
+    Make ensemble predictions from averaged predict_proba outputs.
 
-    This pipeline component takes scalar predictions from a prior pipeline
-    stage and averages them to make an ensemble prediction.  These predictions
-    should be outputs from predict_proba.  To vote with decision_function
-    outputs use the SoftVotingDecision class. To mix classifiers with different
-    scalar output methods, use the HardVotingClassifier which uses the
-    categorical 'predict' method common to both types of classifiers.
+    This multichannel pipeline component takes a list of predict_proba outputs
+    from an ensemble of of base classifiers and predicts with the averaged
+    probs.
 
-    SoftVotingClassifier can be used as a standalone pipeline component or be
-    passed as the the meta_predictor paramter to MultichannelPredictor,
+    Notes
+    -----
+    - To vote with decision_function outputs use the SoftVotingDecision or
+      HardVotingClassifier classes.
+    - To mix classifiers with different scalar output methods, use the
+      HardVotingClassifier class.
+
+    Examples
+    --------
+    SoftVotingMetaClassifier as a meta-predictor for ChannelEnsemble.
+    ::
+
+        from sklearn.preprocessing import StandardScaler
+        from sklearn.neighbors import KNeighborsClassifier
+        import pipecaster as pc
+
+        Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=5,
+                                                      n_random_Xs=5)
+
+        clf = pc.MultichannelPipeline(n_channels=10)
+        clf.add_layer(StandardScaler())
+        base_clf = KNeighborsClassifier()
+        base_clf = pc.transform_wrappers.SingleChannel(base_clf)
+        clf.add_layer(base_clf)
+        clf.add_layer(pc.SoftVotingClassifier())
+        pc.cross_val_score(clf, Xs, y)
+        # output: [0.9411764705882353, 0.8768382352941176, 0.9080882352941176]
+
+    """
+
+    def __init__(self):
+        self._estimator_type = 'classifier'
+
+    def fit(self, Xs, y, **fit_params):
+        if isinstance(y, np.ndarray) and len(y.shape) > 1 and y.shape[1] > 1:
+            raise NotImplementedError('Multilabel and multi-output '
+                                      'meta-classification not supported')
+        self.classes_, y = np.unique(y, return_inverse=True)
+        return self
+
+    def predict_proba(self, Xs):
+        live_Xs = [X for X in Xs if X is not None]
+
+        # expand binary classification probs to 2 columns
+        if len(self.classes_) == 2:
+            for i, X in enumerate(live_Xs):
+                X_expanded = np.empty((X.shape[0], 2))
+                X = X.reshape(-1)
+                X_expanded[:, 0] =  1.0 - X
+                X_expanded[:, 1] =  X
+                live_Xs[i] = X_expanded
+
+        return np.mean(live_Xs, axis=0)
+
+    def predict(self, Xs):
+        mean_probs = self.predict_proba(Xs)
+        decisions = np.argmax(mean_probs, axis=1)
+        predictions = self.classes_[decisions]
+        return predictions
+
+    def get_clone(self):
+        """
+        Get a stateful clone.
+        """
+        clone = super().get_clone()
+        if hasattr(self, 'classes_'):
+            clone.classes_ = self.classes_.copy()
+        return clone
+
+
+class SoftVotingDecision(Cloneable, Saveable):
+    """
+    Take average of an ensemble of decision_function outputs.
+
+    This pipeline component takes scalar decision_function outputs from a prior
+    pipeline classifier stage and averages them.  Averaged decision_function
+    outputs can be used as meta-features for model stacking (see example
+    below).
+
+    Notes
+    -----
+        - The ensemble of inputs must be concatenated into a single
+          meta-feature matrix in a prior stage.
+
+        - This class implements estimator and tranformer interfaces but
+          lacks a complete predictor interface (i.e. 'predict' method) because
+          there is not a standard method for generating a categorical
+          predictions from an ensemble of decision_function outputs.
+
+    Examples
+    --------
+    ::
+
+        from sklearn.preprocessing import StandardScaler
+        from sklearn.ensemble import GradientBoostingClassifier
+        from sklearn.svm import SVC
+        import pipecaster as pc
+        from sklearn.metrics import balanced_accuracy_score
+
+        Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=6,
+                                                      n_random_Xs=3)
+
+        clf = pc.MultichannelPipeline(n_channels=9)
+        clf.add_layer(StandardScaler())
+        base_clf = pc.make_cv_transformer(SVC(),
+                                          transform_method='decision_function')
+        clf.add_layer(base_clf)
+        meta_clf1 = pc.SoftVotingDecision()
+        clf.add_layer(3, meta_clf1, 3, meta_clf1, 3, meta_clf1)
+        meta_clf2 = pc.MultichannelPredictor(GradientBoostingClassifier())
+        clf.add_layer(meta_clf2)
+        pc.cross_val_score(clf, Xs, y, score_method='predict',
+                                        scorer=balanced_accuracy_score)
+        # [0.8823529411764706, 0.8823529411764706, 0.7040441176470589]
+    """
+
+    def __init__(self):
+        self._estimator_type = 'classifier'
+
+    def fit(self, Xs, y, **fit_params):
+        if isinstance(y, np.ndarray) and len(y.shape) > 1 and y.shape[1] > 1:
+            raise NotImplementedError('Multilabel and multi-output '
+                                      'meta-classification not supported')
+        self.classes_, y = np.unique(y, return_inverse=True)
+        return self
+
+    def decision_function(self, Xs):
+        live_Xs = [X for X in Xs if X is not None]
+        return np.mean(live_Xs, axis=0)
+
+    def transform(self, Xs):
+        Xs_t = [None for X in Xs]
+        Xs_t[0] = self.decision_function(Xs)
+        return Xs_t
+
+    def fit_transform(self, Xs, y, **fit_params):
+        self.fit(Xs, y, **fit_params)
+        return self.transform(Xs)
+
+    def get_clone(self):
+        """
+        Get a stateful clone.
+        """
+        clone = super().get_clone()
+        if hasattr(self, 'classes_'):
+            clone.classes_ = self.classes_.copy()
+        return clone
+
+
+class HardVotingClassifier(Cloneable, Saveable):
+    """
+    Predict using the most frequent class in a prediction ensemble.
+
+    This pipeline component takes categorical predictions from a prior pipeline
+    stage and uses them to make an ensemble prediction.  The prediction
+    is made by taking the modal prediction (i.e. most frequently predicted
+    class) of the classifiers in the ensemble.
+
+    Examples
+    --------
+    ::
+
+        from sklearn.ensemble import GradientBoostingClassifier
+        import pipecaster as pc
+
+        Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=5,
+                                                      n_random_Xs=5)
+
+        clf = pc.MultichannelPipeline(n_channels=10)
+        base_clf = GradientBoostingClassifier()
+        base_clf = pc.make_transformer(base_clf, transform_method='predict')
+        clf.add_layer(base_clf)
+        clf.add_layer(pc.HardVotingClassifier())
+        pc.cross_val_score(clf, Xs, y, cv=3)
+        # output: [0.8823529411764706, 0.9117647058823529, 0.8216911764705883]
+    """
+
+    def __init__(self):
+        self._estimator_type = 'classifier'
+
+    def fit(self, Xs, y, **fit_params):
+        if isinstance(y, np.ndarray) and len(y.shape) > 1 and y.shape[1] > 1:
+            raise NotImplementedError('Multilabel and multi-output '
+                                      'meta-classification not supported')
+        self.classes_, y = np.unique(y, return_inverse=True)
+        return self
+
+    def predict(self, Xs):
+        """
+        Return the modal class predicted by the base classifiers.
+        """
+        live_Xs = [X for X in Xs if X is not None]
+        y_preds = np.concatenate(live_Xs, axis=1)
+        y_pred = scipy.stats.mode(y_preds, axis=1)[0].reshape(-1)
+        try:
+            return self.classes_[y_pred]
+        except IndexError:
+            raise IndexError('Could not decoding category labels.  Try setting'
+                             ' the base predictor transform_method to predict')
+
+    def get_clone(self):
+        """
+        Get a stateful clone.
+        """
+        clone = super().get_clone()
+        if hasattr(self, 'classes_'):
+            clone.classes_ = self.classes_.copy()
+        return clone
+
+
+class AggregatingRegressor(Cloneable, Saveable):
+    """
+    Predict with aggregated outputs of a regressor ensemble.
+
+    This multichannel component takes a list of predictions from a prior
+    pipeline stage and converts them into a single prediction using an
+    aggregator function (e.g. np.mean).
+
+    Notes
+    -----
+    Only supports single output regressors.
+
+    Parameters
+    ----------
+    aggregator : callable, default=np.mean
+        Function for converting multiple regression predictions into a single
+        prediction.  Signature: prediction = aggregator(predictions).
+
+    Examples
+    --------
+    ::
+
+        import numpy as np
+        from sklearn.ensemble import GradientBoostingRegressor
+        import pipecaster as pc
+
+        Xs, y, _ = pc.make_multi_input_regression(n_informative_Xs=3)
+
+        clf = pc.MultichannelPipeline(n_channels=3)
+        base_clf = GradientBoostingRegressor()
+        clf.add_layer(pc.make_transformer(base_clf))
+        clf.add_layer(pc.AggregatingRegressor(np.mean))
+        pc.cross_val_score(clf, Xs, y, cv=3)
+        # output: [0.4126896021655341, 0.3661579493175574, 0.2878593262097652]
+    """
+
+    def __init__(self, aggregator=np.mean):
+        self.aggregator = aggregator
+        self._estimator_type = 'regressor'
+
+    def fit(self, Xs=None, y=None, **fit_params):
+        return self
+
+    def predict(self, Xs):
+        live_Xs = [X for X in Xs if X is not None]
+        y_preds = np.concatenate(live_Xs, axis=1)
+        return self.aggregator(y_preds, axis=1)
+
+
+class SoftVotingMetaClassifier(Cloneable, Saveable):
+    """
+    Soft voting meta-classifier.
+
+    This component can be used in contexts where you would ordinarily use an
+    ML algorithm for meta-classification.  Like ML meta-classifiers,
+    SoftVotingMetaClassifier takes an input vector formed by concatenating the
+    predictions of the base predictors.  The prediction behavior is identical
+    to SoftVotingClassifier.
+
+    SoftVotingMetaClassifier can be used as a standalone pipeline component or
+    be used as the the meta_predictor paramter to MultichannelPredictor,
     Ensemble, and ChannelEnsemble components.
 
     The inputs, which must be concatenated into a single meta-feature matrix in
     a prior stage, are decatenated and predicted classes inferred from the
     order of the meta-feature matrix columns.
 
+    Notes
+    -----
+    - To vote with decision_function outputs use the SoftVotingMetaDecision or
+      HardVotingMetaClassifier classes.
+    - To mix classifiers with different scalar output methods, use the
+      HardVotingMetaClassifier class.
+
     Examples
     --------
-    SoftVotingClassifier as a meta-predictor for ChannelEnsemble.
+    SoftVotingMetaClassifier as a meta-predictor for ChannelEnsemble.
     ::
 
         from sklearn.ensemble import GradientBoostingClassifier
@@ -55,12 +331,12 @@ class SoftVotingClassifier(Cloneable, Saveable):
 
         clf = pc.MultichannelPipeline(n_channels=10)
         base_clf = GradientBoostingClassifier()
-        meta_clf = pc.SoftVotingClassifier()
+        meta_clf = pc.SoftVotingMetaClassifier()
         clf.add_layer(pc.ChannelEnsemble(base_clf, meta_clf))
         pc.cross_val_score(clf, Xs, y, cv=3)
         # output: [0.9117647058823529, 0.8180147058823529, 0.9117647058823529]
 
-    SoftVotingClassifier as a predictor for MultichannelPredictor.
+    SoftVotingMetaClassifier as a predictor for MultichannelPredictor.
     ::
 
         from sklearn.ensemble import GradientBoostingClassifier
@@ -71,13 +347,13 @@ class SoftVotingClassifier(Cloneable, Saveable):
         clf = pc.MultichannelPipeline(n_channels=10)
         base_clf = pc.transform_wrappers.SingleChannel(
             GradientBoostingClassifier())
-        meta_clf = pc.SoftVotingClassifier()
+        meta_clf = pc.SoftVotingMetaClassifier()
         clf.add_layer(base_clf)
         clf.add_layer(pc.MultichannelPredictor(meta_clf))
         pc.cross_val_score(clf, Xs, y, cv=3)
         # output: [0.9117647058823529, 0.8180147058823529, 0.9117647058823529]
 
-    SoftVotingClassifier as a standalone pipeline component.
+    SoftVotingMetaClassifier as a standalone pipeline component.
     ::
 
         from sklearn.ensemble import GradientBoostingClassifier
@@ -91,7 +367,7 @@ class SoftVotingClassifier(Cloneable, Saveable):
             GradientBoostingClassifier())
         clf.add_layer(base_clf)
         clf.add_layer(pc.ChannelConcatenator())
-        clf.add_layer(1, pc.SoftVotingClassifier())
+        clf.add_layer(1, pc.SoftVotingMetaClassifier())
         pc.cross_val_score(clf, Xs, y, cv=3)
         # output: [0.9117647058823529, 0.8180147058823529, 0.9117647058823529]
     """
@@ -148,24 +424,18 @@ class SoftVotingClassifier(Cloneable, Saveable):
         return clone
 
 
-class SoftVotingDecision(Cloneable, Saveable):
+class SoftVotingMetaDecision(Cloneable, Saveable):
     """
     Take average of an ensemble of decision_function outputs.
 
-    This pipeline component takes scalar decision_function outputs from a prior
-    pipeline classifier stage and averages them.  Averaged decision_function
-    outputs can be used as meta-features for model stacking (see example
-    below).
-
-    Notes
-    -----
-        - The ensemble of inputs must be concatenated into a single
-          meta-feature matrix in a prior stage.
-
-        - This class implements estimator and tranformer interfaces but
-          lacks a complete predictor interface (i.e. 'predict' method) because
-          there is not a standard method for generating a categorical
-          predictions from an ensemble of decision_function outputs.
+    This component can be used in limited contexts where you would ordinarily
+    use an ML algorithm to generate meta-features from an ensemble (see example
+    below).  Like ML meta-classifiers, SoftVotingMetaDecision takes an input
+    vector formed by concatenating the predictions of the base predictors.
+    Unlike ML models, SoftVotingMetaDecision can't make predictions, it can
+    only output meta-features to be used for additional meta-classification
+    (there is not a standard method for generating a categorical predictions
+    from an ensemble of decision_function outputs).
 
     Examples
     --------
@@ -184,7 +454,7 @@ class SoftVotingDecision(Cloneable, Saveable):
         base_clf = pc.transform_wrappers.SingleChannel(SVC(),
                                         transform_method='decision_function')
         clf.add_layer(base_clf)
-        meta_clf1 = pc.SoftVotingDecision()
+        meta_clf1 = pc.SoftVotingMetaDecision()
         clf.add_layer(2, meta_clf1, 2, meta_clf1, 2, meta_clf1, 2,
                       meta_clf1, 2, meta_clf1)
         meta_clf2 = pc.MultichannelPredictor(GradientBoostingClassifier())
@@ -233,22 +503,22 @@ class SoftVotingDecision(Cloneable, Saveable):
         return clone
 
 
-class HardVotingClassifier(Cloneable, Saveable):
+class HardVotingMetaClassifier(Cloneable, Saveable):
     """
-    Predict using the modal prediction of an ensemble.
+    Predict with the most frquent class in ensemble of predictions.
 
-    This pipeline component takes categorical predictions from a prior pipeline
-    stage and uses them to make an ensemble prediction.  The prediction
-    is made by taking the modal prediction (i.e. most frequently predicted
-    class) of the classifiers in the ensemble.
+    This component can be used in contexts where you would ordinarily use an
+    ML algorithm for meta-classification.  Like ML meta-classifiers,
+    HardVotingMetaClassifier takes an input vector formed by concatenating the
+    predictions of the base predictors.  The prediction behavior is identical
+    to HardVoting
 
-    The ensemble of inputs for HardVotingClassifier must be concatenated into a
-    single matrix in a prior stage.
-
+    The ensemble of inputs for HardVotingMetaClassifier must be concatenated
+    into a single matrix in a prior stage.
 
     Examples
     --------
-    HardVotingClassifier as a meta-predictor for ChannelEnsemble.
+    HardVotingMetaClassifier as a meta-predictor for ChannelEnsemble.
     ::
 
         from sklearn.ensemble import GradientBoostingClassifier
@@ -259,13 +529,13 @@ class HardVotingClassifier(Cloneable, Saveable):
 
         clf = pc.MultichannelPipeline(n_channels=10)
         base_clf = GradientBoostingClassifier()
-        meta_clf = pc.HardVotingClassifier()
+        meta_clf = pc.HardVotingMetaClassifier()
         clf.add_layer(pc.ChannelEnsemble(base_clf, meta_clf,
                                          base_transform_methods='predict'))
         pc.cross_val_score(clf, Xs, y, cv=3)
         # output: [0.7647058823529411, 0.6985294117647058, 0.9080882352941176]
 
-    HardVotingClassifier as a predictor for MultichannelPredictor.
+    HardVotingMetaClassifier as a predictor for MultichannelPredictor.
     ::
 
         from sklearn.ensemble import GradientBoostingClassifier
@@ -276,13 +546,13 @@ class HardVotingClassifier(Cloneable, Saveable):
         clf = pc.MultichannelPipeline(n_channels=10)
         base_clf = pc.transform_wrappers.SingleChannel(
             GradientBoostingClassifier(), transform_method='predict')
-        meta_clf = pc.HardVotingClassifier()
+        meta_clf = pc.HardVotingMetaClassifier()
         clf.add_layer(base_clf)
         clf.add_layer(pc.MultichannelPredictor(meta_clf))
         pc.cross_val_score(clf, Xs, y, cv=3)
         # output: [0.7352941176470589, 0.7849264705882353, 0.7536764705882353]
 
-    HardVotingClassifier as a standalone pipeline component.
+    HardVotingMetaClassifier as a standalone pipeline component.
     ::
 
         from sklearn.ensemble import GradientBoostingClassifier
@@ -296,7 +566,7 @@ class HardVotingClassifier(Cloneable, Saveable):
             GradientBoostingClassifier(), transform_method='predict')
         clf.add_layer(base_clf)
         clf.add_layer(pc.ChannelConcatenator())
-        clf.add_layer(1, pc.HardVotingClassifier())
+        clf.add_layer(1, pc.HardVotingMetaClassifier())
         pc.cross_val_score(clf, Xs, y, cv=3)
         # output: [0.7352941176470589, 0.6654411764705883, 0.78125]
     """
@@ -332,16 +602,15 @@ class HardVotingClassifier(Cloneable, Saveable):
         return clone
 
 
-class AggregatingRegressor(Cloneable, Saveable):
+class AggregatingMetaRegressor(Cloneable, Saveable):
     """
     Predict with aggregated outputs of a regressor ensemble.
 
-    This pipeline component takes predictions from a prior pipeline stage that
-    have been concatenated into a single meta-feature matrix and converts
-    multiple predictions into a single prediction with an aggregator function
-    (e.g. np.mean).  Can be used alone or as a meta-predictor within
-    MultichannelPredictor, Ensemble, and ChannelEnsemble
-    pipeline components.
+    This pipeline component can take the place of ML algorithms that function
+    as meta-regressors.  It cannot predict, but can output meta-features
+    created by applying an aggeragator function to the predictions of the base
+    regressors.  Can be used alone or as a meta-predictor within
+    MultichannelPredictor, Ensemble, and ChannelEnsemble pipeline components.
 
     Notes
     -----
@@ -351,7 +620,7 @@ class AggregatingRegressor(Cloneable, Saveable):
     ----------
     aggregator : callable, default=np.mean
         Function for converting multiple regression predictions into a single
-        prediction.
+        prediction.  Signature: prediction = aggregator(predictions).
 
     Examples
     --------
@@ -366,7 +635,7 @@ class AggregatingRegressor(Cloneable, Saveable):
 
         clf = pc.MultichannelPipeline(n_channels=10)
         base_clf = GradientBoostingRegressor()
-        meta_clf = pc.AggregatingRegressor(np.mean)
+        meta_clf = pc.AggregatingMetaRegressor(np.mean)
         clf.add_layer(pc.ChannelEnsemble(base_clf, meta_clf))
         pc.cross_val_score(clf, Xs, y, cv=3)
         # output: [0.05944403104941709, 0.08425323185871114, 0.067995808]
@@ -377,7 +646,7 @@ class AggregatingRegressor(Cloneable, Saveable):
             GradientBoostingRegressor())
         clf.add_layer(base_clf)
         clf.add_layer(pc.ChannelConcatenator())
-        clf.add_layer(1, pc.AggregatingRegressor(np.mean))
+        clf.add_layer(1, pc.AggregatingMetaRegressor(np.mean))
         pc.cross_val_score(clf, Xs, y, cv=3)
         # output: [0.05845840783307943, 0.08014277920579282, 0.0686751928]
 
@@ -389,13 +658,13 @@ class AggregatingRegressor(Cloneable, Saveable):
             GradientBoostingRegressor())
         clf.add_layer(base_clf)
         clf.add_layer(
-            pc.MultichannelPredictor(pc.AggregatingRegressor(np.mean)))
+            pc.MultichannelPredictor(pc.AggregatingMetaRegressor(np.mean)))
         pc.cross_val_score(clf, Xs, y, cv=3)
         # output: [0.01633148118462313, 0.03953337266754531, 0.04450143]
     """
 
     def __init__(self, aggregator=np.mean):
-        self._params_to_attributes(AggregatingRegressor.__init__, locals())
+        self._params_to_attributes(AggregatingMetaRegressor.__init__, locals())
         self._estimator_type = 'regressor'
 
     def fit(self, X=None, y=None, **fit_params):
@@ -414,7 +683,7 @@ class Ensemble(Cloneable, Saveable):
     pooling base predictor inferences with a meta-predictor.
 
     The meta-predictor may be a voting or aggregating algorithm (e.g.
-    SoftVotingClassifier, AggregatingRegressor) or a scikit-learn conformant ML
+    SoftVotingMetaClassifier, AggregatingMetaRegressor) or a scikit-learn conformant ML
     algorithm.  In the latter case, it is standard practice to use internal
     cross validation training of the base classifiers to prevent them from
     making inferences on training samples (1).  To activate internal cross
@@ -527,7 +796,7 @@ class Ensemble(Cloneable, Saveable):
 
         ensemble_clf = pc.Ensemble(
                          base_predictors=predictors,
-                         meta_predictor=pc.SoftVotingClassifier(),
+                         meta_predictor=pc.SoftVotingMetaClassifier(),
                          base_processes='max')
 
         clf = Pipeline([('scaler', StandardScaler()),
@@ -559,7 +828,7 @@ class Ensemble(Cloneable, Saveable):
 
         ensemble_clf = pc.Ensemble(
                          base_predictors=predictors,
-                         meta_predictor=pc.SoftVotingClassifier(),
+                         meta_predictor=pc.SoftVotingMetaClassifier(),
                          internal_cv=5, scorer='auto',
                          score_selector=pc.RankScoreSelector(k=2),
                          disable_cv_train=True, base_processes='max')
@@ -944,7 +1213,7 @@ class GridSearchEnsemble(Ensemble):
     (e.g. those found in the :mod:`pipecaster.score_selection` module).
 
     The optional meta-predictor may be a voting or aggregating
-    algorithm (e.g. SoftVotingClassifier, AggregatingRegressor) or a
+    algorithm (e.g. SoftVotingMetaClassifier, AggregatingMetaRegressor) or a
     scikit-learn conformant ML algorithm.  In the latter case, it is standard
     practice to use internal cross validation training of the base classifiers
     to prevent them from making inferences on training samples (1).  To
@@ -1033,7 +1302,7 @@ class GridSearchEnsemble(Ensemble):
             clf = pc.GridSearchEnsemble(
                              param_dict=screen,
                              base_predictor_cls=GradientBoostingClassifier,
-                             meta_predictor=pc.SoftVotingClassifier(),
+                             meta_predictor=pc.SoftVotingMetaClassifier(),
                              internal_cv=5, scorer='auto',
                              score_selector=pc.RankScoreSelector(k=2),
                              base_processes=pc.count_cpus())
@@ -1252,7 +1521,7 @@ class ChannelEnsemble(Cloneable, Saveable):
     pooling base predictor inferences with a meta-predictor.
 
     The meta-predictor may be a voting or aggregating algorithm (e.g.
-    SoftVotingClassifier, AggregatingRegressor) or a scikit-learn conformant ML
+    SoftVotingMetaClassifier, AggregatingMetaRegressor) or a scikit-learn conformant ML
     algorithm.  In the latter case, it is standard practice to use internal
     cross validation training of the base classifiers to prevent them from
     making inferences on training samples (1).  To activate internal cross

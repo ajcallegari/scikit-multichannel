@@ -18,9 +18,9 @@ from pipecaster.testing_utils import make_multi_input_classification
 from pipecaster.testing_utils import make_multi_input_regression
 
 from pipecaster.multichannel_pipeline import MultichannelPipeline
-from pipecaster.ensemble_learning import SoftVotingClassifier
-from pipecaster.ensemble_learning import HardVotingClassifier
-from pipecaster.ensemble_learning import AggregatingRegressor
+from pipecaster.ensemble_learning import SoftVotingMetaClassifier
+from pipecaster.ensemble_learning import HardVotingMetaClassifier
+from pipecaster.ensemble_learning import AggregatingMetaRegressor
 from pipecaster.ensemble_learning import MultichannelPredictor
 from pipecaster.ensemble_learning import ChannelEnsemble
 from pipecaster.cross_validation import cross_val_score
@@ -50,7 +50,7 @@ class TestMultichannelClassification(unittest.TestCase):
         base_clf = transform_wrappers.SingleChannel(KNeighborsClassifier(
                                             n_neighbors=5, weights='uniform'))
         mclf.add_layer(base_clf)
-        mclf.add_layer(MultichannelPredictor(SoftVotingClassifier()))
+        mclf.add_layer(MultichannelPredictor(SoftVotingMetaClassifier()))
         mclf.fit([X], y)
         mclf_predictions = mclf.predict([X])
         self.assertTrue(np.array_equal(clf_predictions, mclf_predictions),
@@ -60,7 +60,7 @@ class TestMultichannelClassification(unittest.TestCase):
         # implementation 2
         mclf = MultichannelPipeline(n_channels=1)
         base_clf = KNeighborsClassifier(n_neighbors=5, weights='uniform')
-        mclf.add_layer(ChannelEnsemble(base_clf, SoftVotingClassifier()))
+        mclf.add_layer(ChannelEnsemble(base_clf, SoftVotingMetaClassifier()))
         mclf.fit([X], y)
         mclf_predictions = mclf.predict([X])
         self.assertTrue(np.array_equal(clf_predictions, mclf_predictions),
@@ -87,7 +87,7 @@ class TestMultichannelClassification(unittest.TestCase):
         base_clf = transform_wrappers.SingleChannel(base_clf,
                                                     transform_method='predict')
         mclf.add_layer(base_clf)
-        mclf.add_layer(MultichannelPredictor(HardVotingClassifier()))
+        mclf.add_layer(MultichannelPredictor(HardVotingMetaClassifier()))
         mclf.fit([X], y)
         mclf_predictions = mclf.predict([X])
         self.assertTrue(np.array_equal(clf_predictions, mclf_predictions),
@@ -98,7 +98,7 @@ class TestMultichannelClassification(unittest.TestCase):
         mclf = MultichannelPipeline(n_channels=1)
         base_clf = KNeighborsClassifier(n_neighbors=5, weights='uniform')
         mclf.add_layer(ChannelEnsemble(base_clf,
-                                       HardVotingClassifier(),
+                                       HardVotingMetaClassifier(),
                                        base_transform_methods='predict'))
         mclf.fit([X], y)
         mclf_predictions = mclf.predict([X])
@@ -145,7 +145,7 @@ class TestMultichannelClassification(unittest.TestCase):
             clf = transform_wrappers.SingleChannel(
                         KNeighborsClassifier(n_neighbors=5, weights='uniform'))
             mclf.add_layer(clf, pipe_processes=n_cpus)
-            mclf.add_layer(MultichannelPredictor(SoftVotingClassifier()))
+            mclf.add_layer(MultichannelPredictor(SoftVotingMetaClassifier()))
 
             split_accuracies = cross_val_score(mclf, Xs, y,
                                                scorer=roc_auc_score,
@@ -158,7 +158,7 @@ class TestMultichannelClassification(unittest.TestCase):
             clf = transform_wrappers.SingleChannel(clf,
                                                    transform_method='predict')
             mclf.add_layer(clf, pipe_processes=n_cpus)
-            mclf.add_layer(MultichannelPredictor(HardVotingClassifier()))
+            mclf.add_layer(MultichannelPredictor(HardVotingMetaClassifier()))
 
             split_accuracies = cross_val_score(mclf, Xs, y,
                                                scorer=roc_auc_score, cv=3,
@@ -211,7 +211,7 @@ class TestMultichannelClassification(unittest.TestCase):
             base_clf = KNeighborsClassifier(n_neighbors=5, weights='uniform')
             mclf.add_layer(
                 ChannelEnsemble(
-                    base_clf, SoftVotingClassifier(), base_processes=n_cpus))
+                    base_clf, SoftVotingMetaClassifier(), base_processes=n_cpus))
             split_accuracies = cross_val_score(mclf, Xs, y,
                                                scorer=roc_auc_score,
                                                cv=3, n_processes=1)
@@ -223,7 +223,7 @@ class TestMultichannelClassification(unittest.TestCase):
             clf = transform_wrappers.SingleChannel(clf,
                                                    transform_method='predict')
             mclf.add_layer(clf, pipe_processes='max')
-            mclf.add_layer(MultichannelPredictor(HardVotingClassifier()))
+            mclf.add_layer(MultichannelPredictor(HardVotingMetaClassifier()))
 
             split_accuracies = cross_val_score(mclf, Xs, y,
                                                scorer=roc_auc_score, cv=3,
@@ -413,7 +413,7 @@ class TestMultiChannelRegression(unittest.TestCase):
         rgr = transform_wrappers.SingleChannel(
                         KNeighborsRegressor(n_neighbors=5, weights='uniform'))
         mrgr.add_layer(rgr, pipe_processes=n_cpus)
-        mrgr.add_layer(MultichannelPredictor(AggregatingRegressor(np.mean)))
+        mrgr.add_layer(MultichannelPredictor(AggregatingMetaRegressor(np.mean)))
         mrgr.fit([X], y)
         mrgr_predictions = mrgr.predict([X])
         self.assertTrue(np.array_equal(rgr_predictions, mrgr_predictions),
@@ -424,7 +424,7 @@ class TestMultiChannelRegression(unittest.TestCase):
         mrgr = MultichannelPipeline(n_channels=1)
         base_rgr = KNeighborsRegressor(n_neighbors=5, weights='uniform')
         mrgr.add_layer(ChannelEnsemble(
-            base_rgr, AggregatingRegressor(np.mean), base_processes='max'))
+            base_rgr, AggregatingMetaRegressor(np.mean), base_processes='max'))
         mrgr.fit([X], y)
         mrgr_predictions = mrgr.predict([X])
         self.assertTrue(np.array_equal(rgr_predictions, mrgr_predictions),
@@ -466,7 +466,7 @@ class TestMultiChannelRegression(unittest.TestCase):
                 KNeighborsRegressor(n_neighbors=20, weights='distance'))
             mrgr.add_layer(rgr, pipe_processes=n_cpus)
             mrgr.add_layer(
-                MultichannelPredictor(AggregatingRegressor(np.mean)))
+                MultichannelPredictor(AggregatingMetaRegressor(np.mean)))
             split_accuracies = cross_val_score(
                 mrgr, Xs, y, scorer=explained_variance_score,
                 cv=3, n_processes=1)
@@ -479,7 +479,7 @@ class TestMultiChannelRegression(unittest.TestCase):
                 KNeighborsRegressor(n_neighbors=20, weights='distance'))
             mrgr.add_layer(rgr, pipe_processes=n_cpus)
             mrgr.add_layer(
-                MultichannelPredictor(AggregatingRegressor(np.median)))
+                MultichannelPredictor(AggregatingMetaRegressor(np.median)))
 
             split_accuracies = cross_val_score(mrgr, Xs, y,
                                                scorer=explained_variance_score,
@@ -542,7 +542,7 @@ class TestMultiChannelRegression(unittest.TestCase):
             mrgr.add_layer(StandardScaler(), pipe_processes=n_cpus)
             base_rgr = KNeighborsRegressor(n_neighbors=20, weights='distance')
             mrgr.add_layer(ChannelEnsemble(
-                base_rgr, AggregatingRegressor(np.mean), base_processes='max'))
+                base_rgr, AggregatingMetaRegressor(np.mean), base_processes='max'))
             split_accuracies = cross_val_score(
                 mrgr, Xs, y, scorer=explained_variance_score,
                 cv=3, n_processes=1)
@@ -553,7 +553,7 @@ class TestMultiChannelRegression(unittest.TestCase):
             mrgr.add_layer(StandardScaler(), pipe_processes=n_cpus)
             rgr = KNeighborsRegressor(n_neighbors=20, weights='distance')
             mrgr.add_layer(ChannelEnsemble(
-                base_rgr, AggregatingRegressor(np.median),
+                base_rgr, AggregatingMetaRegressor(np.median),
                 base_processes='max'))
             split_accuracies = cross_val_score(mrgr, Xs, y,
                                                scorer=explained_variance_score,

@@ -1264,7 +1264,7 @@ class ChannelConcatenator(Cloneable, Saveable):
         base_clf = pc.transform_wrappers.SingleChannel(GradientBoostingClassifier())
         clf.add_layer(base_clf)
         clf.add_layer(pc.ChannelConcatenator())
-        clf.add_layer(1, pc.SoftVotingClassifier())
+        clf.add_layer(1, pc.SoftVotingMetaClassifier())
         pc.cross_val_score(clf, Xs, y, cv=3)
         # output: [0.8235294117647058, 0.7849264705882353, 0.7886029411764706]
     """
