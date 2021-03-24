@@ -49,7 +49,7 @@ A typical ML workflow involves screening input sources, feature extraction & eng
 Relevant classes: **SelectiveStack**, **GridSearchStack**,  **SelectKBestScores**, **SelectKBestPerformers**, **SelectKBestModels**, **SelectKBestProbes**
 
 ## fast distributed computing with ray
-Pipecaster uses the ray library to speed up multiprocessing by passing arguments through a distributed in-memory object store without the usual serialization/deserialization overhead and without passing the same object multiple times when needed by multiple jobs.  Ray also enables pipecaster to rapidly distribute jobs among networked computers.
+Pipecaster uses the ray library to speed up multiprocessing by passing arguments through a distributed in-memory object store without the usual serialization/deserialization overhead and without passing the same object multiple times when needed by multiple jobs.  Ray also enables pipecaster to rapidly distribute jobs among networked computers.  Pipecaster allows parallel execution of channel jobs, base predictor jobs, hyperparameter set jobs, cross validation jobs, and internal cross validation jobs.
 
 ## install pipecaster
 
