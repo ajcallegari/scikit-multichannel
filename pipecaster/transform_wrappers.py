@@ -347,7 +347,6 @@ class SingleChannelCV(SingleChannel):
 
             y_transform = split_results['transform']['y_pred']
             y_score = split_results['score']['y_pred']
-
             is_binary = (True if is_classifier and len(self.classes_) == 2
                          else False)
 

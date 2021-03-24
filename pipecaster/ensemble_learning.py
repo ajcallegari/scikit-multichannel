@@ -1242,22 +1242,47 @@ class GridSearchEnsemble(Ensemble):
         the internal_cv and score_selector parameters are set, in which case
         predictions from the top performing model will be used in the absence
         of a meta-predictor.
+    base_transform_methods : str or list, default='auto'
+        - Set the name of the base predictor methods to use for generating
+          meta-features.
+        - if 'auto' :
+            - If classifier : Method picked using
+              config.transform_method_precedence order (default:
+              predict_proba->predict_log_proba->decision_function->predict)
+            - If regressor : 'predict'
+        - If str other than 'auto' : Name is broadcast over all base
+          predictors.
+        - If list : List of names or 'auto', one per base predictor.
     internal_cv : int, None, or callable, default=None
         - Function for train/test subdivision of the training data.  Used to
           estimate performance of base classifiers and ensure they do not
           generate predictions from their training samples during
           meta-predictor training.
-        - If int : StratifiedKfold(n_splits=internal_cv) if classifier or
+        - If int > 1: StratifiedKfold(n_splits=internal_cv) if classifier or
           KFold(n_splits=internal_cv) if regressor.
-        - If None : default value of 5.
+        - If {None, 1}: disable internal cv.
         - If callable: Assumed to be split generator like scikit-learn KFold.
-    scorer : callable or 'auto', default='auto'
-        - Performance metric used for model selection.
-        - If callable : should return a scalar figure of merit with
-          signature: score = scorer(y_true, y_pred).
-        - If 'auto' : balanced_accuracy_score if classifier,
-          explained_variance_score if regressor.
-    score_selector : callable or None, default=None
+    base_score_methods : {str, list}, default='auto'
+        - Name or names of prediction method(s) used when scoring predictor
+          performance.
+        - if 'auto' :
+            - If classifier : Method picked using
+              config.score_method_precedence order (default:
+              predict_proba->predict_log_proba->decision_function->predict)
+            - If regressor : 'predict'
+        - If str other than 'auto' : Name is broadcast over all base
+          predictors.
+        - If list : List of names or 'auto', one per base predictor.
+    scorer : {callable, 'auto'}, default='auto'
+        - Method for calculating performance scores.
+        - If 'auto':
+            - explained_variance_score for regressors with predict()
+            - roc_auc_score for classifiers with {predict_proba,
+              predict_log_proba, decision_function}
+            - balanced_accuracy_score for classifiers with only predict()
+        - If callable: A scorer that returns a scalar figure of merit score
+          with signature: score = scorer(y_true, y_pred).
+      score_selector : callable or None, default=None
         - Method for selecting models from the ensemble.
         - If callable : Selector with signature:
           selected_indices = callable(scores).
@@ -1266,13 +1291,6 @@ class GridSearchEnsemble(Ensemble):
     disable_cv_train : bool, default=False
         - If False : cv predictions will be used to train the meta-predictor.
         - If True : cv predictions not used to train the meta-predictor.
-    base_predict_methods : str or list, default='auto'
-        - Set the name of the base predictor methods to use.
-        - If 'auto' : Use the precedence order specified in
-          :mod:`pipecaster.transform_wrappers` to select a predict method.
-        - If str other than 'auto' : Name is broadcast over all base
-          predictors.
-        - If list : List of names, one per base predictor.
     base_processes : int or 'max', default=1
         - The number of parallel processes to run for base predictor fitting.
         - If int : Use up to base_processes number of processes.
@@ -1315,20 +1333,22 @@ class GridSearchEnsemble(Ensemble):
     """
 
     def __init__(self, param_dict=None, base_predictor_cls=None,
-                 meta_predictor=None, internal_cv=5, scorer='auto',
+                 meta_predictor=None,
+                 base_transform_methods='auto',
+                 internal_cv=5,
+                 base_score_methods='auto',
+                 scorer='auto',
                  score_selector=RankScoreSelector(k=3),
                  disable_cv_train=False,
-                 base_transform_method='auto',
                  base_processes=1, cv_processes=1):
         self._params_to_attributes(GridSearchEnsemble.__init__, locals())
         self.params_list_ = list(ParameterGrid(self.param_dict))
         base_predictors = [self.base_predictor_cls(**ps)
                                    for ps in self.params_list_]
-        super().__init__(base_predictors, self.meta_predictor,
-                         self.internal_cv, self.scorer,
-                         self.score_selector, self.disable_cv_train,
-                         self.base_transform_method,
-                         self.base_processes, self.cv_processes)
+        super().__init__(base_predictors, meta_predictor,
+                         base_transform_methods, internal_cv,
+                         base_score_methods, scorer, score_selector,
+                         disable_cv_train, base_processes, cv_processes)
 
     def fit(self, X, y=None, **fit_params):
 
