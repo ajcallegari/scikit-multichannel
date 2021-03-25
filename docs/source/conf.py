@@ -13,7 +13,7 @@
 import os
 import sys
 # Source code dir relative to this file
-# sys.path.insert(0, os.path.abspath('../..'))
+sys.path.insert(0, os.path.abspath('../..')) 
 
 
 # -- Project information -----------------------------------------------------
