@@ -1,5 +1,5 @@
-pipecaster autodocumentation stub
-=================================
+API docs
+========
 
 .. autosummary::
    :toctree: _autosummary
