@@ -42,7 +42,7 @@ concatenation, voting, or model stacking to generate a single prediction.
 
 ## Distributed computing with ray
 ------------------------------
-Pipecaster uses the `ray <https://docs.ray.io/en/master/>`_ library to speed up
+Pipecaster uses the [ray](https://docs.ray.io/en/master/) library to speed up
 multiprocessing by passing arguments through a distributed in-memory object
 store without the usual serialization/deserialization overhead and without
 passing the same object multiple times when needed by multiple jobs.  Ray also
