@@ -1,5 +1,4 @@
 numpy==1.17.2
-numpydoc==1.1.0
 grpcio==1.34.0
 hiredis==1.1.0
 joblib==0.16.0
