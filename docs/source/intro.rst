@@ -83,3 +83,5 @@ dependencies:
 **Thanks** to `Ilya Goldberg <https://github.com/igg/>`_ and
 `Josiah Johnston <https://github.com/josiahjohnston>`_ for the fascinating
 conversations that inspired pipecaster.
+
+Pipecaster was developed by `A. John Callegari <https://www.linkedin.com/in/ajcallegari/>`_
