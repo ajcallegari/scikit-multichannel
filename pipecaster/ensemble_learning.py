@@ -20,8 +20,7 @@ import pipecaster.parallel as parallel
 
 __all__ = ['SoftVotingClassifier', 'SoftVotingDecision',
            'HardVotingClassifier', 'AggregatingRegressor',
-           'SoftVotingMetaClassifier',
-           'SoftVotingMetaDecision',
+           'SoftVotingMetaClassifier', 'SoftVotingMetaDecision',
            'HardVotingMetaClassifier', 'AggregatingMetaRegressor', 'Ensemble',
            'GridSearchEnsemble', 'MultichannelPredictor', 'ChannelEnsemble']
 
@@ -301,7 +300,7 @@ class SoftVotingMetaClassifier(Cloneable, Saveable):
     ML algorithm for meta-classification.  Like ML meta-classifiers,
     SoftVotingMetaClassifier takes an input vector formed by concatenating the
     predictions of the base predictors.  The prediction behavior is identical
-    to SoftVotingClassifier.
+    to :class:`SoftVotingClassifier`.
 
     SoftVotingMetaClassifier can be used as a standalone pipeline component or
     be used as the the meta_predictor paramter to MultichannelPredictor,
@@ -345,13 +344,12 @@ class SoftVotingMetaClassifier(Cloneable, Saveable):
         Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
                                                       n_random_Xs=7)
         clf = pc.MultichannelPipeline(n_channels=10)
-        base_clf = pc.transform_wrappers.SingleChannel(
-            GradientBoostingClassifier())
+        base_clf = pc.make_transformer(GradientBoostingClassifier())
         meta_clf = pc.SoftVotingMetaClassifier()
         clf.add_layer(base_clf)
         clf.add_layer(pc.MultichannelPredictor(meta_clf))
         pc.cross_val_score(clf, Xs, y, cv=3)
-        # output: [0.9117647058823529, 0.8180147058823529, 0.9117647058823529]
+        # output: [0.82352941176, 0.8474264705882353, 0.9080882352]
 
     SoftVotingMetaClassifier as a standalone pipeline component.
     ::
@@ -363,13 +361,12 @@ class SoftVotingMetaClassifier(Cloneable, Saveable):
                                                       n_random_Xs=7)
 
         clf = pc.MultichannelPipeline(n_channels=10)
-        base_clf = pc.transform_wrappers.SingleChannel(
-            GradientBoostingClassifier())
+        base_clf = pc.make_transformer(GradientBoostingClassifier())
         clf.add_layer(base_clf)
         clf.add_layer(pc.ChannelConcatenator())
         clf.add_layer(1, pc.SoftVotingMetaClassifier())
         pc.cross_val_score(clf, Xs, y, cv=3)
-        # output: [0.9117647058823529, 0.8180147058823529, 0.9117647058823529]
+        # output: [0.8823529411764706, 0.8492647058823529, 0.8455882352941176]
     """
 
     def __init__(self):
@@ -451,8 +448,8 @@ class SoftVotingMetaDecision(Cloneable, Saveable):
 
         clf = pc.MultichannelPipeline(n_channels=10)
         clf.add_layer(StandardScaler())
-        base_clf = pc.transform_wrappers.SingleChannel(SVC(),
-                                        transform_method='decision_function')
+        base_clf = pc.make_transformer(SVC(),
+                                       transform_method='decision_function')
         clf.add_layer(base_clf)
         meta_clf1 = pc.SoftVotingMetaDecision()
         clf.add_layer(2, meta_clf1, 2, meta_clf1, 2, meta_clf1, 2,
@@ -460,7 +457,7 @@ class SoftVotingMetaDecision(Cloneable, Saveable):
         meta_clf2 = pc.MultichannelPredictor(GradientBoostingClassifier())
         clf.add_layer(meta_clf2)
         pc.cross_val_score(clf, Xs, y, cv=3)
-        # output: [0.85294117, 0.88051470, 0.8786764705]
+        # output: [0.35294117647058826, 0.84375, 0.5808823529411764]
     """
 
     def __init__(self):
@@ -511,7 +508,7 @@ class HardVotingMetaClassifier(Cloneable, Saveable):
     ML algorithm for meta-classification.  Like ML meta-classifiers,
     HardVotingMetaClassifier takes an input vector formed by concatenating the
     predictions of the base predictors.  The prediction behavior is identical
-    to HardVoting
+    to :class:`HardVotingClassifier`.
 
     The ensemble of inputs for HardVotingMetaClassifier must be concatenated
     into a single matrix in a prior stage.
@@ -630,37 +627,33 @@ class AggregatingMetaRegressor(Cloneable, Saveable):
         from sklearn.ensemble import GradientBoostingRegressor
         import pipecaster as pc
 
-        Xs, y, _ = pc.make_multi_input_regression(n_informative_Xs=5,
-                                                  n_random_Xs=5)
+        Xs, y, _ = pc.make_multi_input_regression(n_informative_Xs=3)
 
-        clf = pc.MultichannelPipeline(n_channels=10)
+        # recommended use style
+        clf = pc.MultichannelPipeline(n_channels=3)
         base_clf = GradientBoostingRegressor()
         meta_clf = pc.AggregatingMetaRegressor(np.mean)
         clf.add_layer(pc.ChannelEnsemble(base_clf, meta_clf))
         pc.cross_val_score(clf, Xs, y, cv=3)
-        # output: [0.05944403104941709, 0.08425323185871114, 0.067995808]
+        # output: [0.38792868647764933, 0.42338725182412085, 0.41323951948]
 
         # alternative use style 1:
-        clf = pc.MultichannelPipeline(n_channels=10)
-        base_clf = pc.transform_wrappers.SingleChannel(
-            GradientBoostingRegressor())
+        clf = pc.MultichannelPipeline(n_channels=3)
+        base_clf = pc.make_transformer(GradientBoostingRegressor())
         clf.add_layer(base_clf)
         clf.add_layer(pc.ChannelConcatenator())
         clf.add_layer(1, pc.AggregatingMetaRegressor(np.mean))
         pc.cross_val_score(clf, Xs, y, cv=3)
-        # output: [0.05845840783307943, 0.08014277920579282, 0.0686751928]
+        # output: [0.3895750977165564, 0.42519719457611027, 0.4154415]
 
         # alternative use style 2:
-        Xs, y, _ = pc.make_multi_input_regression(n_informative_Xs=5,
-                                              n_random_Xs=5)
-        clf = pc.MultichannelPipeline(n_channels=10)
-        base_clf = pc.transform_wrappers.SingleChannel(
-            GradientBoostingRegressor())
+        clf = pc.MultichannelPipeline(n_channels=3)
+        base_clf = pc.make_transformer(GradientBoostingRegressor())
+        meta_clf = pc.AggregatingMetaRegressor(np.mean)
         clf.add_layer(base_clf)
-        clf.add_layer(
-            pc.MultichannelPredictor(pc.AggregatingMetaRegressor(np.mean)))
+        clf.add_layer(pc.MultichannelPredictor(meta_clf))
         pc.cross_val_score(clf, Xs, y, cv=3)
-        # output: [0.01633148118462313, 0.03953337266754531, 0.04450143]
+        # output: [0.39292990230137037, 0.42187542250236043, 0.413277619]
     """
 
     def __init__(self, aggregator=np.mean):
@@ -878,7 +871,7 @@ class Ensemble(Cloneable, Saveable):
         clf = Pipeline([('scaler', StandardScaler()),
                         ('ensemble_clf', ensemble_clf)])
 
-        pc.cross_val_score(clf, X, y, score_methods=['predict'])
+        pc.cross_val_score(clf, X, y, score_method='predict')
         # output: [0.7541594951233506, 0.7360154905335627, 0.7289156626506024]
 
     Model selection (no meta-prediction):
@@ -1400,10 +1393,9 @@ class MultichannelPredictor(Cloneable, Saveable):
     """
     Predict with mutliple intput channels.
 
-    This pipeline component concatenates mutliple inputs to create a single
-    feature matrix used as input for an ML or voting/aggregating algorithm.
-    It outputs a single prediction into the first channel.  Can be used for
-    either normal prediction or meta-prediction.
+    This pipeline component concatenates mutliple inputs and into a single
+    vector and uses it as input for a scikit-learn compatible predictor.
+    Can be used for prediction or meta-prediction.
 
     Parameters
     ----------
@@ -1432,7 +1424,7 @@ class MultichannelPredictor(Cloneable, Saveable):
         pc.cross_val_score(clf, Xs, y, cv=3)
         # output: [0.9117647058823529, 0.8768382352941176, 0.9099264705882353]
 
-    Model stacking:
+    Meta-prediction (stacked generalization):
     ::
 
         from sklearn.ensemble import GradientBoostingClassifier
@@ -1442,12 +1434,11 @@ class MultichannelPredictor(Cloneable, Saveable):
         Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
                                                       n_random_Xs=7)
         clf = pc.MultichannelPipeline(n_channels=10)
-        base_clf = pc.transform_wrappers.SingleChannelCV(
-                                                GradientBoostingClassifier())
+        base_clf = pc.make_cv_transformer(GradientBoostingClassifier())
         clf.add_layer(base_clf, pipe_processes='max')
         clf.add_layer(pc.MultichannelPredictor(SVC()))
         pc.cross_val_score(clf, Xs, y, cv=3)
-        # output: [0.9411764705882353, 0.9411764705882353, 0.9375]
+        # output: [0.9117647058823529, 0.90625, 0.9099264705882353]
     """
 
     def __init__(self, predictor):
@@ -1634,14 +1625,56 @@ class ChannelEnsemble(Cloneable, Saveable):
 
     Examples
     --------
-    Measure accuracy of KNeighborsClassifier on each of 10 input channels using
-    internal cross validation, select the top 3 performers, and metapredict
-    with SVC:
+    Channel Voting:
     ::
 
         from sklearn.datasets import make_classification
-        from sklearn.preprocessing import StandardScaler
-        from sklearn.neighbors import KNeighborsClassifier
+        from sklearn.ensemble import GradientBoostingClassifier
+        import pipecaster as pc
+
+        Xs, y, X_types = pc.make_multi_input_classification(n_informative_Xs=3,
+                                                            n_random_Xs=7)
+
+        clf = pc.MultichannelPipeline(n_channels=10)
+        base_clf = pc.make_transformer(GradientBoostingClassifier())
+        meta_clf = pc.SoftVotingMetaClassifier()
+        clf.add_layer(pc.ChannelEnsemble(base_clf, meta_clf),
+                      pipe_processes='max')
+
+        pc.cross_val_score(clf, Xs, y, score_method='predict')
+        # output: [0.85294117647, 0.821691176470, 0.909926470]
+
+    Channel voting with model selection:
+    ::
+
+        from sklearn.datasets import make_classification
+        from sklearn.ensemble import GradientBoostingClassifier
+        import pipecaster as pc
+
+        Xs, y, X_types = pc.make_multi_input_classification(n_informative_Xs=3,
+                                                            n_random_Xs=7)
+
+        clf = pc.MultichannelPipeline(n_channels=10)
+        base_clf = pc.make_transformer(GradientBoostingClassifier())
+        meta_clf = pc.SoftVotingMetaClassifier()
+        clf.add_layer(pc.ChannelEnsemble(base_clf, meta_clf, internal_cv=3,
+                                     score_selector=pc.RankScoreSelector(k=3)),
+                      pipe_processes='max')
+
+        pc.cross_val_score(clf, Xs, y, score_method='predict')
+        # output: [0.8235294117647058, 0.8455882352941176, 0.8768382352941176]
+
+        clf.fit(Xs, y)
+        df = clf.get_model(0, 0).get_screen_results()
+        df['input'] = X_types
+        df
+        # output: DataFrame with screen results compared to informative inputs
+
+    Stacked Generalization:
+    ::
+
+        from sklearn.datasets import make_classification
+        from sklearn.ensemble import GradientBoostingClassifier
         from sklearn.svm import SVC
         import pipecaster as pc
 
@@ -1649,22 +1682,39 @@ class ChannelEnsemble(Cloneable, Saveable):
                                                             n_random_Xs=7)
 
         clf = pc.MultichannelPipeline(n_channels=10)
-        clf.add_layer(StandardScaler())
-        clf.add_layer(pc.ChannelEnsemble(
-                        KNeighborsClassifier(), SVC(),
-                        internal_cv=5,
-                        score_selector=pc.RankScoreSelector(3)),
+        base_clf = pc.make_transformer(GradientBoostingClassifier())
+        meta_clf = SVC()
+        clf.add_layer(pc.ChannelEnsemble(base_clf, meta_clf, internal_cv=3),
                       pipe_processes='max')
 
-        pc.cross_val_score(clf, Xs, y, score_methods=['predict'])
-        # output=> [0.794116, 0.8805, 0.8768]
+        pc.cross_val_score(clf, Xs, y, score_method='predict')
+        # output: [0.9117647058823529, 0.8823529411764706, 0.96875]
 
-        import pandas as pd
+    Model selection without ensemble prediction:
+    ::
+
+        from sklearn.datasets import make_classification
+        from sklearn.ensemble import GradientBoostingClassifier
+        from sklearn.svm import SVC
+        import pipecaster as pc
+
+        Xs, y, X_types = pc.make_multi_input_classification(n_informative_Xs=3,
+                                                            n_random_Xs=7)
+
+        clf = pc.MultichannelPipeline(n_channels=10)
+        base_clf = pc.make_transformer(GradientBoostingClassifier())
+        clf.add_layer(pc.ChannelEnsemble(base_clf, internal_cv=3,
+                                         score_selector=pc.RankScoreSelector(k=1)),
+                      pipe_processes='max')
+
+        pc.cross_val_score(clf, Xs, y, score_method='predict')
+        # output: [0.823529411, 0.8768382352, 0.75919117647]
+
         clf.fit(Xs, y)
-        selected_indices = clf.get_model(1,0).get_support()
-        selection_mask = [True if i in selected_indices else False
-                          for i, X in enumerate(Xs)]
-        pd.DataFrame({'selections':selection_mask, 'input type':X_types})
+        df = clf.get_model(0, 0).get_screen_results()
+        df['input'] = X_types
+        df
+        # output: DataFrame with screen results compared to informative inputs
     """
 
     def __init__(self, base_predictors, meta_predictor=None,

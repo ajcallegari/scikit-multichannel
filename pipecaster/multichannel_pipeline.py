@@ -1,5 +1,5 @@
 """
-ML pipeline that takes multiple input matrices.
+ML pipeline that takes multiple feature matrix inputs.
 """
 
 import numpy as np
@@ -64,7 +64,7 @@ def _has_live_channels(Xs, channel_indices=None):
 
 class Layer(Cloneable, Saveable):
     """
-    Stage in a pipeline.
+    Stage in a multi-stage pipeline.
 
     Layers objects are generally instantiated and handled internally by the
     MultichannelPipeline class.  In special cases, the user may want to create
@@ -553,7 +553,7 @@ class Layer(Cloneable, Saveable):
 
 class MultichannelPipeline(Cloneable, Saveable):
     """
-    ML pipeline with multiple inputs.
+    ML pipeline with multiple feature matrix inputs.
 
     MultichannelPipeline implements a multichannel analog of the scikit-learn
     Pipeline class.  For instance, a scikit-learn pipeline (which has the
@@ -685,7 +685,6 @@ class MultichannelPipeline(Cloneable, Saveable):
 
         # Create ensemble predictor with 10 LogistRegression base predictors
         # executed in parallel processes and a SVC meta-classifier.
-        # Predictions will be identical to pipeline in previous example.
         base_clf, meta_clf = LogisticRegression(), SVC()
         clf.add_layer(
             pc.ChannelEnsemble(base_clf, meta_clf, internal_cv=5),
@@ -713,7 +712,7 @@ class MultichannelPipeline(Cloneable, Saveable):
         clf.add_layer(StandardScaler())
 
         # add internal cross validation training for stacked generalizion:
-        base_clf = pc.transform_wrappers.SingleChannelCV(LogisticRegression())
+        base_clf = pc.make_cv_transformer(LogisticRegression())
 
         # create 10 LogisticRegression models, one per input,
         # that train in parallel using all available CPUs:
@@ -725,7 +724,7 @@ class MultichannelPipeline(Cloneable, Saveable):
         # test the pipeline on synthetic data
         pc.cross_val_score(clf, Xs, y)
 
-        # output: [0.9705882352941176, 1.0, 0.8805147058823529]
+        # output: [0.9117647058823529, 0.8805147058823529, 0.7886029411764706]
 
     **Model stacking, style 3:**
     ::
@@ -746,7 +745,7 @@ class MultichannelPipeline(Cloneable, Saveable):
         clf.add_layer(StandardScaler())
 
         # add internal cross validation training for stacked generalizion:
-        base_clf = pc.transform_wrappers.SingleChannelCV(LogisticRegression())
+        base_clf = pc.make_cv_transformer(LogisticRegression())
 
         # create 10 LogisticRegression models, one per input,
         # that train in parallel using all available CPUs:
@@ -760,7 +759,7 @@ class MultichannelPipeline(Cloneable, Saveable):
         # test the pipeline on synthetic data
         pc.cross_val_score(clf, Xs, y)
 
-        # output: [0.9705882352941176, 0.9393382352941176, 0.9393382352941176]
+        # output: [0.9117647058823529, 0.96875, 0.9393382352941176]
     """
 
     def __init__(self, n_channels=1):
@@ -1256,17 +1255,18 @@ class ChannelConcatenator(Cloneable, Saveable):
     ::
 
         from sklearn.ensemble import GradientBoostingClassifier
+        from sklearn.svm import SVC
         import pipecaster as pc
 
         Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=3,
                                                       n_random_Xs=7)
         clf = pc.MultichannelPipeline(n_channels=10)
-        base_clf = pc.transform_wrappers.SingleChannel(GradientBoostingClassifier())
+        base_clf = pc.make_cv_transformer(GradientBoostingClassifier())
         clf.add_layer(base_clf)
         clf.add_layer(pc.ChannelConcatenator())
-        clf.add_layer(1, pc.SoftVotingMetaClassifier())
+        clf.add_layer(1, SVC())
         pc.cross_val_score(clf, Xs, y, cv=3)
-        # output: [0.8235294117647058, 0.7849264705882353, 0.7886029411764706]
+        # output: [0.9411764705882353, 0.9099264705882353, 0.8768382352941176]
     """
 
     def fit(self, Xs, y=None, **fit_params):

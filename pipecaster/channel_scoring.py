@@ -37,6 +37,24 @@ class AggregateFeatureScorer(Cloneable, Saveable):
         from individual features scores (e.g. np.mean) with the signature:
         score = aggregator(scores)
 
+    Examples
+    --------
+    ::
+
+        import numpy as np
+        import pipecaster as pc
+        from sklearn.ensemble import GradientBoostingClassifier
+        from sklearn.feature_selection import f_classif
+
+        Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=10)
+        clf = pc.MultichannelPipeline(n_channels=10)
+        clf.add_layer(pc.ChannelSelector(
+                        channel_scorer=pc.AggregateFeatureScorer(f_classif,
+                                                                 np.mean),
+                        score_selector=pc.RankScoreSelector(3)))
+        clf.add_layer(pc.MultichannelPredictor(GradientBoostingClassifier()))
+        pc.cross_val_score(clf, Xs, y)
+        # output: [0.9705882352941176, 0.9117647058823529, 0.9411764705882353]
     """
     def __init__(self, feature_scorer=f_classif, aggregator=np.sum):
         self._params_to_attributes(AggregateFeatureScorer.__init__, locals())
@@ -106,7 +124,29 @@ class CvPerformanceScorer(Cloneable, Saveable):
           CPUs.
         - If int > 1 : Run each split in a different process, using up to
           cv_processes number of CPUs.
+
+    Examples
+    --------
+    ::
+
+        import numpy as np
+        import pipecaster as pc
+        from sklearn.ensemble import GradientBoostingClassifier
+        from sklearn.feature_selection import f_classif
+
+        probe = GradientBoostingClassifier(n_estimators=5)
+
+        Xs, y, _ = pc.make_multi_input_classification(n_informative_Xs=10)
+        clf = pc.MultichannelPipeline(n_channels=10)
+        clf.add_layer(pc.ChannelSelector(
+                        channel_scorer=pc.CvPerformanceScorer(probe),
+                        score_selector=pc.RankScoreSelector(3)))
+        clf.add_layer(pc.MultichannelPredictor(GradientBoostingClassifier()))
+        pc.cross_val_score(clf, Xs, y)
+        # output: [0.9117647058823529, 0.9393382352941176, 0.9393382352941176]
+
     """
+
     def __init__(self, predictor_probe, cv=5,
                  score_method='auto', scorer='auto',
                  cv_processes=1):

@@ -1,5 +1,5 @@
 """
-Pipeline components that select a subset of the pipeline's channels.
+Components that select channels to send to next pipeline stage.
 
 Selections are made using channel scorers and score selectors like those found
 in: :mod:`pipecaster.channel_scoring` and :mod:`pipecaster.score_selection`.
@@ -67,7 +67,7 @@ class ChannelSelector(Cloneable, Saveable):
                         score_selector=pc.RankScoreSelector(3)))
         clf.add_layer(pc.MultichannelPredictor(GradientBoostingClassifier()))
         pc.cross_val_score(clf, Xs, y)
-        >>> [0.9705882352941176, 0.9117647058823529, 0.9411764705882353]
+        # output: [0.9117647058823529, 0.8786764705882353, 0.9375]
     """
 
     def __init__(self, channel_scorer=None, score_selector=None,
@@ -218,10 +218,10 @@ class SelectKBestScores(ChannelSelector):
         selections = clf.get_model(1,0).get_support()
         # show selected input types (random or informative)
         [t for i, t in enumerate(X_types) if i in selections]
-        >>>['informative', 'informative', 'informative']
+        # output: ['informative', 'informative', 'informative']
 
         pc.cross_val_score(clf, Xs, y)
-        >>>[0.8235294117647058, 0.9375, 0.8823529411764706]
+        # output: [1.0, 0.96875, 1.0]
     """
     def __init__(self, feature_scorer=None, aggregator=np.sum, k=1,
                  channel_processes=1):
@@ -276,7 +276,7 @@ class SelectPercentBestScores(ChannelSelector):
         # output: ['informative', 'informative', 'informative']
 
         pc.cross_val_score(clf, Xs, y)
-        >>>[0.9411764705882353, 0.9411764705882353, 0.9705882352941176]
+        # output: [0.9117647058823529, 0.9080882352941176, 0.8492647058823529]
     """
     def __init__(self, feature_scorer=None, aggregator=np.sum, percent=33,
                  channel_processes=1):
@@ -669,8 +669,9 @@ class SelectHighPassProbes(ChannelSelector):
         pc.cross_val_score(clf, Xs, y)
         # output: [0.8823529, 0.970588235, 0.94117647]
     """
-    def __init__(self, predictor_probe=None, cv=3, scorer='auto', cutoff=0.0,
-                 n_min=1, channel_processes=1, cv_processes=1):
+    def __init__(self, predictor_probe=None, cv=3, score_method='auto',
+                 scorer='auto', cutoff=0.0, n_min=1, channel_processes=1,
+                 cv_processes=1):
         self._params_to_attributes(SelectHighPassProbes.__init__, locals())
         super().__init__(CvPerformanceScorer(predictor_probe, cv,
                                              score_method, scorer,
@@ -753,11 +754,9 @@ class SelectVarianceHighPassProbes(ChannelSelector):
                                                             n_random_Xs=7)
         clf = pc.MultichannelPipeline(n_channels=10)
         clf.add_layer(StandardScaler())
-        probe = GradientBoostingClassifier(n_estimators=5, max_depth=3)
-        clf.add_layer(pc.SelectVarianceHighPassProbes(
-                        predictor_probe=probe, cv=5, scorer='auto',
-                        variance_cutoff=1, get_variance=np.nanstd,
-                        get_baseline=np.nanmean, n_min=1))
+        clf.add_layer(pc.SelectHighPassProbes(
+                    predictor_probe=GradientBoostingClassifier(n_estimators=5),
+                    cv=5, scorer='auto', cutoff=0.1, n_min=1))
         clf.add_layer(pc.MultichannelPredictor(GradientBoostingClassifier()))
         clf.fit(Xs, y)
 

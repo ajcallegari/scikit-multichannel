@@ -190,20 +190,20 @@ def cross_val_predict(predictor, Xs, y=None, groups=None,
     Returns
     -------
     dict
-        - If combine_splits is True:
-          {'predict':y_pred, 'transform':y_pred, 'score':y_pred)}
-          Where y_pred = np.array(n_samples) or None if the type of prediction
-          was not requested.  There will not be dict entries for prediction
-          method parameters set to None (e.g. no 'transform' key when
-          transform_method=None).
-        - If combine_splits is False:
-          {'predict':[], 'transform':[],
-          'score':[], 'indices':[])}
-          Where empty brackets indicate identically ordered lists with one list
-          item per split.  List items are either prediction arrays or sample
-          indices for the splits.  There will not be dict entries for
-          prediction method parameters set to None (e.g. no 'transform' key
-          when transform_method=None).
+        - If combine_splits is True :
+            {'predict':y_pred, 'transform':y_pred, 'score':y_pred)}
+            Where y_pred = np.array(n_samples) or None if the type of
+            prediction was not requested.  There will not be dict entries for
+            prediction method parameters set to None (e.g. no 'transform' key
+            when transform_method=None).
+        - If combine_splits is False :
+            {'predict':[], 'transform':[],
+            'score':[], 'indices':[])}
+            Where empty brackets indicate identically ordered lists with one
+            list item per split.  List items are either prediction arrays or
+            sample indices for the splits.  There will not be dict entries for
+            prediction method parameters set to None (e.g. no 'transform' key
+            when transform_method=None).
 
     Examples
     --------
@@ -300,6 +300,9 @@ def cross_val_predict(predictor, Xs, y=None, groups=None,
 
 def score_predictions(y_true, y_pred, score_method, scorer,
                       is_classification, is_binary):
+    """
+    Score predictions with 'auto' method support.
+    """
     y_true, y_pred = np.array(y_true), np.array(y_pred)
     # set scorer if 'auto'
     if type(scorer) == str and scorer == 'auto':

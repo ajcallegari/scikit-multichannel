@@ -46,6 +46,22 @@ def make_multi_input_classification(n_informative_Xs=5,
         generates the dataset.  Parameters are per-matrix, not for entire
         multi-matrix dataset.
 
+    Examples
+    --------
+    ::
+
+        from sklearn.ensemble import GradientBoostingClassifier
+        from sklearn.metrics import balanced_accuracy_score
+        import pipecaster as pc
+
+        Xs, y, X_types = pc.make_multi_input_classification(n_informative_Xs=3,
+                                                      n_random_Xs=7)
+        clf = pc.MultichannelPipeline(n_channels=10)
+        clf.add_layer(pc.MultichannelPredictor(GradientBoostingClassifier()))
+        pc.cross_val_score(clf, Xs, y, cv=3, score_method='predict',
+                           scorer=balanced_accuracy_score)
+        # output: [0.9117647058823529, 0.9393382352941176, 0.9393382352941176]
+
     Returns
     -------
     (Xs, y, X_types)
@@ -211,7 +227,7 @@ def make_multi_input_regression(n_informative_Xs=10,
         generates the dataset.  Parameters are per-matrix, not for entire
         multi-matrix dataset.
 
-    returns
+    Returns
     -------
     (Xs, y, X_types)
     Xs : list
@@ -221,6 +237,22 @@ def make_multi_input_regression(n_informative_Xs=10,
         List of synthetic sample labels.
     X_types : list of strings,
         Description of the feature matrices: 'informative', 'weak', or 'random'
+
+    Examples
+    --------
+    ::
+
+        from sklearn.ensemble import GradientBoostingRegressor
+        from sklearn.metrics import explained_variance_score
+        import pipecaster as pc
+
+        Xs, y, X_types = pc.make_multi_input_regression(n_informative_Xs=3,
+                                                      n_random_Xs=2)
+        clf = pc.MultichannelPipeline(n_channels=5)
+        clf.add_layer(pc.MultichannelPredictor(GradientBoostingRegressor()))
+        pc.cross_val_score(clf, Xs, y, cv=3, score_method='predict',
+                           scorer=explained_variance_score)
+        # output: [0.02483741714363, 0.0990588731587, 0.1309564952293]
     """
 
     if seed is not None:

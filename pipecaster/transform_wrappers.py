@@ -4,9 +4,9 @@ Wrapper classes for internal ML models.
 MultichannelPipelines treat all internal component as transfomers (i.e.
 invoking fit/transform/fit_transform).  As a consequence, when predictors are
 used internally (e.g. for voting or stacking) a transformer interface must be
-added to the internal predictors.  In practice, this just means choosing a
-prediction method to use when transforming and converting 1D outputs to 2D
-outputs.
+added to the internal predictors.  In practice, this means choosing a
+prediction method to use when transforming, converting 1D outputs to 2D
+outputs, and applying internal cross validation training when required.
 
 :class:`SingleChannel` and :class:`Multichannel` classes add a transformer
 interface to single channel and multichannel predictors respectively.
@@ -57,6 +57,23 @@ def make_transformer(predictor, transform_method='auto'):
     -------
     Predictor/transformer
         A wrapped predictor with both predictor and transformer interfaces.
+
+    Examples
+    --------
+    ::
+
+        from sklearn.ensemble import GradientBoostingClassifier
+        import pipecaster as pc
+
+        Xs, y, X_types = pc.make_multi_input_classification(n_informative_Xs=3,
+                                                            n_random_Xs=2)
+        clf = pc.MultichannelPipeline(n_channels=5)
+        base_clf = GradientBoostingRegressor()
+        base_clf = pc.make_transformer(base_clf)
+        clf.add_layer(base_clf)
+        clf.add_layer(pc.SoftVotingClassifier())
+        pc.cross_val_score(clf, Xs, y, cv=3)
+        # output: [0.8529411764705882, 0.9411764705882353, 0.96875]
     """
     if utils.is_multichannel(predictor):
         return Multichannel(predictor, transform_method)
@@ -119,6 +136,23 @@ def make_cv_transformer(predictor, transform_method='auto', internal_cv=5,
         A wrapped predictor with both predictor and transformer interfaces.
         Internal cross_validation training occurs during calls to
         fit_transform().
+
+    Examples
+    --------
+    ::
+
+        from sklearn.ensemble import GradientBoostingClassifier
+        import pipecaster as pc
+
+        Xs, y, X_types = pc.make_multi_input_classification(n_informative_Xs=3,
+                                                      n_random_Xs=2)
+        clf = pc.MultichannelPipeline(n_channels=5)
+        base_clf = GradientBoostingRegressor()
+        base_clf = pc.make_cv_transformer(base_clf)
+        clf.add_layer(base_clf)
+        clf.add_layer(pc.MultichannelPredictor(GradientBoostingClassifier()))
+        pc.cross_val_score(clf, Xs, y, cv=3)
+        # output: [0.8529411764705882, 0.9080882352941176, 1.0]
     """
     if utils.is_multichannel(predictor):
         return MultichannelCV(predictor, transform_method, internal_cv,

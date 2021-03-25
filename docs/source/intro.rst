@@ -1,6 +1,9 @@
 Introduction to pipecaster
 ==========================
 
+.. figure::  _images/profile.png
+   :align:   center
+
 Pipecaster is a Python library for building machine learning pipelines out of
 scikit-learn components.  It features:
 
@@ -31,14 +34,17 @@ See:
 
 Why use a multichannel architecture?
 ------------------------------------
+
 - When there are multiple input matrices coming from different data sources or
   feature extraction methods, you can sometimes get better model performance by
   training a separate ML model on each input and then making an ensemble
   prediction.
+
 - You want to automate the selection of input sources, feature extraction
   methods, ML algrithms, and hyperparameters (e.g. when you have a large
   number of related tasks or find yourself screening the "usual suspects" with
   each new task).
+
 - You want to use an enormous number of inputs but don't want the
   computational cost of having your ML model train on all of them.
 
@@ -57,6 +63,10 @@ Installation
   git clone https://github.com/ajcallegari/pipecaster.git
   cd pipecaster
   pip install .
+
+or:
+::
+  pip install pipecaster
 
 pipecaster was developed with Python 3.7.5 and tested with the following
 dependencies:
