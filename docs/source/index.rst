@@ -1,9 +1,9 @@
 Welcome to pipecaster's documentation
 =====================================
 
-.. toctree::
-    :maxdepth: 2
+.. autosummary::
+   :toctree: _autosummary
+   :template: custom-module-template.rst
+   :recursive:
 
-    Intro <intro.rst>
-    Tutorial <tutorial.rst>
-    API docs <API.rst>
+   pipecaster
