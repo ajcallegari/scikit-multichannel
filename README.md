@@ -18,8 +18,9 @@ scikit-learn components.  It features:
     - screening of model hyperparameters
 - fast distributed computing with ray
 
-tutorials: https://github.com/ajcallegari/pipecaster/tree/master/tutorials  
-docs: https://pipecaster.readthedocs.io/en/latest/  
+**tutorials**: https://github.com/ajcallegari/pipecaster/tree/master/tutorials  
+
+**docs**: https://pipecaster.readthedocs.io/en/latest/  
 
 ![Complex multichannel architecture](/images/profile.png)
 
