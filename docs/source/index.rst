@@ -7,3 +7,6 @@ Welcome to pipecaster's documentation
     Intro <intro.rst>
     Tutorial <tutorial.rst>
     API docs <API.rst>
+
+
+On github: https://github.com/ajcallegari/pipecaster
