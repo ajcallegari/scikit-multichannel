@@ -4,7 +4,10 @@ Pipecaster is a Python library for building machine learning pipelines out of
 scikit-learn components.  It features:
 
 - a multichannel pipeline architecture
-- ensemble learning (voting, aggregating, stacked generalization)
+- ensemble learning
+    - channel ensembles
+    - model ensembles
+    - voting, aggregating, stacked generalization
 - tools for managing complex pipeline architectures:
     - Keras-like layers
     - Visual feedback during pipeline construction
