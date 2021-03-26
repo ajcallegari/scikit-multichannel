@@ -66,7 +66,6 @@ or:
 
 pipecaster was developed with Python 3.7.5 and tested with the following
 dependencies:
-::
 ```
 numpy==1.17.2
 joblib==0.16.0
