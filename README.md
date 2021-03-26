@@ -16,6 +16,7 @@ scikit-learn components.  It features:
 - fast distributed computing with ray
 
 tutorials: https://github.com/ajcallegari/pipecaster/tree/master/tutorials
+docs: https://pipecaster.readthedocs.io/en/latest/
 
 ![Complex multichannel architecture](/images/profile.png)
 

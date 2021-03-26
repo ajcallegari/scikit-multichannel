@@ -5,6 +5,7 @@ setup(
     packages = ['pipecaster'],
     version = 'v0.1-alpha',  # Ideally should be same as your GitHub release tag varsion
     description = 'multichannel machine learning library with in-pipeline automation',
+    long_description = 'Python library for building multichannel machine learning pipelines and for in-pipeline automation (semi-auto-ML)',
     author = 'A. John Callegari Jr.',
     author_email = 'a.john.callegari@gmail.com',
     license='MIT',
