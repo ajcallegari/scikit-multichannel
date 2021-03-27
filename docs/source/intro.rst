@@ -38,7 +38,7 @@ Why use a multichannel architecture?
 - When there are multiple input matrices coming from different data sources or
   feature extraction methods, you can sometimes get better model performance by
   training a separate ML model on each input and then making an ensemble
-  prediction.
+  prediction (e.g. when the the ratio of samples to features is low).
 
 - You want to automate the selection of input sources, feature extraction
   methods, ML algorithms, and hyperparameters (e.g. when you have a large
