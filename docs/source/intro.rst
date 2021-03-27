@@ -41,7 +41,7 @@ Why use a multichannel architecture?
   prediction.
 
 - You want to automate the selection of input sources, feature extraction
-  methods, ML algrithms, and hyperparameters (e.g. when you have a large
+  methods, ML algorithms, and hyperparameters (e.g. when you have a large
   number of related tasks or find yourself screening the "usual suspects" with
   each new task).
 
