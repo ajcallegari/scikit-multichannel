@@ -3,7 +3,7 @@ from distutils.core import setup
 setup(
     name = 'pipecaster',
     packages = ['pipecaster'],
-    version = 'v0.1-alpha',  # Ideally should be same as your GitHub release tag varsion
+    version = 'v0.1-alpha',  # same as your GitHub release tag varsion
     description = 'multichannel machine learning library with in-pipeline automation',
     long_description = 'Python library for building multichannel machine learning pipelines and for in-pipeline automation (semi-auto-ML)',
     author = 'A. John Callegari Jr.',

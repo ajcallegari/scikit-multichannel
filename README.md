@@ -18,8 +18,29 @@ scikit-learn components.  It features:
     - screening of model hyperparameters
 - fast distributed computing with ray
 
-**tutorials**: https://github.com/ajcallegari/pipecaster/tree/master/tutorials  
+```
+# Make a channel ensemble classifier by training 10 base models on 10 input
+# channels and combining their inferences with a support vector machine:
 
+from sklearn.preprocessing import StandardScaler
+from sklearn.linear_model import LogisticRegression
+from sklearn.svm import SVC
+import pipecaster as pc
+
+Xs, y, X_types = pc.make_multi_input_classification(n_informative_Xs=10)
+
+clf = pc.MultichannelPipeline(n_channels=10)
+clf.add_layer(StandardScaler())
+clf.add_layer(pc.make_cv_transformer(LogisticRegression()))
+clf.add_layer(pc.MultichannelPredictor(SVC()))
+
+pc.cross_val_score(clf, Xs, y)
+
+# output (balanced accuracy): [0.97, 1.0, 0.97]
+```
+
+
+**tutorials**: https://github.com/ajcallegari/pipecaster/tree/master/tutorials  
 **docs**: https://pipecaster.readthedocs.io/en/latest/  
 
 ![Complex multichannel architecture](/images/profile.png)
