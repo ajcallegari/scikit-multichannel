@@ -35,7 +35,7 @@ scikit-learn components.  It features:
   import numpy as np
   from sklearn.preprocessing import StandardScaler
   from sklearn.feature_selection import SelectKBest, f_classif
-  from sklearn.linear_model import LogisticRegression
+  from sklearn.ensemble import GradientBoostingClassifier
   from sklearn.svm import SVC
   import pipecaster as pc
 
@@ -46,10 +46,11 @@ scikit-learn components.  It features:
   clf.add_layer(StandardScaler())
   clf.add_layer(SelectKBest(f_classif, k=10))
   clf.add_layer(pc.SelectKBestScores(f_classif, np.sum, k=3))
-  clf.add_layer(pc.make_cv_transformer(LogisticRegression()))
+  clf.add_layer(pc.make_cv_transformer(GradientBoostingClassifier()))
   clf.add_layer(pc.MultichannelPredictor(SVC()))
 
   pc.cross_val_score(clf, Xs, y)
+  # output (balanced accuracy): [0.97, 0.85, 1.0]
 
 What is a multichannel pipeline?
 --------------------------------
