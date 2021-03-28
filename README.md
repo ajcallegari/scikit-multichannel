@@ -16,34 +16,36 @@ scikit-learn components.  It features:
       performance of a probe ML model
     - screening of ML algorithms
     - screening of model hyperparameters
-- fast distributed computing with ray
+- fast distributed computing with [ray](https://docs.ray.io/en/master/)
+
+**Tutorials**: https://github.com/ajcallegari/pipecaster/tree/master/tutorials  
+**Docs**: https://pipecaster.readthedocs.io/en/latest/  
+
+![Complex multichannel architecture](/images/profile.png)
 
 ```
-# Make a channel ensemble classifier by training 10 base models on 10 input
-# channels and combining their inferences with a support vector machine:
+# build the pipeline architecture depicted above
 
+import numpy as np
 from sklearn.preprocessing import StandardScaler
+from sklearn.feature_selection import SelectKBest, f_classif
 from sklearn.linear_model import LogisticRegression
 from sklearn.svm import SVC
 import pipecaster as pc
 
-Xs, y, X_types = pc.make_multi_input_classification(n_informative_Xs=10)
+Xs, y, X_type = pc.make_multi_input_classification(n_informative_Xs=3,
+                                                   n_random_Xs=7)
 
 clf = pc.MultichannelPipeline(n_channels=10)
 clf.add_layer(StandardScaler())
+clf.add_layer(SelectKBest(f_classif, k=10))
+clf.add_layer(pc.SelectKBestScores(f_classif, np.sum, k=3))
 clf.add_layer(pc.make_cv_transformer(LogisticRegression()))
 clf.add_layer(pc.MultichannelPredictor(SVC()))
 
 pc.cross_val_score(clf, Xs, y)
-
-# output (balanced accuracy): [0.97, 1.0, 0.97]
+# output (balanced accuracy): [0.97, 1.0, 0.93]
 ```
-
-
-**tutorials**: https://github.com/ajcallegari/pipecaster/tree/master/tutorials  
-**docs**: https://pipecaster.readthedocs.io/en/latest/  
-
-![Complex multichannel architecture](/images/profile.png)
 
 ## What is a multichannel pipeline?
 A multichannel pipeline is an ML pipeline that takes multiple input vectors
@@ -75,15 +77,17 @@ passing the same object multiple times when needed by multiple jobs.  Ray also
 enables pipecaster to rapidly distribute jobs among networked computers.
 
 Installation
-------------
+------------  
+
+`pip install pipecaster`
+
+or:
+
 ```
 git clone https://github.com/ajcallegari/pipecaster.git
 cd pipecaster
 pip install .
 ```
-or:
-
-`pip install pipecaster`
 
 pipecaster was developed with Python 3.7.5 and tested with the following
 dependencies:
