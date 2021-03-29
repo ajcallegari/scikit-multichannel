@@ -54,7 +54,7 @@ scikit-learn components.  It features:
 
 What is a multichannel pipeline?
 --------------------------------
-A multichannel pipeline is an ML pipeline that takes multiple input vectors
+A multichannel pipeline is an ML pipeline that takes multiple input matrices
 and processes them in separate channels before combining them through
 concatenation, voting, or model stacking to generate a single prediction.
 
