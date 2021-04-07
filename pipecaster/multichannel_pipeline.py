@@ -581,9 +581,10 @@ class MultichannelPipeline(Cloneable, Saveable):
     input and output.  During calls to pipeline.fit(), each pipe in the
     internal layers is used to fit and transform the data.  Predictors can't
     be directly included in internal layers as they lack a required transform()
-    or fit_transform() method, but must first be wrapped with classes from the
-    :mod:`pipecaster.transform_wrappers` module as shown in the example below.
-    These wrappers are useful for model stacking.
+    or fit_transform() method, but must first be converte into tranformers
+    using the make_transformer and make_cv_transformer functions
+    as shown in the example below.  These wrappers can be used to generate
+    outputs for voting, aggregation, or model stacking.
 
     MultichannelPipelines have a constant number of I/O channels internally,
     but some channels may be set to None when they are inactivated by selection

@@ -1,10 +1,12 @@
 Introduction to pipecaster
 ==========================
 
-Pipecaster is a Python library for building machine learning pipelines out of
-scikit-learn components.  It features:
+Pipecaster is a Python library for automating aspects the ML workflow and for
+building noise-resistant machine learning pipelines that learn fast from a
+small number of samples.  It features:
 
 - a multichannel pipeline architecture
+- support for scikit-learn compatible components
 - ensemble learning
 
     - channel ensembles
@@ -14,7 +16,7 @@ scikit-learn components.  It features:
 - tools for managing complex pipeline architectures:
 
     - Keras-like layers
-    - Visual feedback during pipeline construction
+    - visual feedback during pipeline construction
 
 - in-pipeline workflow automation (or 'semi-auto-ML'):
 
@@ -24,6 +26,8 @@ scikit-learn components.  It features:
     - screening of model hyperparameters
 
 - fast distributed computing with `ray <https://docs.ray.io/en/master/>`_
+
+- >90% unit test coverage for the alpha releases
 
 .. figure::  _images/profile.png
    :align:   center
