@@ -1,8 +1,8 @@
 
 ## Pipecaster overview
-Pipecaster is a Python library for automating aspects the ML workflow and for
-building noise-resistant machine learning pipelines that learn fast from a
-small number of samples.  It features:
+Pipecaster is a Python library for automating aspects of the machine learning
+(ML) workflow and for building noise-resistant ML pipelines that learn fast
+from a limited number of samples.  It features:
 
 - a multichannel pipeline architecture
 - support for scikit-learn compatible components
@@ -56,23 +56,24 @@ and processes them in separate channels before combining them through
 concatenation, voting, or model stacking to generate a single prediction.
 
 ## Why use a multichannel architecture?
-------------------------------------
 
-- When there are multiple input matrices coming from different data sources or
+- When you have multiple input matrices coming from different data sources or
   feature extraction methods, you can sometimes get better model performance by
   training a separate ML model on each input and then making an ensemble
-  prediction.
+  prediction.  This performance boost may be due to increased diversity of
+  utilized features.
 
-- You want to automate the selection of input sources, feature extraction
-  methods, ML algorithms, and hyperparameters (e.g. when you have a large
-  number of related tasks or find yourself screening the "usual suspects" with
-  each new task).
+- You have a large number of input sources and want to define quality criteria
+  for input into your model, either because input selection improves model
+  performance or it reduces the computational cost of model training.
+  Pipecaster provides pipeline components for selecting inputs based on feature scores or performance metrics of a probe ML model.  
 
-- You want to use an enormous number of inputs but don't want the
-  computational cost of having your ML model train on all of them.
+- You want to include a feature selection stage and ensure that features from
+  each of your input sources are represented in the final selection.
+  Pipecaster makes it easy to guarantee feature diversity by applying feature
+  selection on a per-input basis.
 
 ## Distributed computing with ray
-------------------------------
 Pipecaster uses the [ray](https://docs.ray.io/en/master/) library to speed up
 multiprocessing by passing arguments through a distributed in-memory object
 store without the usual serialization/deserialization overhead and without
