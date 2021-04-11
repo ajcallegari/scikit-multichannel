@@ -103,7 +103,3 @@ scipy==1.3.1
 pandas==0.24.2
 scikit-learn==0.23.2
 ```
-
-**Thanks** to [Ilya Goldberg](https://github.com/igg) and [Josiah Johnston](https://github.com/josiahjohnston) for the fascinating conversations that inspired pipecaster.
-
-Pipecaster was developed by A. John Callegari (https://www.linkedin.com/in/ajcallegari/)
