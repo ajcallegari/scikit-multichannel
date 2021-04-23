@@ -66,7 +66,8 @@ concatenation, voting, or model stacking to generate a single prediction.
 - You have a large number of input sources and want to define quality criteria
   for input into your model, either because input selection improves model
   performance or it reduces the computational cost of model training.
-  Pipecaster provides pipeline components for selecting inputs based on feature scores or performance metrics of a probe ML model.  
+  Pipecaster provides pipeline components for selecting inputs based on
+  aggregate feature scores or performance metrics of a probe ML model.  
 
 - You want to include a feature selection stage and ensure that features from
   each of your input sources are represented in the final selection.
