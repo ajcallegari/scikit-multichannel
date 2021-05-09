@@ -12,6 +12,7 @@ from a limited number of samples.  It features:
     - channel ensembles
     - model ensembles
     - voting, aggregating, stacked generalization
+    - internal cross validation training
 
 - tools for managing complex pipeline architectures:
 

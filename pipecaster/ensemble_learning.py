@@ -30,8 +30,8 @@ class SoftVotingClassifier(Cloneable, Saveable):
     Make ensemble predictions from averaged predict_proba outputs.
 
     This multichannel pipeline component takes a list of predict_proba outputs
-    from an ensemble of of base classifiers and predicts with the averaged
-    probs.
+    from an ensemble of channel classifiers (one classifier per channel) and
+    predicts with the averaged probs.
 
     Notes
     -----
@@ -42,7 +42,6 @@ class SoftVotingClassifier(Cloneable, Saveable):
 
     Examples
     --------
-    SoftVotingMetaClassifier as a meta-predictor for ChannelEnsemble.
     ::
 
         from sklearn.preprocessing import StandardScaler
@@ -107,16 +106,13 @@ class SoftVotingDecision(Cloneable, Saveable):
     """
     Take average of an ensemble of decision_function outputs.
 
-    This pipeline component takes scalar decision_function outputs from a prior
-    pipeline classifier stage and averages them.  Averaged decision_function
-    outputs can be used as meta-features for model stacking (see example
+    This multichannel pipeline component takes scalar decision_function outputs
+    from an ensemble of channel classifiers (one classifier per channel)
+    averages them to generate meta-features for model stacking (see example
     below).
 
     Notes
     -----
-        - The ensemble of inputs must be concatenated into a single
-          meta-feature matrix in a prior stage.
-
         - This class implements estimator and tranformer interfaces but
           lacks a complete predictor interface (i.e. 'predict' method) because
           there is not a standard method for generating a categorical
@@ -186,10 +182,10 @@ class HardVotingClassifier(Cloneable, Saveable):
     """
     Predict using the most frequent class in a prediction ensemble.
 
-    This pipeline component takes categorical predictions from a prior pipeline
-    stage and uses them to make an ensemble prediction.  The prediction
-    is made by taking the modal prediction (i.e. most frequently predicted
-    class) of the classifiers in the ensemble.
+    This multichannel pipeline component takes categorical predictions an
+    ensemble of channel classifiers (one classifier per channel) and uses them
+    to make an ensemble prediction.  The prediction is made by taking the modal
+    class (i.e. most frequently predicted class).
 
     Examples
     --------
@@ -247,9 +243,9 @@ class AggregatingRegressor(Cloneable, Saveable):
     """
     Predict with aggregated outputs of a regressor ensemble.
 
-    This multichannel component takes a list of predictions from a prior
-    pipeline stage and converts them into a single prediction using an
-    aggregator function (e.g. np.mean).
+    This multichannel component takes a list of predictions from an ensemble
+    of channel regressors (one regressor per channel) and converts them into a
+    single prediction using an aggregation function (e.g. np.mean).
 
     Notes
     -----
@@ -296,11 +292,11 @@ class SoftVotingMetaClassifier(Cloneable, Saveable):
     """
     Soft voting meta-classifier.
 
-    This component can be used in contexts where you would ordinarily use an
-    ML algorithm for meta-classification.  Like ML meta-classifiers,
-    SoftVotingMetaClassifier takes an input vector formed by concatenating the
-    predictions of the base predictors.  The prediction behavior is identical
-    to :class:`SoftVotingClassifier`.
+    This single channel component can be used in contexts where you would
+    ordinarily use an ML algorithm for meta-classification.  Like ML
+    meta-classifiers, SoftVotingMetaClassifier takes an input vector formed by
+    concatenating the predictions of the base predictors.  The prediction
+    behavior is identical to :class:`SoftVotingClassifier`.
 
     SoftVotingMetaClassifier can be used as a standalone pipeline component or
     be used as the the meta_predictor paramter to MultichannelPredictor,
@@ -425,14 +421,15 @@ class SoftVotingMetaDecision(Cloneable, Saveable):
     """
     Take average of an ensemble of decision_function outputs.
 
-    This component can be used in limited contexts where you would ordinarily
-    use an ML algorithm to generate meta-features from an ensemble (see example
-    below).  Like ML meta-classifiers, SoftVotingMetaDecision takes an input
-    vector formed by concatenating the predictions of the base predictors.
-    Unlike ML models, SoftVotingMetaDecision can't make predictions, it can
-    only output meta-features to be used for additional meta-classification
-    (there is not a standard method for generating a categorical predictions
-    from an ensemble of decision_function outputs).
+    This single channel component can be used in limited contexts where you
+    would ordinarily use an ML algorithm to generate meta-features from an
+    ensemble (see example below).  Like ML meta-classifiers,
+    SoftVotingMetaDecision takes an input vector formed by concatenating the
+    predictions of the base predictors. Unlike ML models,
+    SoftVotingMetaDecision can't make predictions, it can only output
+    meta-features to be used for additional meta-classification (there is not a
+    standard method for generating categorical predictions from an ensemble of
+    decision_function outputs).
 
     Examples
     --------
@@ -504,11 +501,11 @@ class HardVotingMetaClassifier(Cloneable, Saveable):
     """
     Predict with the most frquent class in ensemble of predictions.
 
-    This component can be used in contexts where you would ordinarily use an
-    ML algorithm for meta-classification.  Like ML meta-classifiers,
-    HardVotingMetaClassifier takes an input vector formed by concatenating the
-    predictions of the base predictors.  The prediction behavior is identical
-    to :class:`HardVotingClassifier`.
+    This single channel component can be used in contexts where you would
+    ordinarily use an ML algorithm for meta-classification.  Like ML
+    meta-classifiers, HardVotingMetaClassifier takes an input vector formed by
+    concatenating the predictions of the base predictors.  The prediction
+    behavior is identical to :class:`HardVotingClassifier`.
 
     The ensemble of inputs for HardVotingMetaClassifier must be concatenated
     into a single matrix in a prior stage.
@@ -603,11 +600,12 @@ class AggregatingMetaRegressor(Cloneable, Saveable):
     """
     Predict with aggregated outputs of a regressor ensemble.
 
-    This pipeline component can take the place of ML algorithms that function
-    as meta-regressors.  It cannot predict, but can output meta-features
-    created by applying an aggeragator function to the predictions of the base
-    regressors.  Can be used alone or as a meta-predictor within
-    MultichannelPredictor, Ensemble, and ChannelEnsemble pipeline components.
+    This single channel pipeline component can take the place of ML algorithms
+    that function as meta-regressors.  It cannot predict, but can output
+    meta-features created by applying an aggeragator function to the
+    predictions of the base regressors.  Can be used alone or as a
+    meta-predictor within MultichannelPredictor, Ensemble, and ChannelEnsemble
+    pipeline components.
 
     Notes
     -----
@@ -676,14 +674,14 @@ class Ensemble(Cloneable, Saveable):
     pooling base predictor inferences with a meta-predictor.
 
     The meta-predictor may be a voting or aggregating algorithm (e.g.
-    SoftVotingMetaClassifier, AggregatingMetaRegressor) or a scikit-learn conformant ML
-    algorithm.  In the latter case, it is standard practice to use internal
-    cross validation training of the base classifiers to prevent them from
-    making inferences on training samples (1).  To activate internal cross
-    validation training, set the internal_cv constructor argument of Ensemble
-    (cross validation is only used to generate outputs for meta-predictor
-    training; the whole training set is always used to train the final base
-    predictor models).
+    SoftVotingMetaClassifier, AggregatingMetaRegressor) or a scikit-learn
+    conformant ML algorithm.  In the latter case, it is standard practice to
+    use internal cross validation training of the base classifiers to prevent
+    them from making inferences on training samples (1).  To activate internal
+    cross validation training, set the internal_cv constructor argument of
+    Ensemble (cross validation is only used to generate outputs for
+    meta-predictor training; the whole training set is always used to train the
+    final base predictor models).
 
     Ensemble also takes advantage of internal cross validation
     to enable in-pipeline screening of base predictors during model

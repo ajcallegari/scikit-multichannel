@@ -10,6 +10,7 @@ from a limited number of samples.  It features:
     - channel ensembles
     - model ensembles
     - voting, aggregating, stacked generalization
+    - internal cross validation training
 - tools for managing complex pipeline architectures:
     - Keras-like layers
     - visual feedback during pipeline construction
@@ -27,7 +28,7 @@ from a limited number of samples.  It features:
 ![Complex multichannel architecture](/images/profile.png)
 
 ```
-# build the pipeline architecture depicted above
+# build the complex pipeline architecture depicted above with 6 lines of code
 
 import numpy as np
 from sklearn.preprocessing import StandardScaler
@@ -36,7 +37,7 @@ from sklearn.ensemble import GradientBoostingClassifier
 from sklearn.svm import SVC
 import pipecaster as pc
 
-Xs, y, X_type = pc.make_multi_input_classification(n_informative_Xs=3,
+Xs, y, X_types = pc.make_multi_input_classification(n_informative_Xs=3,
                                                    n_random_Xs=7)
 
 clf = pc.MultichannelPipeline(n_channels=10)
