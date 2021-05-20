@@ -601,11 +601,10 @@ class AggregatingMetaRegressor(Cloneable, Saveable):
     Predict with aggregated outputs of a regressor ensemble.
 
     This single channel pipeline component can take the place of ML algorithms
-    that function as meta-regressors.  It cannot predict, but can output
-    meta-features created by applying an aggeragator function to the
-    predictions of the base regressors.  Can be used alone or as a
-    meta-predictor within MultichannelPredictor, Ensemble, and ChannelEnsemble
-    pipeline components.
+    that function as meta-regressors.  I makes predictions using an aggregator
+    function to convert an ensemble of predictions into a single preidiction.
+    Can be used alone or as a meta-predictor within MultichannelPredictor,
+    Ensemble, and ChannelEnsemble pipeline components.
 
     Notes
     -----
