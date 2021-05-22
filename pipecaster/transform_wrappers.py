@@ -274,12 +274,19 @@ class SingleChannel(Cloneable, Saveable):
         self.model = utils.get_clone(self.predictor)
         is_classifier = utils.is_classifier(self.predictor)
         if y is None:
-            self.model.fit(X, **fit_params)
+            try:
+                self.model.fit(X, **fit_params)
+            except:
+                self.model.fit(X)
+                print('fit_params rejected by {}'.format(self.model))
         else:
             if is_classifier:
                 self.classes_, y = np.unique(y, return_inverse=True)
-            self.model.fit(X, y, **fit_params)
-
+            try:
+                self.model.fit(X, y, **fit_params)
+            except:
+                self.model.fit(X, y)
+                print('fit_params rejected by {}'.format(self.model))
         self._set_estimator_type(self.model)
         self._remove_predictor_interface()
         self._add_model_interface(self.model, X)
