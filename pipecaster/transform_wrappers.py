@@ -223,6 +223,10 @@ class SingleChannel(Cloneable, Saveable):
     object that it wraps, so the method attributes in a SingleChannel instance
     are not usually identical to the method attributes of the SingleChannel
     class.
+    
+    If a sample_weight parameter is sent to the fit() method but the wrapped
+    predictor doesn't accept this argument, fit() will be called without the
+    sample_weight parameter and no warning will be given.
     """
 
     def __init__(self, predictor, transform_method='auto'):
@@ -278,7 +282,6 @@ class SingleChannel(Cloneable, Saveable):
                 self.model.fit(X, **fit_params)
             except:
                 self.model.fit(X)
-                print('fit_params rejected by {}'.format(self.model))
         else:
             if is_classifier:
                 self.classes_, y = np.unique(y, return_inverse=True)
@@ -286,7 +289,6 @@ class SingleChannel(Cloneable, Saveable):
                 self.model.fit(X, y, **fit_params)
             except:
                 self.model.fit(X, y)
-                print('fit_params rejected by {}'.format(self.model))
         self._set_estimator_type(self.model)
         self._remove_predictor_interface()
         self._add_model_interface(self.model, X)
@@ -431,6 +433,10 @@ class SingleChannelCV(SingleChannel):
     object that it wraps, so the method attributes in a SingleChannelCV
     instance are usually not identical to the method attributes of the
     SingleChannelCV class.
+
+    If a sample_weight parameter is sent to the fit() method but the wrapped
+    predictor doesn't accept this argument, fit() will be called without the
+    sample_weight parameter and no warning will be given.
     """
 
     def __init__(self, predictor, transform_method='auto', internal_cv=5,
@@ -738,6 +744,10 @@ class MultichannelCV(Multichannel):
     object that it wraps, so the method attributes in a MultichannelCV
     instance are usually not identical to the method attributes of the
     MultichannelCV class.
+
+    If a sample_weight parameter is sent to the fit() method but the wrapped
+    predictor doesn't accept this argument, fit() will be called without the
+    sample_weight parameter and no warning will be given.
     """
 
     def __init__(self, multichannel_predictor, transform_method='auto',
