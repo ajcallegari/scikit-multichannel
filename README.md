@@ -23,7 +23,7 @@ from a limited number of samples.  It features:
 - \>90% unit test coverage for the alpha releases
 
 **Tutorials**: https://github.com/ajcallegari/scikit-multichannel/tree/master/tutorials  
-**Docs**: https://scikit-multichannel.readthedocs.io/en/latest/  
+**Docs**: https://pipecaster.readthedocs.io/en/latest/ 
 
 ![Complex multichannel architecture](/images/profile.png)
 
